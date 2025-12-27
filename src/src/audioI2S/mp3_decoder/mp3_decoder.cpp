@@ -5,6 +5,7 @@
  *  Created on: 26.10.2018
  *  Updated on: 27.05.2022
  */
+
 #include "mp3_decoder.h"
 /* clip to range [-2^n, 2^n - 1] */
 #if 0 //Fast on ARM:
@@ -699,29 +700,7 @@ void SetBitstreamPointer(BitStreamInfo_t *bsi, int nBytes, unsigned char *buf) {
     bsi->cachedBits = 0; /* i.e. zero bits in cache */
     bsi->nBytes = nBytes;
 }
-//----------------------------------------------------------------------------------------------------------------------
-void RefillBitstreamCache(BitStreamInfo_t *bsi) {
-    int nBytes = bsi->nBytes;
-    /* optimize for common case, independent of machine endian-ness */
-    if (nBytes >= 4) {
-        bsi->iCache = (*bsi->bytePtr++) << 24;
-        bsi->iCache |= (*bsi->bytePtr++) << 16;
-        bsi->iCache |= (*bsi->bytePtr++) << 8;
-        bsi->iCache |= (*bsi->bytePtr++);
-        bsi->cachedBits = 32;
-        bsi->nBytes -= 4;
-    } else {
-        bsi->iCache = 0;
-        while (nBytes--) {
-            bsi->iCache |= (*bsi->bytePtr++);
-            bsi->iCache <<= 8;
-        }
-        bsi->iCache <<= ((3 - bsi->nBytes) * 8);
-        bsi->cachedBits = 8 * bsi->nBytes;
-        bsi->nBytes = 0;
-    }
-}
-//----------------------------------------------------------------------------------------------------------------------
+
 unsigned int GetBits(BitStreamInfo_t *bsi, int nBits) {
     unsigned int data, lowBits;
 
@@ -3640,26 +3619,6 @@ void FDCT32(int *buf, int *dest, int offset, int oddBlock, int gb) {
 /***********************************************************************************************************************
  * P O L Y P H A S E
  **********************************************************************************************************************/
-inline
-short ClipToShort(int x, int fracBits){
-
-    /* assumes you've already rounded (x += (1 << (fracBits-1))) */
-    x >>= fracBits;
-
-#ifndef __XTENSA__
-    /* Ken's trick: clips to [-32768, 32767] */
-    //ok vor generic case (fb)
-    int sign = x >> 31;
-    if (sign != (x >> 15))
-        x = sign ^ ((1 << 15) - 1);
-
-    return (short)x;
-#else
-    //this is better on xtensa (fb)
-    asm ("clamps %0, %1, 15" : "=a" (x) : "a" (x) : );
-    return x;
-#endif
-}
 /***********************************************************************************************************************
  * Function:    PolyphaseMono
  *
@@ -3787,12 +3746,24 @@ void PolyphaseStereo(short *pcm, int *vbuf, const uint32_t *coefBase){
         sum1R = sum2R = rndVal;
 
         for(int j=0; j<8; j++){
-            c1=*coef; coef++; c2=*coef; coef++; vLo=*(vb1+(j)); vHi = *(vb1+(23-(j)));
-            sum1L=MADD64(sum1L, vLo,  c1); sum2L=MADD64(sum2L, vLo,  c2);
-            sum1L=MADD64(sum1L, vHi, -c2); sum2L=MADD64(sum2L, vHi,  c1);
-            vLo=*(vb1+32+(j));  vHi=*(vb1+32+(23-(j)));
-            sum1R=MADD64(sum1R, vLo,  c1); sum2R=MADD64(sum2R, vLo,  c2);
-            sum1R=MADD64(sum1R, vHi, -c2); sum2R=MADD64(sum2R, vHi,  c1);
+            c1=*coef;
+            coef++;
+            c2=*coef;
+            coef++;
+            vLo=*(vb1+(j));
+            vHi = *(vb1+(23-(j)));
+            sum1L=MADD64(sum1L, vLo,  c1);
+            sum2L=MADD64(sum2L, vLo,  c2);
+
+            sum1L=MADD64(sum1L, vHi, -c2);
+            sum2L=MADD64(sum2L, vHi,  c1);
+
+            vLo=*(vb1+32+(j));
+            vHi=*(vb1+32+(23-(j)));
+            sum1R=MADD64(sum1R, vLo,  c1);
+            sum2R=MADD64(sum2R, vLo,  c2);
+            sum1R=MADD64(sum1R, vHi, -c2);
+            sum2R=MADD64(sum2R, vHi,  c1);
         }
         vb1 += 64;
         *(pcm + 0)         = ClipToShort((int)SAR64(sum1L, (32-m_CSHIFT)), m_DQ_FRACBITS_OUT - 2 - 2 - 15);

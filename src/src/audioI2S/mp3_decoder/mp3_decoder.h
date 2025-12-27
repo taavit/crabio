@@ -4,6 +4,8 @@
 #include "Arduino.h"
 #include "assert.h"
 
+#include "../../../../include/rust_mod.h"
+
 static const uint8_t  m_HUFF_PAIRTABS          =32;
 static const uint8_t  m_BLOCK_SIZE             =18;
 static const uint8_t  m_NBANDS                 =32;
@@ -47,13 +49,6 @@ typedef struct SFBandTable {
     int/*short*/ l[23];
     int/*short*/ s[14];
 } SFBandTable_t;
-
-typedef struct BitStreamInfo {
-    unsigned char *bytePtr;
-    unsigned int iCache;
-    int cachedBits;
-    int nBytes;
-} BitStreamInfo_t;
 
 typedef enum {          /* map these to the corresponding 2-bit values in the frame header */
     Stereo = 0x00,      /* two independent channels, but L and R frames might have different # of bits */
@@ -505,9 +500,5 @@ int IMDCT36(int *xCurr, int *xPrev, int *y, int btCurr, int btPrev, int blockIdx
 void imdct12(int *x, int *out);
 int IMDCT12x3(int *xCurr, int *xPrev, int *y, int btPrev, int blockIdx, int gb);
 int HybridTransform(int *xCurr, int *xPrev, int y[m_BLOCK_SIZE][m_NBANDS], SideInfoSub_t *sis, BlockCount_t *bc);
-inline uint64_t SAR64(uint64_t x, int n) {return x >> n;}
-inline int MULSHIFT32(int x, int y) { int z; z = (uint64_t) x * (uint64_t) y >> 32; return z;}
-inline uint64_t MADD64(uint64_t sum64, int x, int y) {sum64 += (uint64_t) x * (uint64_t) y; return sum64;}/* returns 64-bit value in [edx:eax] */
-inline uint64_t xSAR64(uint64_t x, int n){return x >> n;}
 inline int FASTABS(int x){ return __builtin_abs(x);} //xtensa has a fast abs instruction //fb
 #define CLZ(x) __builtin_clz(x) //fb

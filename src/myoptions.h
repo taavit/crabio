@@ -8,15 +8,19 @@
 
 #define myoptions_h
 #define DSP_MODEL DSP_SSD1306
-#define I2C_SDA 13
-#define I2C_SCL 12
+#define I2C_SDA 5
+#define I2C_SCL 6
 
-#define I2S_DOUT 4
-#define I2S_BCLK 6
-#define I2S_LRC 5
+#define I2S_DOUT 8
+#define I2S_BCLK 7
+#define I2S_LRC 9
 
-#define BTN_LEFT 7
-#define BTN_CENTER 8
-#define BTN_RIGHT 9
+#define BTN_LEFT 1
+#define BTN_CENTER 2
+#define BTN_RIGHT 3
+
+#define ENC_BTNR 11
+#define ENC_BTNL 12
+#define ENC_BTNB 10
 
 #endif
