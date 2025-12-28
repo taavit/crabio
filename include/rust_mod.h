@@ -12,6 +12,7 @@ typedef struct BitStreamInfo {
 } BitStreamInfo_t;
 
 void RefillBitstreamCache(BitStreamInfo_t *bsi);
+unsigned int GetBits(BitStreamInfo_t *bsi, int nBits);
 
 uint64_t rust_add(uint64_t a, uint64_t b);
 

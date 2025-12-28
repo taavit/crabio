@@ -75,16 +75,16 @@ pub fn clip_to_short(mut x: i32, frac_bits: i32) -> i16 {
 }
 
 
-const m_HUFF_PAIRTABS: u8          =32;
-const m_BLOCK_SIZE: usize             =18;
-const m_NBANDS: usize                 =32;
-const m_MAX_REORDER_SAMPS: usize      =(192-126)*3;      // largest critical band for short blocks (see sfBandTable)
-const m_VBUF_LENGTH: usize           =17*2* m_NBANDS;    // for double-sized vbuf FIFO
-const m_MAX_SCFBD: usize              =4;     // max scalefactor bands per channel
-const m_MAINBUF_SIZE: usize          =1940;
-const m_MAX_NGRAN: usize              =2;     // max granules
-const m_MAX_NCHAN: usize              =2;     // max channels
-const m_MAX_NSAMP: usize             =576;   // max samples per channel, per granule
+const HUFF_PAIRTABS: u8          = 32;
+const BLOCK_SIZE: usize          = 18;
+const NBANDS: usize              = 32;
+const MAX_REORDER_SAMPS: usize   = (192-126)*3;      // largest critical band for short blocks (see sfBandTable)
+const VBUF_LENGTH: usize         = 17*2* NBANDS;    // for double-sized vbuf FIFO
+const MAX_SCFBD: usize           = 4;     // max scalefactor bands per channel
+const MAINBUF_SIZE: usize        = 1940;
+const MAX_NGRAN: usize           = 2;     // max granules
+const MAX_NCHAN: usize           = 2;     // max channels
+const MAX_NSAMP: usize           = 576;   // max samples per channel, per granule
 
 
 const ERR_MP3_NONE: i8 =                  0;
@@ -173,7 +173,7 @@ struct SideInfoSub {
 struct SideInfo {
     mainDataBegin: i32,
     privateBits: i32,
-    scfsi: [[i32; m_MAX_NCHAN]; m_MAX_SCFBD],                /* 4 scalefactor bands per channel */
+    scfsi: [[i32; MAX_NCHAN]; MAX_SCFBD],                /* 4 scalefactor bands per channel */
 }
 
 struct CriticalBandInfo {
@@ -184,13 +184,13 @@ struct CriticalBandInfo {
 }
 
 struct DequantInfo {
-    workBuf: [i32; m_MAX_REORDER_SAMPS],             /* workbuf for reordering short blocks */
+    workBuf: [i32; MAX_REORDER_SAMPS],             /* workbuf for reordering short blocks */
 }
 
 struct HuffmanInfo {
-    huffDecBuf: [[i32; m_MAX_NCHAN]; m_MAX_NSAMP],       /* used both for decoded Huffman values and dequantized coefficients */
-    nonZeroBound: [i32; m_MAX_NCHAN],                /* number of coeffs in huffDecBuf[ch] which can be > 0 */
-    gb: [i32; m_MAX_NCHAN],                          /* minimum number of guard bits in huffDecBuf[ch] */
+    huffDecBuf: [[i32; MAX_NCHAN]; MAX_NSAMP],       /* used both for decoded Huffman values and dequantized coefficients */
+    nonZeroBound: [i32; MAX_NCHAN],                /* number of coeffs in huffDecBuf[ch] which can be > 0 */
+    gb: [i32; MAX_NCHAN],                          /* minimum number of guard bits in huffDecBuf[ch] */
 }
 
 enum HuffTabType {
@@ -205,16 +205,16 @@ enum HuffTabType {
 
 struct HuffTabLookup {
     linBits: i32,
-     tabType: i32, /*HuffTabType*/
+    tabType: i32, /*HuffTabType*/
 }
 
 struct IMDCTInfo {
-    outBuf: [[[i32; m_MAX_NCHAN]; m_BLOCK_SIZE]; m_NBANDS],  /* output of IMDCT */
-    overBuf: [[i32; m_MAX_NCHAN]; m_MAX_NSAMP / 2],      /* overlap-add buffer (by symmetry, only need 1/2 size) */
-    numPrevIMDCT: [i32; m_MAX_NCHAN],                /* how many IMDCT's calculated in this channel on prev. granule */
-    prevType: [i32; m_MAX_NCHAN],
-    prevWinSwitch: [i32; m_MAX_NCHAN],
-    gb: [i32; m_MAX_NCHAN],
+    outBuf: [[[i32; MAX_NCHAN]; BLOCK_SIZE]; NBANDS],  /* output of IMDCT */
+    overBuf: [[i32; MAX_NCHAN]; MAX_NSAMP / 2],      /* overlap-add buffer (by symmetry, only need 1/2 size) */
+    numPrevIMDCT: [i32; MAX_NCHAN],                /* how many IMDCT's calculated in this channel on prev. granule */
+    prevType: [i32; MAX_NCHAN],
+    prevWinSwitch: [i32; MAX_NCHAN],
+    gb: [i32; MAX_NCHAN],
 }
 
 struct BlockCount {
@@ -244,13 +244,13 @@ struct ScaleFactorJS { /* used in MPEG 2, 2.5 intensity (joint) stereo only */
  *   last 15 blocks to shift them down one, a hardware style FIFO)
  */
 struct SubbandInfo {
-    vbuf: [i32; m_MAX_NCHAN * m_VBUF_LENGTH],      /* vbuf for fast DCT-based synthesis PQMF - double size for speed (no modulo indexing) */
+    vbuf: [i32; MAX_NCHAN * VBUF_LENGTH],      /* vbuf for fast DCT-based synthesis PQMF - double size for speed (no modulo indexing) */
     vindex: i32,                             /* internal index for tracking position in vbuf */
 }
 
 struct MP3DecInfo {
     /* buffer which must be large enough to hold largest possible main_data section */
-    mainBuf: [u8; m_MAINBUF_SIZE],
+    mainBuf: [u8; MAINBUF_SIZE],
     /* special info for "free" bitrate files */
     freeBitrateFlag: i32,
     freeBitrateSlots: i32,
@@ -265,27 +265,32 @@ struct MP3DecInfo {
 
     mainDataBegin: i32,
     mainDataBytes: i32,
-    part23Length: [[i32; m_MAX_NGRAN]; m_MAX_NCHAN],
+    part23Length: [[i32; MAX_NGRAN]; MAX_NCHAN],
 }
 
-// fn GetBits(bsi: &mut BitStreamInfo, nBits: i32) -> u32 {
-//     let mut data: u32;
-//     let mut lowBits: u32;
+pub fn get_bits(bsi: &mut BitStreamInfo<'_>, n_bits: u32) -> u32 {
+    let n_bits = n_bits.min(32) as i32; // safe cap
 
-//     nBits &= 0x1f; /* nBits mod 32 to avoid unpredictable results like >> by negative amount */
-//     data = bsi.iCache >> (31 - nBits); /* unsigned >> so zero-extend */
-//     data >>= 1; /* do as >> 31, >> 1 so that nBits = 0 works okay (returns 0) */
-//     bsi.iCache <<= nBits; /* left-justify cache */
-//     bsi.cachedBits -= nBits; /* how many bits have we drawn from the cache so far */
-//     if bsi.cachedBits < 0 {/* if we cross an int boundary, refill the cache */
-//         lowBits = -bsi.cachedBits;
-//         refill_bitstream_cache(bsi);
-//         data |= bsi.iCache >> (32 - lowBits); /* get the low-order bits */
-//         bsi.cachedBits -= lowBits; /* how many bits have we drawn from the cache so far */
-//         bsi.iCache <<= lowBits; /* left-justify cache */
-//     }
-//     return data;
-// }
+    if bsi.cached_bits >= n_bits {
+        let data = bsi.cache >> (32 - n_bits);
+        bsi.cache <<= n_bits;
+        bsi.cached_bits -= n_bits;
+        data
+    } else {
+        let mut data = bsi.cache >> (32 - bsi.cached_bits);
+        let needed = n_bits - bsi.cached_bits;
+
+        refill_bitstream_cache(bsi);
+
+        let low = bsi.cache >> (32 - needed);
+        data = (data << needed) | low;
+
+        bsi.cache <<= needed;
+        bsi.cached_bits -= needed;
+
+        data
+    }
+}
 
 pub fn refill_bitstream_cache(bsi: &mut BitStreamInfo<'_>) {
     let len = bsi.bytes.len();

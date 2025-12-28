@@ -2,13 +2,13 @@
 #![feature(asm_experimental_arch)]
 use core::panic::PanicInfo;
 
-use crate::mp3_decoder::{BitStreamInfo, clip_to_short, madd_64, mulshift_32, refill_bitstream_cache, sar_64};
+use crate::mp3_decoder::{BitStreamInfo, clip_to_short, get_bits, madd_64, mulshift_32, refill_bitstream_cache, sar_64};
 
 mod mp3_decoder;
 
 #[repr(C)]
 pub struct BitStreamInfoC {
-    pub byte_ptr: *mut u8,        // unsigned char *bytePtr;
+    pub byte_ptr: *const u8,        // unsigned char *bytePtr;
     pub i_cache: u32,             // unsigned int iCache;
     pub cached_bits: i32,         // int cachedBits;
     pub n_bytes: i32,             // int nBytes;
@@ -68,4 +68,24 @@ pub extern "C" fn RefillBitstreamCache(bsi_c: *mut BitStreamInfoC) {
     bsi_c.byte_ptr = unsafe { bsi_c.byte_ptr.add(consumed) };
     bsi_c.n_bytes -= consumed as i32;
     bsi_c.cached_bits = bsi_rs.cached_bits;
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn GetBits(bsi_c: *mut BitStreamInfoC, n_bits: u32) -> u32 {
+    let bsi_c: &mut BitStreamInfoC = unsafe { &mut *bsi_c };
+    let data_slice = unsafe { core::slice::from_raw_parts(bsi_c.byte_ptr, bsi_c.n_bytes as usize) };
+    let mut bsi_rs = BitStreamInfo {
+        bytes: data_slice,
+        cache: bsi_c.i_cache,
+        cached_bits: bsi_c.cached_bits,
+    };
+
+    let res = get_bits(&mut bsi_rs, n_bits);
+    bsi_c.i_cache = bsi_rs.cache;
+    let consumed = data_slice.len() - bsi_rs.bytes.len();
+    bsi_c.byte_ptr = unsafe { bsi_c.byte_ptr.add(consumed) };
+    bsi_c.n_bytes -= consumed as i32;
+    bsi_c.cached_bits = bsi_rs.cached_bits;
+
+    res
 }

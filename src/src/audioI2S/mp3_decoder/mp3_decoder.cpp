@@ -701,23 +701,6 @@ void SetBitstreamPointer(BitStreamInfo_t *bsi, int nBytes, unsigned char *buf) {
     bsi->nBytes = nBytes;
 }
 
-unsigned int GetBits(BitStreamInfo_t *bsi, int nBits) {
-    unsigned int data, lowBits;
-
-    nBits &= 0x1f; /* nBits mod 32 to avoid unpredictable results like >> by negative amount */
-    data = bsi->iCache >> (31 - nBits); /* unsigned >> so zero-extend */
-    data >>= 1; /* do as >> 31, >> 1 so that nBits = 0 works okay (returns 0) */
-    bsi->iCache <<= nBits; /* left-justify cache */
-    bsi->cachedBits -= nBits; /* how many bits have we drawn from the cache so far */
-    if (bsi->cachedBits < 0) {/* if we cross an int boundary, refill the cache */
-        lowBits = -bsi->cachedBits;
-        RefillBitstreamCache(bsi);
-        data |= bsi->iCache >> (32 - lowBits); /* get the low-order bits */
-        bsi->cachedBits -= lowBits; /* how many bits have we drawn from the cache so far */
-        bsi->iCache <<= lowBits; /* left-justify cache */
-    }
-    return data;
-}
 //----------------------------------------------------------------------------------------------------------------------
 int CalcBitsUsed(BitStreamInfo_t *bsi, unsigned char *startBuf, int startOffset){
     int bitsUsed;
