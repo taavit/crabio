@@ -11,6 +11,10 @@ const NGRANS_MPEG1: u8           =2;
 const NGRANS_MPEG2: u8           =1;
 const SQRTHALF: u32               =0x5a82799a;  // sqrt(0.5) in Q31 format
 
+const C3_0: i32 = 0x6ed9eba1; /* format = Q31, cos(pi/6) */
+const C6: [i32; 3] = [0x7ba3751d, 0x5a82799a, 0x2120fb83]; /* format = Q31, cos(((0:2) + 0.5) * (pi/6)) */
+
+
 pub const polyCoef: [u32; 264] = [
     /* shuffled vs. original from 0, 1, ... 15 to 0, 15, 2, 13, ... 14, 1 */
     0x00000000, 0x00000074, 0x00000354, 0x0000072c, 0x00001fd4, 0x00005084, 0x000066b8, 0x000249c4,
@@ -62,6 +66,58 @@ pub fn mulshift_32(x: i32, y: i32) -> i32 {
 pub fn madd_64(sum64: u64, x: i32, y: i32) -> u64 {
     sum64 + (x as u64) * (y as u64)
 }/* returns 64-bit value in [edx:eax] */
+
+/// 12-point IMDCT for MP3 short blocks (fixed-point)
+///
+/// Input:  exactly 18 coefficients (only indices 0,3,6,9,12,15 used)
+/// Output: exactly 6 time-domain samples
+#[inline(always)]
+pub fn imdct_12(x: &[i32; 18], out: &mut [i32; 6]) {
+    let x0 = x[0];
+    let x1 = x[3];
+    let x2 = x[6];
+    let x3 = x[9];
+    let x4 = x[12];
+    let x5 = x[15];
+
+    // Pre-butterfly
+    let t4 = x4 - x5;
+    let mut t3 = x3 - t4;
+    let t2 = x2 - t3;
+    t3 -= x5;
+    let mut t1 = x1 - t2;
+    let t0 = x0 - t1;
+    t1 -= t3;
+
+    let t0 = t0 >> 1;
+    let t1 = t1 >> 1;
+
+    // Even part
+    let a0 = mulshift_32(C3_0, t2) << 1;
+    let a1 = t0 + (t4 >> 1);
+    let a2 = t0 - t4;
+
+    let even0 = a1 + a0;
+    let even2 = a2;
+    let even4 = a1 - a0;
+
+    // Odd part
+    let a0 = mulshift_32(C3_0, t3) << 1;
+    let a1 = t1 + (x5 >> 1);  // note: x5, not t5 — original uses original x5
+    let a2 = t1 - x5;
+
+    let odd1 = mulshift_32(C6[0], a1 + a0) << 2;
+    let odd3 = mulshift_32(C6[1], a2) << 2;
+    let odd5 = mulshift_32(C6[2], a1 - a0) << 2;
+
+    // Output
+    out[0] = even0 + odd1;
+    out[1] = even2 + odd3;
+    out[2] = even4 + odd5;
+    out[3] = even4 - odd5;
+    out[4] = even2 - odd3;
+    out[5] = even0 - odd1;
+}
 
 ///
 ///  P O L Y P H A S E
@@ -263,22 +319,22 @@ struct SubbandInfo {
 
 struct MP3DecInfo {
     /* buffer which must be large enough to hold largest possible main_data section */
-    mainBuf: [u8; MAINBUF_SIZE],
+    main_buf: [u8; MAINBUF_SIZE],
     /* special info for "free" bitrate files */
-    freeBitrateFlag: i32,
-    freeBitrateSlots: i32,
+    free_bitrate_flag: i32,
+    free_bitrate_slots: i32,
     /* user-accessible info */
     bitrate: i32,
-    nChans: i32,
+    n_chans: i32,
     samprate: i32,
-    nGrans: i32,             /* granules per frame */
-    nGranSamps: i32,         /* samples per granule */
-    nSlots: i32,
+    n_grans: i32,             /* granules per frame */
+    n_gran_samps: i32,         /* samples per granule */
+    n_slots: i32,
     layer: i32,
 
-    mainDataBegin: i32,
-    mainDataBytes: i32,
-    part23Length: [[i32; MAX_NGRAN]; MAX_NCHAN],
+    main_data_begin: i32,
+    main_data_bytes: i32,
+    part23_length: [[i32; MAX_NGRAN]; MAX_NCHAN],
 }
 
 pub fn get_bits(bsi: &mut BitStreamInfo<'_>, n_bits: u32) -> u32 {
@@ -339,6 +395,53 @@ pub fn refill_bitstream_cache(bsi: &mut BitStreamInfo<'_>) {
  **********************************************************************************************************************/
 pub fn mp3_find_sync_word(data: &[u8]) -> Option<&[u8]> {
     data.windows(2)
-        .position(|w| w[0] == 0xFF && (w[1] & 0xE0) == 0xE0)
+        .position(|w| w[0] == SYNCWORDH && (w[1] & SYNCWORDL) == SYNCWORDL)
         .map(|pos| &data[pos..])
+}
+
+/***********************************************************************************************************************
+ * Function:    MP3FindFreeSync
+ *
+ * Description: figure out number of bytes between adjacent sync words in "free" mode
+ *
+ * Inputs:      buffer to search for next sync word
+ *              the 4-byte frame header starting at the current sync word
+ *              max number of bytes to search in buffer
+ *
+ * Outputs:     none
+ *
+ * Return:      offset to next sync word, minus any pad byte (i.e. nSlots)
+ *              -1 if sync not found after searching nBytes
+ *
+ * Notes:       this checks that the first 22 bits of the next frame header are the
+ *                same as the current frame header, but it's still not foolproof
+ *                (could accidentally find a sequence in the bitstream which
+ *                 appears to match but is not actually the next frame header)
+ *              this could be made more error-resilient by checking several frames
+ *                in a row and verifying that nSlots is the same in each case
+ *              since free mode requires CBR (see spec) we generally only call
+ *                this function once (first frame) then store the result (nSlots)
+ *                and just use it from then on
+ **********************************************************************************************************************/
+/// Find the start of the next frame with a matching header (free format detection)
+/// Returns the byte offset to the frame start (excluding padding byte if set)
+pub fn mp3_find_free_sync(buf: &[u8], first_header: [u8; 4]) -> Option<usize> {
+    if buf.len() < 4 {
+        return None;
+    }
+
+    let fh0 = first_header[0];
+    let fh1 = first_header[1];
+    let fh2_masked = first_header[2] & 0xFC;
+    let padding = (first_header[2] >> 1) & 0x01 != 0;
+
+    buf.windows(4)
+        .position(|window| {
+            window[0] == SYNCWORDH &&                  // sync high byte
+            (window[1] & SYNCWORDL) == SYNCWORDL &&         // sync low bits
+            window[0] == fh0 &&
+            window[1] == fh1 &&
+            (window[2] & 0xFC) == fh2_masked
+        })
+        .map(|pos| if padding { pos.saturating_sub(1) } else { pos })
 }

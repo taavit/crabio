@@ -1129,58 +1129,6 @@ int UnpackScaleFactors( unsigned char *buf, int *bitOffset, int bitsAvail, int g
  **********************************************************************************************************************/
 
 /***********************************************************************************************************************
- * Function:    MP3FindFreeSync
- *
- * Description: figure out number of bytes between adjacent sync words in "free" mode
- *
- * Inputs:      buffer to search for next sync word
- *              the 4-byte frame header starting at the current sync word
- *              max number of bytes to search in buffer
- *
- * Outputs:     none
- *
- * Return:      offset to next sync word, minus any pad byte (i.e. nSlots)
- *              -1 if sync not found after searching nBytes
- *
- * Notes:       this checks that the first 22 bits of the next frame header are the
- *                same as the current frame header, but it's still not foolproof
- *                (could accidentally find a sequence in the bitstream which
- *                 appears to match but is not actually the next frame header)
- *              this could be made more error-resilient by checking several frames
- *                in a row and verifying that nSlots is the same in each case
- *              since free mode requires CBR (see spec) we generally only call
- *                this function once (first frame) then store the result (nSlots)
- *                and just use it from then on
- **********************************************************************************************************************/
-int MP3FindFreeSync(unsigned char *buf, unsigned char firstFH[4], int nBytes){
-    int offset = 0;
-    unsigned char *bufPtr = buf;
-
-    /* loop until we either:
-     *  - run out of nBytes (FindMP3SyncWord() returns -1)
-     *  - find the next valid frame header (sync word, version, layer, CRC flag, bitrate, and sample rate
-     *      in next header must match current header)
-     */
-    while (1) {
-        offset = MP3FindSyncWord(bufPtr, nBytes);
-        bufPtr += offset;
-        if (offset < 0) {
-            return -1;
-        } else if ((bufPtr[0] == firstFH[0]) && (bufPtr[1] == firstFH[1])
-                && ((bufPtr[2] & 0xfc) == (firstFH[2] & 0xfc))) {
-            /* want to return number of bytes per frame,
-             * NOT counting the padding byte, so subtract one if padFlag == 1 */
-            if ((firstFH[2] >> 1) & 0x01)
-                bufPtr--;
-            return bufPtr - buf;
-        }
-        bufPtr += 3;
-        nBytes -= (offset + 3);
-    };
-
-    return -1;
-}
-/***********************************************************************************************************************
  * Function:    MP3GetLastFrameInfo
  *
  * Description: get info about last MP3 frame decoded (number of sampled decoded,
@@ -3028,68 +2976,6 @@ int IMDCT36(int *xCurr, int *xPrev, int *y, int btCurr, int btPrev, int blockIdx
     mOut |= FreqInvertRescale(y, xPrev, blockIdx, es);
 
     return mOut;
-}
-
-
-
-/* 12-point inverse DCT, used in IMDCT12x3()
- * 4 input guard bits will ensure no overflow
- */
-void imdct12(int *x, int *out) {
-    int a0, a1, a2;
-    int x0, x1, x2, x3, x4, x5;
-
-    x0 = *x;
-    x += 3;
-    x1 = *x;
-    x += 3;
-    x2 = *x;
-    x += 3;
-    x3 = *x;
-    x += 3;
-    x4 = *x;
-    x += 3;
-    x5 = *x;
-    x += 3;
-
-    x4 -= x5;
-    x3 -= x4;
-    x2 -= x3;
-    x3 -= x5;
-    x1 -= x2;
-    x0 -= x1;
-    x1 -= x3;
-
-    x0 >>= 1;
-    x1 >>= 1;
-
-    a0 = MULSHIFT32(c3_0, x2) << 1;
-    a1 = x0 + (x4 >> 1);
-    a2 = x0 - x4;
-    x0 = a1 + a0;
-    x2 = a2;
-    x4 = a1 - a0;
-
-    a0 = MULSHIFT32(c3_0, x3) << 1;
-    a1 = x1 + (x5 >> 1);
-    a2 = x1 - x5;
-
-    /* cos window odd samples, mul by 2, eat sign bit */
-    x1 = MULSHIFT32(c6[0], a1 + a0) << 2;
-    x3 = MULSHIFT32(c6[1], a2) << 2;
-    x5 = MULSHIFT32(c6[2], a1 - a0) << 2;
-
-    *out = x0 + x1;
-    out++;
-    *out = x2 + x3;
-    out++;
-    *out = x4 + x5;
-    out++;
-    *out = x4 - x5;
-    out++;
-    *out = x2 - x3;
-    out++;
-    *out = x0 - x1;
 }
 
 /***********************************************************************************************************************
