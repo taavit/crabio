@@ -633,3 +633,65 @@ pub fn polyphase_stereo(mut pcm: &mut [i16], vbuf: &[i32], coef_base: &[u32]) {
         pcm = &mut pcm[2..];
     }
 }
+
+pub fn polyphase_mono(mut pcm: &mut [i16], vbuf: &[i32], coef_base: &[u32]) {
+    let mut vLo: i32;
+    let mut vHi: i32;
+    let mut c1: u32;
+    let mut c2: u32;
+    let mut sum1L: u64;
+    let mut sum2L: u64;
+    let rndVal: u64 = 1 << ((DQ_FRACBITS_OUT - 2 - 2 - 15) - 1 + (32 - CSHIFT));
+
+    /* special case, output sample 0 */
+    let mut coef = coef_base;
+    let mut vb1 = vbuf;
+    sum1L = rndVal;
+    for j in 0..8 {
+        c1=coef[0];
+        coef = &coef[1..];
+        c2=coef[0];
+        coef = &coef[1..];
+        vLo=vb1[j];
+        vHi=vb1[23-(j)]; // 0...7
+        sum1L=madd_64(sum1L, vLo, c1 as i32); sum1L=madd_64(sum1L, vHi, -(c2 as i32));
+    }
+    pcm[0] = clip_to_short(sar_64(sum1L, (32-CSHIFT) as i32) as i32, (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32);
+
+    /* special case, output sample 16 */
+    coef = &coef_base[256..];
+    vb1 = &vbuf[64*16..];
+    sum1L = rndVal;
+    for j in 0..8 {
+        c1=coef[0];
+        coef = &coef[1..];
+        vLo=vb1[j];
+        sum1L = madd_64(sum1L, vLo,  c1 as i32); // 0...7
+    }
+    pcm[16] = clip_to_short(sar_64(sum1L, (32-CSHIFT) as i32)as i32, (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32);
+
+    /* main convolution loop: sum1L = samples 1, 2, 3, ... 15   sum2L = samples 31, 30, ... 17 */
+    coef = &coef_base[16..];
+    vb1 = &vbuf[64..];
+    pcm = &mut pcm[1..];
+
+    /* right now, the compiler creates bad asm from this... */
+    for i in (1..=15).rev() {
+        sum1L = rndVal;
+        sum2L = rndVal;
+        for j in 0..8 {
+            c1= coef[0];
+            coef = &coef[1..];
+            c2=coef[0];
+            coef = &coef[1..];
+            vLo= vb1[j];
+            vHi = vb1[23-j];
+            sum1L=madd_64(sum1L, vLo,  c1 as i32); sum2L = madd_64(sum2L, vLo,  c2 as i32);
+            sum1L=madd_64(sum1L, vHi, -(c2 as i32)); sum2L = madd_64(sum2L, vHi,  c1 as i32);
+        }
+        vb1 = &vb1[64..];
+        pcm[0]       = clip_to_short(sar_64(sum1L, (32-CSHIFT) as i32) as i32, (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32);
+        pcm[2*i] = clip_to_short(sar_64(sum2L, (32-CSHIFT) as i32) as i32, (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32);
+        pcm = &mut pcm[1..];
+    }
+}
