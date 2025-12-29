@@ -1129,31 +1129,6 @@ int UnpackScaleFactors( unsigned char *buf, int *bitOffset, int bitsAvail, int g
  **********************************************************************************************************************/
 
 /***********************************************************************************************************************
- * Function:    MP3FindSyncWord
- *
- * Description: locate the next byte-alinged sync word in the raw mp3 stream
- *
- * Inputs:      buffer to search for sync word
- *              max number of bytes to search in buffer
- *
- * Outputs:     none
- *
- * Return:      offset to first sync word (bytes from start of buf)
- *              -1 if sync not found after searching nBytes
- **********************************************************************************************************************/
-int MP3FindSyncWord(unsigned char *buf, int nBytes) {
-    int i;
-
-    /* find byte-aligned syncword - need 12 (MPEG 1,2) or 11 (MPEG 2.5) matching bits */
-    for (i = 0; i < nBytes - 1; i++) {
-        if ((buf[i + 0] & m_SYNCWORDH) == m_SYNCWORDH
-                && (buf[i + 1] & m_SYNCWORDL) == m_SYNCWORDL)
-            return i;
-    }
-
-    return -1;
-}
-/***********************************************************************************************************************
  * Function:    MP3FindFreeSync
  *
  * Description: figure out number of bytes between adjacent sync words in "free" mode

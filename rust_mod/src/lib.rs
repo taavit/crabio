@@ -2,7 +2,7 @@
 #![feature(asm_experimental_arch)]
 use core::panic::PanicInfo;
 
-use crate::mp3_decoder::{BitStreamInfo, clip_to_short, get_bits, madd_64, mulshift_32, refill_bitstream_cache, sar_64};
+use crate::mp3_decoder::{BitStreamInfo, clip_to_short, get_bits, madd_64, mp3_find_sync_word, mulshift_32, refill_bitstream_cache, sar_64};
 
 mod mp3_decoder;
 
@@ -88,4 +88,17 @@ pub extern "C" fn GetBits(bsi_c: *mut BitStreamInfoC, n_bits: u32) -> u32 {
     bsi_c.cached_bits = bsi_rs.cached_bits;
 
     res
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn MP3FindSyncWord(buf: *const u8, n_bytes: i32) -> i32 {
+    if n_bytes < 2 {
+        return -1;
+    }
+
+    let data = unsafe { core::slice::from_raw_parts(buf, n_bytes as usize) };
+
+    mp3_find_sync_word(data)
+        .map(|tail| unsafe { tail.as_ptr().offset_from(buf) } as i32)
+        .unwrap_or(-1)
 }

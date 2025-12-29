@@ -11,6 +11,8 @@ typedef struct BitStreamInfo {
     int nBytes;
 } BitStreamInfo_t;
 
+int MP3FindSyncWord(unsigned char *buf, int nBytes);
+
 void RefillBitstreamCache(BitStreamInfo_t *bsi);
 unsigned int GetBits(BitStreamInfo_t *bsi, int nBits);
 

@@ -1,3 +1,16 @@
+const SYNCWORDH: u8              =0xff;
+const SYNCWORDL: u8              =0xf0;
+const DQ_FRACBITS_OUT: u8        =25;  // number of fraction bits in output of dequant
+const CSHIFT: u8                 =12;  // coefficients have 12 leading sign bits for early-terminating mulitplies
+const SIBYTES_MPEG1_MONO: u8     =17;
+const SIBYTES_MPEG1_STEREO: u8   =32;
+const SIBYTES_MPEG2_MONO: u8     =9;
+const SIBYTES_MPEG2_STEREO: u8   =17;
+const IMDCT_SCALE: u8            =2;   // additional scaling (by sqrt(2)) for fast IMDCT36
+const NGRANS_MPEG1: u8           =2;
+const NGRANS_MPEG2: u8           =1;
+const SQRTHALF: u32               =0x5a82799a;  // sqrt(0.5) in Q31 format
+
 pub const polyCoef: [u32; 264] = [
     /* shuffled vs. original from 0, 1, ... 15 to 0, 15, 2, 13, ... 14, 1 */
     0x00000000, 0x00000074, 0x00000354, 0x0000072c, 0x00001fd4, 0x00005084, 0x000066b8, 0x000249c4,
@@ -308,4 +321,24 @@ pub fn refill_bitstream_cache(bsi: &mut BitStreamInfo<'_>) {
         bsi.cached_bits = (8 * len) as i32;
         bsi.bytes = &[];
     }
+}
+
+
+/***********************************************************************************************************************
+ * Function:    MP3FindSyncWord
+ *
+ * Description: locate the next byte-alinged sync word in the raw mp3 stream
+ *
+ * Inputs:      buffer to search for sync word
+ *              max number of bytes to search in buffer
+ *
+ * Outputs:     none
+ *
+ * Return:      offset to first sync word (bytes from start of buf)
+ *              -1 if sync not found after searching nBytes
+ **********************************************************************************************************************/
+pub fn mp3_find_sync_word(data: &[u8]) -> Option<&[u8]> {
+    data.windows(2)
+        .position(|w| w[0] == 0xFF && (w[1] & 0xE0) == 0xE0)
+        .map(|pos| &data[pos..])
 }
