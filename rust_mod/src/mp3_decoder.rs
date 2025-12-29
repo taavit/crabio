@@ -1,15 +1,15 @@
-const SYNCWORDH: u8              =0xff;
-const SYNCWORDL: u8              =0xf0;
-const DQ_FRACBITS_OUT: u8        =25;  // number of fraction bits in output of dequant
-const CSHIFT: u8                 =12;  // coefficients have 12 leading sign bits for early-terminating mulitplies
-const SIBYTES_MPEG1_MONO: u8     =17;
-const SIBYTES_MPEG1_STEREO: u8   =32;
-const SIBYTES_MPEG2_MONO: u8     =9;
-const SIBYTES_MPEG2_STEREO: u8   =17;
-const IMDCT_SCALE: u8            =2;   // additional scaling (by sqrt(2)) for fast IMDCT36
-const NGRANS_MPEG1: u8           =2;
-const NGRANS_MPEG2: u8           =1;
-const SQRTHALF: u32               =0x5a82799a;  // sqrt(0.5) in Q31 format
+pub const SYNCWORDH: u8              =0xff;
+pub const SYNCWORDL: u8              =0xf0;
+pub const DQ_FRACBITS_OUT: u8        =25;  // number of fraction bits in output of dequant
+pub const CSHIFT: u8                 =12;  // coefficients have 12 leading sign bits for early-terminating mulitplies
+pub const SIBYTES_MPEG1_MONO: u8     =17;
+pub const SIBYTES_MPEG1_STEREO: u8   =32;
+pub const SIBYTES_MPEG2_MONO: u8     =9;
+pub const SIBYTES_MPEG2_STEREO: u8   =17;
+pub const IMDCT_SCALE: u8            =2;   // additional scaling (by sqrt(2)) for fast IMDCT36
+pub const NGRANS_MPEG1: u8           =2;
+pub const NGRANS_MPEG2: u8           =1;
+pub const SQRTHALF: u32               =0x5a82799a;  // sqrt(0.5) in Q31 format
 
 const C3_0: i32 = 0x6ed9eba1; /* format = Q31, cos(pi/6) */
 const C6: [i32; 3] = [0x7ba3751d, 0x5a82799a, 0x2120fb83]; /* format = Q31, cos(((0:2) + 0.5) * (pi/6)) */
@@ -21,7 +21,7 @@ const C9_3: i32 = 0x5246dd49;
 const C9_4: i32 = 0x7e0e2e32;
 
 
-pub const polyCoef: [u32; 264] = [
+pub const POLY_COEF: [u32; 264] = [
     /* shuffled vs. original from 0, 1, ... 15 to 0, 15, 2, 13, ... 14, 1 */
     0x00000000, 0x00000074, 0x00000354, 0x0000072c, 0x00001fd4, 0x00005084, 0x000066b8, 0x000249c4,
     0x00049478, 0xfffdb63c, 0x000066b8, 0xffffaf7c, 0x00001fd4, 0xfffff8d4, 0x00000354, 0xffffff8c,
@@ -219,16 +219,16 @@ pub fn clip_to_short(mut x: i32, frac_bits: i32) -> i16 {
 }
 
 
-const HUFF_PAIRTABS: u8          = 32;
-const BLOCK_SIZE: usize          = 18;
-const NBANDS: usize              = 32;
-const MAX_REORDER_SAMPS: usize   = (192-126)*3;      // largest critical band for short blocks (see sfBandTable)
-const VBUF_LENGTH: usize         = 17*2* NBANDS;    // for double-sized vbuf FIFO
-const MAX_SCFBD: usize           = 4;     // max scalefactor bands per channel
-const MAINBUF_SIZE: usize        = 1940;
-const MAX_NGRAN: usize           = 2;     // max granules
-const MAX_NCHAN: usize           = 2;     // max channels
-const MAX_NSAMP: usize           = 576;   // max samples per channel, per granule
+pub const HUFF_PAIRTABS: u8          = 32;
+pub const BLOCK_SIZE: usize          = 18;
+pub const NBANDS: usize              = 32;
+pub const MAX_REORDER_SAMPS: usize   = (192-126)*3;      // largest critical band for short blocks (see sfBandTable)
+pub const VBUF_LENGTH: usize         = 17*2* NBANDS;    // for double-sized vbuf FIFO
+pub const MAX_SCFBD: usize           = 4;     // max scalefactor bands per channel
+pub const MAINBUF_SIZE: usize        = 1940;
+pub const MAX_NGRAN: usize           = 2;     // max granules
+pub const MAX_NCHAN: usize           = 2;     // max channels
+pub const MAX_NSAMP: usize           = 576;   // max samples per channel, per granule
 
 
 const ERR_MP3_NONE: i8 =                  0;
@@ -519,4 +519,117 @@ pub fn mp3_find_free_sync(buf: &[u8], first_header: [u8; 4]) -> Option<usize> {
             (window[2] & 0xFC) == fh2_masked
         })
         .map(|pos| if padding { pos.saturating_sub(1) } else { pos })
+}
+
+/***********************************************************************************************************************
+ * Function:    PolyphaseStereo
+ *
+ * Description: filter one subband and produce 32 output PCM samples for each channel
+ *
+ * Inputs:      pointer to PCM output buffer
+ *              number of "extra shifts" (vbuf format = Q(DQ_FRACBITS_OUT-2))
+ *              pointer to start of vbuf (preserved from last call)
+ *              start of filter coefficient table (in proper, shuffled order)
+ *              no minimum number of guard bits is required for input vbuf
+ *                (see additional scaling comments below)
+ *
+ * Outputs:     32 samples of two channels of decoded PCM data, (i.e. Q16.0)
+ *
+ * Return:      none
+ *
+ * Notes:       interleaves PCM samples LRLRLR...
+ **********************************************************************************************************************/
+pub fn polyphase_stereo(mut pcm: &mut [i16], vbuf: &[i32], coef_base: &[u32]) {
+    let rnd_val = 1 << ((DQ_FRACBITS_OUT - 2 - 2 - 15) - 1 + (32 - CSHIFT));
+
+    /* special case, output sample 0 */
+    let mut coef = coef_base;
+    let vb1 = vbuf;
+    let mut sum1_r: u64 = rnd_val;
+    let mut sum1_l: u64 = rnd_val;
+    let mut sum2_r: u64 ;
+    let mut sum2_l: u64 ;
+    let mut c1: u32;
+    let mut c2: u32;
+    let mut v_lo: i32;
+    let mut v_hi: i32;
+
+    for j in 0..8 {
+        c1 = coef[0];
+        coef = &coef[1..];
+        c2=coef[0];
+        coef = &coef[1..];
+        v_lo=vb1[j];
+        v_hi=vb1[23-j];
+        sum1_l = madd_64(
+            sum1_l as u64,
+            v_lo,
+            c1 as i32
+        );
+        sum1_l = madd_64(sum1_l as u64, v_hi, -(c2 as i32));
+        v_lo=vb1[32+j];
+        v_hi=vb1[32+(23-j)];
+        sum1_r=madd_64(sum1_r as u64, v_lo,  c1 as i32);
+        sum1_r=madd_64(sum1_r as u64, v_hi, -(c2 as i32));
+    }
+
+    pcm[0] = clip_to_short(sar_64(sum1_l as u64, (32 - CSHIFT) as i32) as i32, (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32);
+    pcm[1] = clip_to_short(sar_64(sum1_r as u64, (32 - CSHIFT) as i32) as i32, (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32);
+
+    /* special case, output sample 16 */
+    coef = &coef_base[256..];
+    let mut vb1 = &vbuf[64*16..];
+    sum1_l = rnd_val;
+    sum1_r = rnd_val;
+
+    for j in 0..8 {
+        c1 = coef[0];
+        coef = &coef[1..];
+        v_lo = vb1[j];
+        sum1_l = madd_64(sum1_l as u64, v_lo,  c1 as i32);
+        v_lo = vb1[32+j];
+        sum1_r = madd_64(sum1_r as u64, v_lo,  c1 as i32);
+    }
+    pcm[2*16 + 0] = clip_to_short(sar_64(sum1_l as u64, (32-CSHIFT) as i32) as i32, (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32);
+    pcm[2*16 + 1] = clip_to_short(sar_64(sum1_r as u64, (32-CSHIFT) as i32) as i32, (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32);
+
+    /* main convolution loop: sum1L = samples 1, 2, 3, ... 15   sum2L = samples 31, 30, ... 17 */
+    coef = &coef_base[16..];
+    vb1 = &vbuf[64..];
+    pcm = &mut pcm[2..];
+
+    /* right now, the compiler creates bad asm from this... */
+    for i in (1..=15).rev() {
+        sum1_l = rnd_val;
+        sum2_l = rnd_val;
+        sum1_r = rnd_val;
+        sum2_r = rnd_val;
+
+        for j in 0..8 {
+            c1=coef[0];
+            coef = &coef[1..];
+            c2=coef[0];
+            coef = &coef[1..];
+            v_lo=vb1[j];
+            v_hi = vb1[23-j];
+            sum1_l=madd_64(sum1_l as u64, v_lo,  c1 as i32);
+            sum2_l=madd_64(sum2_l as u64, v_lo,  c2 as i32);
+
+            sum1_l=madd_64(sum1_l as u64, v_hi, -(c2 as i32));
+            sum2_l=madd_64(sum2_l as u64, v_hi,  (c1 as i32));
+
+            v_lo=vb1[32+j];
+            v_hi=vb1[32+23-(j)];
+            sum1_r= madd_64(sum1_r as u64, v_lo,  c1 as i32);
+            sum2_r= madd_64(sum2_r as u64, v_lo,  c2 as i32);
+            sum1_r= madd_64(sum1_r as u64, v_hi, -(c2 as i32));
+            sum2_r= madd_64(sum2_r as u64, v_hi,  c1 as i32);
+        }
+        vb1 = &vb1[64..];
+        pcm[0]         = clip_to_short(sar_64(sum1_l as u64, (32-CSHIFT) as i32) as i32, (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32);
+        pcm[1]         = clip_to_short(sar_64(sum1_r as u64, (32-CSHIFT) as i32) as i32, (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32);
+        pcm[2*2*i + 0] = clip_to_short(sar_64(sum2_l as u64, (32-CSHIFT) as i32) as i32, (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32);
+        pcm[2*2*i + 1] = clip_to_short(sar_64(sum2_r as u64, (32-CSHIFT) as i32) as i32, (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32);
+        pcm = &mut pcm[2..];
+    }
 }
