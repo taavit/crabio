@@ -2,7 +2,7 @@
 #![feature(asm_experimental_arch)]
 use core::panic::PanicInfo;
 
-use crate::mp3_decoder::{BitStreamInfo, clip_to_short, get_bits, imdct_12, madd_64, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, refill_bitstream_cache, sar_64};
+use crate::mp3_decoder::{BitStreamInfo, clip_to_short, get_bits, idct_9, imdct_12, madd_64, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, refill_bitstream_cache, sar_64};
 
 mod mp3_decoder;
 
@@ -45,6 +45,14 @@ pub extern "C" fn imdct12(x: *const i32, out: *mut i32) {
     };
 
     imdct_12(x_arr, out_arr);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn idct9(x: *mut i32) {
+    let x_arr: &mut [i32; 9] = unsafe { 
+        core::slice::from_raw_parts_mut(x, 9).try_into().unwrap_unchecked() 
+    };
+    idct_9(x_arr);
 }
 
 #[unsafe(no_mangle)]

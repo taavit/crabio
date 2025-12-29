@@ -20,6 +20,8 @@ unsigned int GetBits(BitStreamInfo_t *bsi, int nBits);
 uint64_t rust_add(uint64_t a, uint64_t b);
 
 void imdct12(int *x, int *out);
+void idct9(int *x);
+
 uint64_t SAR64(uint64_t x, int n);
 uint64_t xSAR64(uint64_t x, int n);
 int MULSHIFT32(int x, int y);

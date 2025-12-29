@@ -14,6 +14,12 @@ const SQRTHALF: u32               =0x5a82799a;  // sqrt(0.5) in Q31 format
 const C3_0: i32 = 0x6ed9eba1; /* format = Q31, cos(pi/6) */
 const C6: [i32; 3] = [0x7ba3751d, 0x5a82799a, 0x2120fb83]; /* format = Q31, cos(((0:2) + 0.5) * (pi/6)) */
 
+const C9_0: i32 = 0x6ed9eba1;
+const C9_1: i32 = 0x620dbe8b;
+const C9_2: i32 = 0x163a1a7e;
+const C9_3: i32 = 0x5246dd49;
+const C9_4: i32 = 0x7e0e2e32;
+
 
 pub const polyCoef: [u32; 264] = [
     /* shuffled vs. original from 0, 1, ... 15 to 0, 15, 2, 13, ... 14, 1 */
@@ -117,6 +123,75 @@ pub fn imdct_12(x: &[i32; 18], out: &mut [i32; 6]) {
     out[3] = even4 - odd5;
     out[4] = even2 - odd3;
     out[5] = even0 - odd1;
+}
+
+#[inline(always)]
+pub fn idct_9(x: &mut [i32; 9]) {
+    let x0 = x[0];
+    let x1 = x[1];
+    let x2 = x[2];
+    let x3 = x[3];
+    let x4 = x[4];
+    let x5 = x[5];
+    let x6 = x[6];
+    let x7 = x[7];
+    let x8 = x[8];
+
+    // Stage 1: differences and sums
+    let a1 = x0 - x6;
+    let a2 = x1 - x5;
+    let a3 = x1 + x5;
+    let a4 = x2 - x4;
+    let a5 = x2 + x4;
+    let a6 = x2 + x8;
+    let a7 = x1 + x7;
+
+    let a8  = a6 - a5; // x8 - x4
+    let a9  = a3 - a7; // x5 - x7
+    let a10 = a2 - x7; // x1 - x5 - x7
+    let a11 = a4 - x8; // x2 - x4 - x8
+
+    // Multiplies with precomputed constants
+    let m1  = mulshift_32(C9_0, x3);
+    let m3  = mulshift_32(C9_0, a10);
+    let m5  = mulshift_32(C9_1, a5);
+    let m6  = mulshift_32(C9_2, a6);
+    let m7  = mulshift_32(C9_1, a8);
+    let m8  = mulshift_32(C9_2, a5);
+    let m9  = mulshift_32(C9_3, a9);
+    let m10 = mulshift_32(C9_4, a7);
+    let m11 = mulshift_32(C9_3, a3);
+    let m12 = mulshift_32(C9_4, a9);
+
+    // Stage 2: intermediate sums
+    let a12 = x0 + (x6 >> 1);
+    let a13 = a12 + (m1 << 1);
+    let a14 = a12 - (m1 << 1);
+    let a15 = a1 + (a11 >> 1);
+    let a16 = (m5 << 1) + (m6 << 1);
+    let a17 = (m7 << 1) - (m8 << 1);
+    let a18 = a16 + a17;
+    let a19 = (m9 << 1) + (m10 << 1);
+    let a20 = (m11 << 1) - (m12 << 1);
+
+    let a21 = a20 - a19;
+    let a22 = a13 + a16;
+    let a23 = a14 + a16;
+    let a24 = a14 + a17;
+    let a25 = a13 + a17;
+    let a26 = a14 - a18;
+    let a27 = a13 - a18;
+
+    // Final output (in-place)
+    x[0] = a22 + a19;
+    x[1] = a15 + (m3 << 1);
+    x[2] = a24 + a20;
+    x[3] = a26 - a21;
+    x[4] = a1 - a11;
+    x[5] = a27 + a21;
+    x[6] = a25 - a20;
+    x[7] = a15 - (m3 << 1);
+    x[8] = a23 - a19;
 }
 
 ///
