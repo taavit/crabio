@@ -30,6 +30,7 @@ uint64_t MADD64(uint64_t sum64, int x, int y);
 short ClipToShort(int x, int fracBits);
 
 void PolyphaseStereo(short *pcm, int *vbuf, const uint32_t *coefBase);
+void PolyphaseMono(short *pcm, int *vbuf, const uint32_t *coefBase);
 
 #ifdef __cplusplus
 }

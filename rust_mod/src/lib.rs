@@ -2,7 +2,7 @@
 #![feature(asm_experimental_arch)]
 use core::panic::PanicInfo;
 
-use crate::mp3_decoder::{BitStreamInfo, CSHIFT, DQ_FRACBITS_OUT, MAX_NCHAN, NBANDS, POLY_COEF, VBUF_LENGTH, clip_to_short, get_bits, idct_9, imdct_12, madd_64, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, polyphase_stereo, refill_bitstream_cache, sar_64};
+use crate::mp3_decoder::{BitStreamInfo, CSHIFT, DQ_FRACBITS_OUT, MAX_NCHAN, NBANDS, POLY_COEF, VBUF_LENGTH, clip_to_short, get_bits, idct_9, imdct_12, madd_64, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, polyphase_mono, polyphase_stereo, refill_bitstream_cache, sar_64};
 
 mod mp3_decoder;
 
@@ -139,6 +139,9 @@ pub unsafe extern "C" fn MP3FindFreeSync(buf: *const u8, first_fh: *const u8, n_
         .unwrap_or(-1)
 }
 
+/***********************************************************************************************************************
+ * P O L Y P H A S E
+ **********************************************************************************************************************/
 
 /***********************************************************************************************************************
  * Function:    PolyphaseStereo
@@ -166,4 +169,31 @@ pub fn PolyphaseStereo(pcm: *mut i16, vbuf: *const i32, coef_base: *const u32) {
     let coef_base = unsafe { core::slice::from_raw_parts(coef_base, POLY_COEF.len()) };
 
     polyphase_stereo(pcm, vbuf, coef_base);
+}
+
+/***********************************************************************************************************************
+ * Function:    PolyphaseMono
+ *
+ * Description: filter one subband and produce 32 output PCM samples for one channel
+ *
+ * Inputs:      pointer to PCM output buffer
+ *              number of "extra shifts" (vbuf format = Q(DQ_FRACBITS_OUT-2))
+ *              pointer to start of vbuf (preserved from last call)
+ *              start of filter coefficient table (in proper, shuffled order)
+ *              no minimum number of guard bits is required for input vbuf
+ *                (see additional scaling comments below)
+ *
+ * Outputs:     32 samples of one channel of decoded PCM data, (i.e. Q16.0)
+ *
+ * Return:      none
+ **********************************************************************************************************************/
+#[unsafe(no_mangle)]
+#[allow(non_snake_case)]
+pub unsafe fn PolyphaseMono(pcm: *mut i16, vbuf: *const i32,coef_base: *const u32) {
+
+    let pcm = unsafe { core::slice::from_raw_parts_mut(pcm, NBANDS * MAX_NCHAN) }; // 32*2
+    let vbuf = unsafe { core::slice::from_raw_parts(vbuf, VBUF_LENGTH) };
+    let coef_base = unsafe { core::slice::from_raw_parts(coef_base, POLY_COEF.len()) };
+
+    polyphase_mono(pcm, vbuf, coef_base);
 }
