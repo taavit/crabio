@@ -7,22 +7,6 @@
  */
 
 #include "mp3_decoder.h"
-/* clip to range [-2^n, 2^n - 1] */
-#if 0 //Fast on ARM:
-#define CLIP_2N(y, n) { \
-	int sign = (y) >> 31;  \
-	if (sign != (y) >> (n))  { \
-		(y) = sign ^ ((1 << (n)) - 1); \
-	} \
-}
-#else //on xtensa this is faster, due to asm min/max instructions:
-#define CLIP_2N(y, n) { \
-    int x = 1 << n; \
-    if (y < -x) y = -x; \
-    x--; \
-    if (y > x) y = x; \
-}
-#endif
 
 const uint8_t  m_SYNCWORDH              =0xff;
 const uint8_t  m_SYNCWORDL              =0xf0;
@@ -3234,15 +3218,6 @@ int Subband( short *pcmBuf) {
  *              guard bit analysis verified by exhaustive testing of all 2^32
  *                combinations of max pos/max neg values in x[]
  **********************************************************************************************************************/
-#define D32FP(i, s1, s2) { \
-    a0 = buf[i];			a3 = buf[31-i]; \
-	a1 = buf[15-i];			a2 = buf[16+i]; \
-    b0 = a0 + a3;			b3 = MULSHIFT32(*cptr++, a0 - a3) << 1;	\
-	b1 = a1 + a2;			b2 = MULSHIFT32(*cptr++, a1 - a2) << (s1);	\
-	buf[i] = b0 + b1;		buf[15-i] = MULSHIFT32(*cptr,   b0 - b1) << (s2); \
-	buf[16+i] = b2 + b3;    buf[31-i] = MULSHIFT32(*cptr++, b3 - b2) << (s2); \
-}
-
 static const uint8_t FDCT32s1s2[16] = {5,3,3,2,2,1,1,1, 1,1,1,1,1,2,2,4};
 
 void FDCT32(int *buf, int *dest, int offset, int oddBlock, int gb) {
@@ -3265,7 +3240,13 @@ void FDCT32(int *buf, int *dest, int offset, int oddBlock, int gb) {
 
 	/* first pass */
     for (unsigned i=0; i < 8; i++) {
-        D32FP(i, FDCT32s1s2[0 + i], FDCT32s1s2[8 + i]);
+        // D32FP
+        a0 = buf[i];			a3 = buf[31-i];
+        a1 = buf[15-i];			a2 = buf[16+i];
+        b0 = a0 + a3;			b3 = MULSHIFT32(*cptr++, a0 - a3) << 1;
+        b1 = a1 + a2;			b2 = MULSHIFT32(*cptr++, a1 - a2) << FDCT32s1s2[0 + i];
+        buf[i] = b0 + b1;		buf[15-i] = MULSHIFT32(*cptr,   b0 - b1) << (FDCT32s1s2[8 + i]);
+        buf[16+i] = b2 + b3;    buf[31-i] = MULSHIFT32(*cptr++, b3 - b2) << (FDCT32s1s2[8 + i]);
     }
 
 	/* second pass */

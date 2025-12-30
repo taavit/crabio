@@ -11,6 +11,8 @@ typedef struct BitStreamInfo {
     int nBytes;
 } BitStreamInfo_t;
 
+int CLIP_2N(int y, uint32_t n);
+
 int MP3FindSyncWord(unsigned char *buf, int nBytes);
 int MP3FindFreeSync(unsigned char *buf, unsigned char firstFH[4], int nBytes);
 

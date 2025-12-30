@@ -3,9 +3,7 @@
 use core::panic::PanicInfo;
 
 use crabio::mp3_decoder::{
-    BitStreamInfo, MAX_NCHAN, NBANDS, POLY_COEF, VBUF_LENGTH,
-    clip_to_short, get_bits, idct_9, imdct_12, madd_64, mp3_find_free_sync, mp3_find_sync_word,
-    mulshift_32, polyphase_mono, polyphase_stereo, refill_bitstream_cache, sar_64,
+    BitStreamInfo, MAX_NCHAN, NBANDS, POLY_COEF, VBUF_LENGTH, clip_2n, clip_to_short, get_bits, idct_9, imdct_12, madd_64, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, polyphase_mono, polyphase_stereo, refill_bitstream_cache, sar_64
 };
 
 #[repr(C)]
@@ -14,6 +12,12 @@ pub struct BitStreamInfoC {
     pub i_cache: u32,        // unsigned int iCache;
     pub cached_bits: i32,    // int cachedBits;
     pub n_bytes: i32,        // int nBytes;
+}
+
+#[unsafe(no_mangle)]
+#[allow(non_snake_case)]
+pub fn CLIP_2N(y: i32, n: u32) -> i32 {
+    clip_2n(y, n)
 }
 
 #[unsafe(no_mangle)]

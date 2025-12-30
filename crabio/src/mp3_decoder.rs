@@ -58,6 +58,18 @@ pub const POLY_COEF: [u32; 264] = [
     0x000001a0, 0x0000187c, 0x000097fc, 0x0003e84c, 0xffff6424, 0xffffff4c, 0x00000248, 0xffffffec,
 ];
 
+#[inline(always)]
+pub fn clip_2n(y: i32, n: u32) -> i32 {
+    if n >= 31 {
+        // No clipping possible or needed in 32-bit signed range
+        // This case is very rare (only when no guard-bit scaling was applied)
+        y
+    } else {
+        // n is 0..=30 → 1 << n is safe (positive, no sign-bit issue)
+        let bound = 1i32 << n;  // normal shift is fine and preferred here
+        y.clamp(-bound, bound - 1)
+    }
+}
 
 #[inline]
 pub fn sar_64(x: u64, n: i32) -> u64 {
@@ -298,11 +310,11 @@ struct FrameHeader {
 }
 
 struct SideInfoSub {
-    part23Length: i32,       /* number of bits in main data */
-    nBigvals: i32,           /* 2x this = first set of Huffman cw's (maximum amplitude can be > 1) */
-    globalGain: i32,         /* overall gain for dequantizer */
+    part23_length: i32,       /* number of bits in main data */
+    n_bigvals: i32,           /* 2x this = first set of Huffman cw's (maximum amplitude can be > 1) */
+    global_gain: i32,         /* overall gain for dequantizer */
     sfCompress: i32,         /* unpacked to figure out number of bits in scale factors */
-    winSwitchFlag: i32,      /* window switching flag */
+    win_switch_flag: i32,      /* window switching flag */
     blockType: i32,          /* block type */
     mixedBlock: i32,         /* 0 = regular block (all short or long), 1 = mixed block */
     tableSelect: [i32; 3],     /* index of Huffman tables for the big values regions */
@@ -348,28 +360,28 @@ enum HuffTabType {
 }
 
 struct HuffTabLookup {
-    linBits: i32,
-    tabType: i32, /*HuffTabType*/
+    lin_bits: i32,
+    tab_type: i32, /*HuffTabType*/
 }
 
 struct IMDCTInfo {
-    outBuf: [[[i32; MAX_NCHAN]; BLOCK_SIZE]; NBANDS],  /* output of IMDCT */
-    overBuf: [[i32; MAX_NCHAN]; MAX_NSAMP / 2],      /* overlap-add buffer (by symmetry, only need 1/2 size) */
-    numPrevIMDCT: [i32; MAX_NCHAN],                /* how many IMDCT's calculated in this channel on prev. granule */
-    prevType: [i32; MAX_NCHAN],
-    prevWinSwitch: [i32; MAX_NCHAN],
+    out_buf: [[[i32; MAX_NCHAN]; BLOCK_SIZE]; NBANDS],  /* output of IMDCT */
+    over_buf: [[i32; MAX_NCHAN]; MAX_NSAMP / 2],      /* overlap-add buffer (by symmetry, only need 1/2 size) */
+    num_prev_imdct: [i32; MAX_NCHAN],                /* how many IMDCT's calculated in this channel on prev. granule */
+    prev_type: [i32; MAX_NCHAN],
+    prev_win_switch: [i32; MAX_NCHAN],
     gb: [i32; MAX_NCHAN],
 }
 
 struct BlockCount {
-    nBlocksLong: i32,
-    nBlocksTotal: i32,
-    nBlocksPrev: i32,
-    prevType: i32,
-    prevWinSwitch: i32,
-    currWinSwitch: i32,
-    gbIn: i32,
-    gbOut: i32,
+    n_blocks_long: i32,
+    n_blocks_total: i32,
+    n_blocks_prev: i32,
+    prev_type: i32,
+    prev_win_switch: i32,
+    curr_win_switch: i32,
+    gb_in: i32,
+    gb_out: i32,
 }
 
 struct ScaleFactorInfoSub {    /* max bits in scalefactors = 5, so use char's to save space */
@@ -1017,5 +1029,89 @@ mod refill_tests {
         refill_bitstream_cache(&mut bsi);
         assert_eq!(bsi.cache, 0);
         assert_eq!(bsi.cached_bits, 0);
+    }
+}
+
+#[cfg(test)]
+mod clip_2n_tests {
+    use super::clip_2n;
+
+    #[test]
+    fn test_normal_range() {
+        // Standard MP3 decoder usage: clip to 16-bit signed range
+        assert_eq!(clip_2n(0, 15), 0);
+        assert_eq!(clip_2n(32767, 15), 32767);
+        assert_eq!(clip_2n(-32768, 15), -32768);
+
+        // Positive overflow
+        assert_eq!(clip_2n(32768, 15), 32767);
+        assert_eq!(clip_2n(100000, 15), 32767);
+
+        // Negative overflow
+        assert_eq!(clip_2n(-32769, 15), -32768);
+        assert_eq!(clip_2n(-100000, 15), -32768);
+    }
+
+    #[test]
+    fn test_different_n_values() {
+        assert_eq!(clip_2n(0, 0), 0);
+        assert_eq!(clip_2n(1, 0), 0);     // max = 0, min = -1 → clips to 0 on positive
+        assert_eq!(clip_2n(-1, 0), -1);
+
+        assert_eq!(clip_2n(1023, 10), 1023);
+        assert_eq!(clip_2n(1024, 10), 1023);
+        assert_eq!(clip_2n(-1024, 10), -1024);
+        assert_eq!(clip_2n(-1025, 10), -1024);
+
+        assert_eq!(clip_2n(7, 3), 7);
+        assert_eq!(clip_2n(8, 3), 7);
+        assert_eq!(clip_2n(-8, 3), -8);
+        assert_eq!(clip_2n(-9, 3), -8);
+    }
+
+    #[test]
+    fn test_bit_exact_match_with_original_helix_macro() {
+        // The original CLIP_2N uses the sign-bit XOR trick
+        // It clips to [-(1<<n), (1<<n)-1]
+        // Verify we match that exactly
+
+        // n=15 → [-32768, 32767]
+        assert_eq!(clip_2n(32768, 15), 32767);  // 2^15 → clamped to 2^15 - 1
+        assert_eq!(clip_2n(i32::MAX, 15), 32767);
+        assert_eq!(clip_2n(i32::MIN, 15), -32768);
+
+        // n=1 → [-2, 1]
+        assert_eq!(clip_2n(2, 1), 1);
+        assert_eq!(clip_2n(-3, 1), -2);
+    }
+
+    #[test]
+    fn test_extreme_n_values() {
+        // n too large → safely clamped to 31
+        assert_eq!(clip_2n(i32::MAX, 40), i32::MAX);       // n=40 → clamped to 31
+        assert_eq!(clip_2n(i32::MIN, 100), i32::MIN);
+    }
+
+    #[test]
+    fn test_n_equals_31() {
+        // Full i32 range except overflow not possible
+        assert_eq!(clip_2n(i32::MAX, 31), i32::MAX);
+        assert_eq!(clip_2n(i32::MIN, 31), i32::MIN);
+        assert_eq!(clip_2n(0, 31), 0);
+    }
+
+    #[test]
+    fn test_n_equals_0() {
+        // Range: [-1, 0]
+        assert_eq!(clip_2n(0, 0), 0);
+        assert_eq!(clip_2n(1, 0), 0);
+        assert_eq!(clip_2n(100, 0), 0);
+    }
+
+    #[test]
+    fn no_panic_on_invalid_shift() {
+        // This test ensures we DON'T panic on large n
+        // If you used raw `1 << n` without clamping/wrapping, this would panic in debug
+        let _ = clip_2n(123, 40);  // Should NOT panic
     }
 }
