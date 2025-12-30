@@ -328,23 +328,23 @@ struct CriticalBandInfo {
 }
 
 struct DequantInfo {
-    workBuf: [i32; MAX_REORDER_SAMPS],             /* workbuf for reordering short blocks */
+    work_buf: [i32; MAX_REORDER_SAMPS],             /* workbuf for reordering short blocks */
 }
 
 struct HuffmanInfo {
-    huffDecBuf: [[i32; MAX_NCHAN]; MAX_NSAMP],       /* used both for decoded Huffman values and dequantized coefficients */
-    nonZeroBound: [i32; MAX_NCHAN],                /* number of coeffs in huffDecBuf[ch] which can be > 0 */
+    huff_dec_buf: [[i32; MAX_NCHAN]; MAX_NSAMP],       /* used both for decoded Huffman values and dequantized coefficients */
+    non_zero_bound: [i32; MAX_NCHAN],                /* number of coeffs in huffDecBuf[ch] which can be > 0 */
     gb: [i32; MAX_NCHAN],                          /* minimum number of guard bits in huffDecBuf[ch] */
 }
 
 enum HuffTabType {
-    noBits,
-    oneShot,
-    loopNoLinbits,
-    loopLinbits,
-    quadA,
-    quadB,
-    invalidTab
+    NoBits,
+    OneShot,
+    LoopNoLinbits,
+    LoopLinbits,
+    QuadA,
+    QuadB,
+    InvalidTab
 }
 
 struct HuffTabLookup {
@@ -378,7 +378,7 @@ struct ScaleFactorInfoSub {    /* max bits in scalefactors = 5, so use char's to
 }
 
 struct ScaleFactorJS { /* used in MPEG 2, 2.5 intensity (joint) stereo only */
-    intensityScale: i32,
+    intensity_scale: i32,
     slen: [i32; 4],
     nr: [i32; 4],
 }
@@ -412,33 +412,49 @@ struct MP3DecInfo {
     part23_length: [[i32; MAX_NGRAN]; MAX_NCHAN],
 }
 
-pub fn get_bits(bsi: &mut BitStreamInfo<'_>, n_bits: u32) -> u32 {
-    let n_bits = n_bits.min(32) as i32; // safe cap
+pub fn get_bits(bsi: &mut BitStreamInfo<'_>, mut n_bits: u32) -> u32 {
+    n_bits = n_bits.min(32);
 
-    if bsi.cached_bits >= n_bits {
-        let data = bsi.cache >> (32 - n_bits);
-        bsi.cache <<= n_bits;
-        bsi.cached_bits -= n_bits;
-        data
-    } else {
-        let mut data = bsi.cache >> (32 - bsi.cached_bits);
-        let needed = n_bits - bsi.cached_bits;
+    // Special case: requesting 0 bits
+    if n_bits == 0 {
+        return 0;
+    }
+
+    // Extract top n_bits from current cache
+    let mut data = bsi.cache.wrapping_shr(32 - n_bits);
+
+    // Consume the bits we just read
+    bsi.cache = bsi.cache.wrapping_shl(n_bits);
+    bsi.cached_bits -= n_bits as i32;
+
+    // If we went negative → we crossed a 32-bit boundary → need to refill
+    if bsi.cached_bits < 0 {
+        let needed = (-bsi.cached_bits) as u32;  // positive amount needed from new cache
 
         refill_bitstream_cache(bsi);
 
-        let low = bsi.cache >> (32 - needed);
-        data = (data << needed) | low;
+        // OR in up to 'needed' bits from the freshly loaded cache
+        let available = bsi.cached_bits.max(0) as u32;
+        let take = needed.min(available);
 
-        bsi.cache <<= needed;
-        bsi.cached_bits -= needed;
+        if take > 0 {
+            data |= bsi.cache.wrapping_shr(32 - take);
 
-        data
+            bsi.cache = bsi.cache.wrapping_shl(take);
+            bsi.cached_bits -= take as i32;
+        }
+        // If no more data (EOF), low bits stay 0 — correct behavior
     }
+
+    data
 }
 
 pub fn refill_bitstream_cache(bsi: &mut BitStreamInfo<'_>) {
     let len = bsi.bytes.len();
-    if len >= 4 {
+    if len == 0 {
+        bsi.cache = 0;
+        bsi.cached_bits = 0;
+    } else if len >= 4 {
         bsi.cache = u32::from_be_bytes([bsi.bytes[0], bsi.bytes[1], bsi.bytes[2], bsi.bytes[3]]);
         bsi.cached_bits = 32;
         bsi.bytes = &bsi.bytes[4..];
@@ -616,7 +632,7 @@ pub fn polyphase_stereo(mut pcm: &mut [i16], vbuf: &[i32], coef_base: &[u32]) {
             sum2_l=madd_64(sum2_l as u64, v_lo,  c2 as i32);
 
             sum1_l=madd_64(sum1_l as u64, v_hi, -(c2 as i32));
-            sum2_l=madd_64(sum2_l as u64, v_hi,  (c1 as i32));
+            sum2_l=madd_64(sum2_l as u64, v_hi,  c1 as i32);
 
             v_lo=vb1[32+j];
             v_hi=vb1[32+23-(j)];
@@ -635,40 +651,40 @@ pub fn polyphase_stereo(mut pcm: &mut [i16], vbuf: &[i32], coef_base: &[u32]) {
 }
 
 pub fn polyphase_mono(mut pcm: &mut [i16], vbuf: &[i32], coef_base: &[u32]) {
-    let mut vLo: i32;
-    let mut vHi: i32;
+    let mut v_lo: i32;
+    let mut v_hi: i32;
     let mut c1: u32;
     let mut c2: u32;
-    let mut sum1L: u64;
-    let mut sum2L: u64;
-    let rndVal: u64 = 1 << ((DQ_FRACBITS_OUT - 2 - 2 - 15) - 1 + (32 - CSHIFT));
+    let mut sum1_l: u64;
+    let mut sum2_l: u64;
+    let rnd_val: u64 = 1 << ((DQ_FRACBITS_OUT - 2 - 2 - 15) - 1 + (32 - CSHIFT));
 
     /* special case, output sample 0 */
     let mut coef = coef_base;
     let mut vb1 = vbuf;
-    sum1L = rndVal;
+    sum1_l = rnd_val;
     for j in 0..8 {
         c1=coef[0];
         coef = &coef[1..];
         c2=coef[0];
         coef = &coef[1..];
-        vLo=vb1[j];
-        vHi=vb1[23-(j)]; // 0...7
-        sum1L=madd_64(sum1L, vLo, c1 as i32); sum1L=madd_64(sum1L, vHi, -(c2 as i32));
+        v_lo=vb1[j];
+        v_hi=vb1[23-(j)]; // 0...7
+        sum1_l=madd_64(sum1_l, v_lo, c1 as i32); sum1_l=madd_64(sum1_l, v_hi, -(c2 as i32));
     }
-    pcm[0] = clip_to_short(sar_64(sum1L, (32-CSHIFT) as i32) as i32, (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32);
+    pcm[0] = clip_to_short(sar_64(sum1_l, (32-CSHIFT) as i32) as i32, (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32);
 
     /* special case, output sample 16 */
     coef = &coef_base[256..];
     vb1 = &vbuf[64*16..];
-    sum1L = rndVal;
+    sum1_l = rnd_val;
     for j in 0..8 {
         c1=coef[0];
         coef = &coef[1..];
-        vLo=vb1[j];
-        sum1L = madd_64(sum1L, vLo,  c1 as i32); // 0...7
+        v_lo=vb1[j];
+        sum1_l = madd_64(sum1_l, v_lo,  c1 as i32); // 0...7
     }
-    pcm[16] = clip_to_short(sar_64(sum1L, (32-CSHIFT) as i32)as i32, (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32);
+    pcm[16] = clip_to_short(sar_64(sum1_l, (32-CSHIFT) as i32)as i32, (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32);
 
     /* main convolution loop: sum1L = samples 1, 2, 3, ... 15   sum2L = samples 31, 30, ... 17 */
     coef = &coef_base[16..];
@@ -677,21 +693,329 @@ pub fn polyphase_mono(mut pcm: &mut [i16], vbuf: &[i32], coef_base: &[u32]) {
 
     /* right now, the compiler creates bad asm from this... */
     for i in (1..=15).rev() {
-        sum1L = rndVal;
-        sum2L = rndVal;
+        sum1_l = rnd_val;
+        sum2_l = rnd_val;
         for j in 0..8 {
             c1= coef[0];
             coef = &coef[1..];
             c2=coef[0];
             coef = &coef[1..];
-            vLo= vb1[j];
-            vHi = vb1[23-j];
-            sum1L=madd_64(sum1L, vLo,  c1 as i32); sum2L = madd_64(sum2L, vLo,  c2 as i32);
-            sum1L=madd_64(sum1L, vHi, -(c2 as i32)); sum2L = madd_64(sum2L, vHi,  c1 as i32);
+            v_lo= vb1[j];
+            v_hi = vb1[23-j];
+            sum1_l=madd_64(sum1_l, v_lo,  c1 as i32); sum2_l = madd_64(sum2_l, v_lo,  c2 as i32);
+            sum1_l=madd_64(sum1_l, v_hi, -(c2 as i32)); sum2_l = madd_64(sum2_l, v_hi,  c1 as i32);
         }
         vb1 = &vb1[64..];
-        pcm[0]       = clip_to_short(sar_64(sum1L, (32-CSHIFT) as i32) as i32, (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32);
-        pcm[2*i] = clip_to_short(sar_64(sum2L, (32-CSHIFT) as i32) as i32, (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32);
+        pcm[0]       = clip_to_short(sar_64(sum1_l, (32-CSHIFT) as i32) as i32, (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32);
+        pcm[2*i] = clip_to_short(sar_64(sum2_l, (32-CSHIFT) as i32) as i32, (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32);
         pcm = &mut pcm[1..];
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::mp3_decoder::clip_to_short;
+
+#[test]
+    fn test_no_shift_no_clipping() {
+        // frac_bits = 0 → no shift, just clipping
+        assert_eq!(clip_to_short(0, 0), 0);
+        assert_eq!(clip_to_short(100, 0), 100);
+        assert_eq!(clip_to_short(-5000, 0), -5000);
+        assert_eq!(clip_to_short(32767, 0), 32767);
+        assert_eq!(clip_to_short(-32768, 0), -32768);
+    }
+
+    #[test]
+    fn test_positive_clipping() {
+        // Values that exceed i16::MAX after shift should be clamped to 32767
+        assert_eq!(clip_to_short(32767 << 1, 1), 32767); // 65534 >> 1 = 32767 → no clip
+        assert_eq!(clip_to_short(32768 << 1, 1), 32767); // 65536 >> 1 = 32768 → clipped
+        assert_eq!(clip_to_short(1_000_000, 0), 32767);
+        assert_eq!(clip_to_short(2_147_483_647, 0), 32767); // i32::MAX
+        assert_eq!(clip_to_short(40000, 1), 20000); // 40000 >> 1 = 20000 → no clip?
+        assert_eq!(clip_to_short(100_000, 1), 32767); // 100000 >> 1 = 50000 → still > 32767 → clipped
+    }
+
+    #[test]
+    fn test_negative_clipping() {
+        // Values that go below i16::MIN after shift should be clamped to -32768
+        assert_eq!(clip_to_short(-32768 << 1, 1), -32768); // -65536 >> 1 = -32768 → no clip
+        assert_eq!(clip_to_short((-32768 << 1) - 2, 1), -32768); // -65538 >> 1 = -32769 → clipped
+        assert_eq!(clip_to_short(-100_000, 0), -32768);
+        assert_eq!(clip_to_short(-2_147_483_648, 0), -32768); // i32::MIN
+    }
+
+    #[test]
+    fn test_exact_edges() {
+        assert_eq!(clip_to_short(32767, 0), 32767);
+        assert_eq!(clip_to_short(32768, 0), 32767);
+        assert_eq!(clip_to_short(-32768, 0), -32768);
+        assert_eq!(clip_to_short(-32769, 0), -32768);
+
+        // After shifting
+        assert_eq!(clip_to_short(32767 << 5, 5), 32767);
+        assert_eq!(clip_to_short((32767 << 5) + 1, 5), 32767);
+        assert_eq!(clip_to_short(-32768 << 5, 5), -32768);
+        assert_eq!(clip_to_short((-32768 << 5) - 1, 5), -32768);
+    }
+
+    #[test]
+    fn test_large_frac_bits() {
+        // Shifting by many bits → most values become 0 or -1 (for negative)
+        assert_eq!(clip_to_short(12345, 20), 0);
+        assert_eq!(clip_to_short(-12345, 20), -1); // arithmetic right shift in Rust for signed
+        assert_eq!(clip_to_short(1 << 30, 30), 1);
+        assert_eq!(clip_to_short(-1 << 30, 30), -1);
+        assert_eq!(clip_to_short(1_000_000, 31), 0);
+        assert_eq!(clip_to_short(-1_000_000, 31), -1);
+    }
+
+    #[test]
+    fn test_frac_bits_zero() {
+        // No shift, pure clipping
+        for i in -40000..=40000 {
+            let expected = i.clamp(i16::MIN as i32, i16::MAX as i32) as i16;
+            assert_eq!(clip_to_short(i, 0), expected);
+        }
+    }
+
+    #[test]
+    fn test_small_shifts() {
+        assert_eq!(clip_to_short(1, 1), 0);
+        assert_eq!(clip_to_short(3, 1), 1);
+        assert_eq!(clip_to_short(4, 1), 2);
+        assert_eq!(clip_to_short(-3, 1), -2);
+        // But let's verify actual behavior:
+        assert_eq!(clip_to_short(-5, 1), -3);
+        // Better to test known values
+        assert_eq!(clip_to_short(-1, 0), -1);
+        assert_eq!(clip_to_short(-1 << 10, 10), -1);
+    }
+
+    mod bitstream {
+        use crate::mp3_decoder::{BitStreamInfo, get_bits, refill_bitstream_cache};
+
+        fn make_bsi(data: &[u8]) -> BitStreamInfo<'_> {
+        BitStreamInfo {
+            bytes: data,
+            cache: 0,
+            cached_bits: 0,
+        }
+    }
+
+    #[test]
+    fn test_get_single_bits() {
+        let data = [0b1011_0011];
+        let mut bsi = make_bsi(&data);
+
+        assert_eq!(get_bits(&mut bsi, 1), 1);
+        assert_eq!(get_bits(&mut bsi, 1), 0);
+        assert_eq!(get_bits(&mut bsi, 1), 1);
+        assert_eq!(get_bits(&mut bsi, 1), 1);
+        assert_eq!(get_bits(&mut bsi, 1), 0);
+        assert_eq!(get_bits(&mut bsi, 1), 0);
+        assert_eq!(get_bits(&mut bsi, 1), 1);
+        assert_eq!(get_bits(&mut bsi, 1), 1);
+
+        assert_eq!(bsi.cached_bits, 0);
+        assert_eq!(bsi.bytes.len(), 0); // consumed 1 byte
+    }
+
+    #[test]
+    fn test_get_various_sizes_from_cache() {
+        let data = [0xAB, 0xCD, 0xEF]; // 0xABCDEF
+        let mut bsi = make_bsi(&data);
+
+        // First read 12 bits: should get 0xABC (0b1010_1011_1100)
+        assert_eq!(get_bits(&mut bsi, 12), 0xABC);
+        // Now cache has 12 bits left: 0xDEF (shifted up)
+        // cache = 0xCDEF0000 >> (32-12) wait, let's verify next
+
+        assert_eq!(get_bits(&mut bsi, 8), 0xDE); // next 8 bits
+        assert_eq!(get_bits(&mut bsi, 4), 0xF);  // next 4 bits (0xE from 0xEF)
+        assert_eq!(get_bits(&mut bsi, 4), 0x0);  // last 4 bits
+
+        assert_eq!(bsi.cached_bits, 0);
+    }
+
+    #[test]
+    fn test_split_across_refill() {
+        let data = [0xF0, 0x0F, 0xAA];
+        let mut bsi = make_bsi(&data);
+
+        // Read 4 bits: 0b1111
+        assert_eq!(get_bits(&mut bsi, 4), 0xF);
+        // Now 4 bits left in cache: 0b0000 (from 0xF0)
+
+        // Read 12 bits: should take remaining 4 (0x0) + next 8 (0x0F) = 0x00F
+        assert_eq!(get_bits(&mut bsi, 12), 0x00F);
+
+        // Now cache has 0xAA and possibly more, but we read 8 bits from refill
+        assert_eq!(get_bits(&mut bsi, 8), 0xAA);
+
+        assert_eq!(bsi.bytes.len(), 0);
+    }
+
+    #[test]
+    fn test_full_32_bits() {
+        let data = [0x12, 0x34, 0x56, 0x78];
+        let mut bsi = make_bsi(&data);
+
+        assert_eq!(get_bits(&mut bsi, 32), 0x12345678);
+        assert_eq!(bsi.cached_bits, 0);
+        assert_eq!(bsi.bytes.len(), 0);
+    }
+
+    #[test]
+    fn test_more_than_32_bits_capped() {
+        let data = [0xFF, 0xFF, 0xFF, 0xFF, 0xFF];
+        let mut bsi = make_bsi(&data);
+
+        // Should cap at 32 and return top 32 bits
+        assert_eq!(get_bits(&mut bsi, 40), 0xFFFFFFFF);
+        // After reading 32 bits, one byte remains in buffer, cache should be refilled
+        refill_bitstream_cache(&mut bsi); // simulate next refill
+        assert_eq!(bsi.cache, 0xFF000000);
+        assert_eq!(bsi.cached_bits, 8);
+    }
+
+    #[test]
+    fn test_small_reads_after_large() {
+        let data = [0xDE, 0xAD, 0xBE, 0xEF];
+        let mut bsi = make_bsi(&data);
+
+        assert_eq!(get_bits(&mut bsi, 16), 0xDEAD);
+        assert_eq!(get_bits(&mut bsi, 3), 0b101); // first 3 bits of 0xBE = 0b10111110
+        assert_eq!(get_bits(&mut bsi, 5), 0b11110); // next 5 bits
+        assert_eq!(get_bits(&mut bsi, 8), 0xEF);
+    }
+
+    #[test]
+    fn test_empty_stream_returns_zero() {
+        let mut bsi = make_bsi(&[]);
+
+        assert_eq!(get_bits(&mut bsi, 1), 0);
+        assert_eq!(get_bits(&mut bsi, 16), 0);
+        assert_eq!(get_bits(&mut bsi, 32), 0);
+        assert_eq!(bsi.cached_bits, 0);
+    }
+
+    #[test]
+    fn test_partial_final_byte() {
+        let data = [0b1010_1010]; // 0b1010_1010
+        let mut bsi = make_bsi(&data);
+
+        assert_eq!(get_bits(&mut bsi, 3), 0b101);
+        assert_eq!(get_bits(&mut bsi, 3), 0b010);
+        assert_eq!(get_bits(&mut bsi, 2), 0b10);
+        // Only 8 bits total, no more
+        assert_eq!(get_bits(&mut bsi, 1), 0);
+    }
+    }
+}
+
+#[cfg(test)]
+mod refill_tests {
+    use super::{refill_bitstream_cache, BitStreamInfo};
+
+    fn make_bsi(bytes: &[u8]) -> BitStreamInfo<'_> {
+        BitStreamInfo {
+            bytes,
+            cache: 0xDEADBEEF, // garbage initial value to detect overwrite
+            cached_bits: -99,   // invalid initial value
+        }
+    }
+
+    #[test]
+    fn refill_empty() {
+        let data = [];
+        let mut bsi = make_bsi(&data);
+
+        refill_bitstream_cache(&mut bsi);
+
+        assert_eq!(bsi.cache, 0);
+        assert_eq!(bsi.cached_bits, 0);
+        assert_eq!(bsi.bytes.len(), 0);
+    }
+
+    #[test]
+    fn refill_full_4_bytes() {
+        let data = [0x12, 0x34, 0x56, 0x78];
+        let mut bsi = make_bsi(&data);
+
+        refill_bitstream_cache(&mut bsi);
+
+        assert_eq!(bsi.cache, 0x12345678);
+        assert_eq!(bsi.cached_bits, 32);
+        assert_eq!(bsi.bytes, &[][..]); // consumed 4 bytes
+    }
+
+    #[test]
+    fn refill_full_more_than_4_bytes() {
+        let data = [0xAB, 0xCD, 0xEF, 0x12, 0x34, 0x56];
+        let mut bsi = make_bsi(&data);
+
+        refill_bitstream_cache(&mut bsi);
+
+        assert_eq!(bsi.cache, 0xABCDEF12);
+        assert_eq!(bsi.cached_bits, 32);
+        assert_eq!(bsi.bytes, &[0x34, 0x56][..]); // left 2 bytes
+    }
+
+    #[test]
+    fn refill_3_bytes() {
+        let data = [0xAB, 0xCD, 0xEF];
+        let mut bsi = make_bsi(&data);
+
+        refill_bitstream_cache(&mut bsi);
+
+        assert_eq!(bsi.cache, 0xABCDEF00); // left-justified!
+        assert_eq!(bsi.cached_bits, 24);
+        assert_eq!(bsi.bytes.len(), 0);
+    }
+
+    #[test]
+    fn refill_2_bytes() {
+        let data = [0x12, 0x34];
+        let mut bsi = make_bsi(&data);
+
+        refill_bitstream_cache(&mut bsi);
+
+        assert_eq!(bsi.cache, 0x12340000);
+        assert_eq!(bsi.cached_bits, 16);
+        assert_eq!(bsi.bytes.len(), 0);
+    }
+
+    #[test]
+    fn refill_1_byte() {
+        let data = [0xFF];
+        let mut bsi = make_bsi(&data);
+
+        refill_bitstream_cache(&mut bsi);
+
+        assert_eq!(bsi.cache, 0xFF000000);
+        assert_eq!(bsi.cached_bits, 8);
+        assert_eq!(bsi.bytes.len(), 0);
+    }
+
+    #[test]
+    fn refill_multiple_calls() {
+        let data = [0xAA, 0xBB, 0xCC, 0xDD, 0xEE];
+        let mut bsi = make_bsi(&data);
+
+        refill_bitstream_cache(&mut bsi);
+        assert_eq!(bsi.cache, 0xAABBCCDD);
+        assert_eq!(bsi.cached_bits, 32);
+        assert_eq!(bsi.bytes, &[0xEE][..]);
+
+        refill_bitstream_cache(&mut bsi);
+        assert_eq!(bsi.cache, 0xEE000000);
+        assert_eq!(bsi.cached_bits, 8);
+        assert_eq!(bsi.bytes.len(), 0);
+
+        refill_bitstream_cache(&mut bsi);
+        assert_eq!(bsi.cache, 0);
+        assert_eq!(bsi.cached_bits, 0);
     }
 }
