@@ -620,59 +620,6 @@ const int ISFMpeg2[2][2][16] PROGMEM = {
         0x05a82799, 0x03ffffff, 0x02d413cc, 0x01ffffff, 0x016a09e6, 0x00ffffff, 0x00b504f3, 0x007fffff }   }
 };
 
-const uint32_t m_COS0_0 = 0x4013c251;  /* Q31 */
-const uint32_t m_COS0_1 = 0x40b345bd;  /* Q31 */
-const uint32_t m_COS0_2 = 0x41fa2d6d;  /* Q31 */
-const uint32_t m_COS0_3 = 0x43f93421;  /* Q31 */
-const uint32_t m_COS0_4 = 0x46cc1bc4;  /* Q31 */
-const uint32_t m_COS0_5 = 0x4a9d9cf0;  /* Q31 */
-const uint32_t m_COS0_6 = 0x4fae3711;  /* Q31 */
-const uint32_t m_COS0_7 = 0x56601ea7;  /* Q31 */
-const uint32_t m_COS0_8 = 0x5f4cf6eb;  /* Q31 */
-const uint32_t m_COS0_9 = 0x6b6fcf26;  /* Q31 */
-const uint32_t m_COS0_10= 0x7c7d1db3;  /* Q31 */
-const uint32_t m_COS0_11= 0x4ad81a97;  /* Q30 */
-const uint32_t m_COS0_12= 0x5efc8d96;  /* Q30 */
-const uint32_t m_COS0_13= 0x41d95790;  /* Q29 */
-const uint32_t m_COS0_14= 0x6d0b20cf;  /* Q29 */
-const uint32_t m_COS0_15= 0x518522fb;  /* Q27 */
-const uint32_t m_COS1_0 = 0x404f4672;  /* Q31 */
-const uint32_t m_COS1_1 = 0x42e13c10;  /* Q31 */
-const uint32_t m_COS1_2 = 0x48919f44;  /* Q31 */
-const uint32_t m_COS1_3 = 0x52cb0e63;  /* Q31 */
-const uint32_t m_COS1_4 = 0x64e2402e;  /* Q31 */
-const uint32_t m_COS1_5 = 0x43e224a9;  /* Q30 */
-const uint32_t m_COS1_6 = 0x6e3c92c1;  /* Q30 */
-const uint32_t m_COS1_7 = 0x519e4e04;  /* Q28 */
-const uint32_t m_COS2_0 = 0x4140fb46;  /* Q31 */
-const uint32_t m_COS2_1 = 0x4cf8de88;  /* Q31 */
-const uint32_t m_COS2_2 = 0x73326bbf;  /* Q31 */
-const uint32_t m_COS2_3 = 0x52036742;  /* Q29 */
-const uint32_t m_COS3_0 = 0x4545e9ef;  /* Q31 */
-const uint32_t m_COS3_1 = 0x539eba45;  /* Q30 */
-const uint32_t m_COS4_0 = 0x5a82799a;  /* Q31 */
-
-const uint32_t m_dcttab[48] PROGMEM = { // faster in ROM
-    /* first pass */
-     m_COS0_0,  m_COS0_15, m_COS1_0,    /* 31, 27, 31 */
-     m_COS0_1,  m_COS0_14, m_COS1_1,    /* 31, 29, 31 */
-     m_COS0_2,  m_COS0_13, m_COS1_2,    /* 31, 29, 31 */
-     m_COS0_3,  m_COS0_12, m_COS1_3,    /* 31, 30, 31 */
-     m_COS0_4,  m_COS0_11, m_COS1_4,    /* 31, 30, 31 */
-     m_COS0_5,  m_COS0_10, m_COS1_5,    /* 31, 31, 30 */
-     m_COS0_6,  m_COS0_9,  m_COS1_6,    /* 31, 31, 30 */
-     m_COS0_7,  m_COS0_8,  m_COS1_7,    /* 31, 31, 28 */
-    /* second pass */
-     m_COS2_0,  m_COS2_3,  m_COS3_0,   /* 31, 29, 31 */
-     m_COS2_1,  m_COS2_2,  m_COS3_1,   /* 31, 31, 30 */
-    -m_COS2_0, -m_COS2_3,  m_COS3_0,   /* 31, 29, 31 */
-    -m_COS2_1, -m_COS2_2,  m_COS3_1,   /* 31, 31, 30 */
-     m_COS2_0,  m_COS2_3,  m_COS3_0,   /* 31, 29, 31 */
-     m_COS2_1,  m_COS2_2,  m_COS3_1,   /* 31, 31, 30 */
-    -m_COS2_0, -m_COS2_3,  m_COS3_0,   /* 31, 29, 31 */
-    -m_COS2_1, -m_COS2_2,  m_COS3_1,   /* 31, 31, 30 */
-};
-
 /***********************************************************************************************************************
  * B I T S T R E A M
  **********************************************************************************************************************/
