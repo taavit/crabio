@@ -724,6 +724,92 @@ pub fn polyphase_mono(mut pcm: &mut [i16], vbuf: &[i32], coef_base: &[u32]) {
     }
 }
 
+
+/***********************************************************************************************************************
+ * D C T 3 2
+ **********************************************************************************************************************/
+
+/***********************************************************************************************************************
+ * Function:    FDCT32
+ *
+ * Description: Ken's highly-optimized 32-point DCT (radix-4 + radix-8)
+ *
+ * Inputs:      input buffer, length = 32 samples
+ *              require at least 6 guard bits in input vector x to avoid possibility
+ *                of overflow in internal calculations (see bbtest_imdct test app)
+ *              buffer offset and oddblock flag for polyphase filter input buffer
+ *              number of guard bits in input
+ *
+ * Outputs:     output buffer, data copied and interleaved for polyphase filter
+ *              no guarantees about number of guard bits in output
+ *
+ * Return:      none
+ *
+ * Notes:       number of muls = 4*8 + 12*4 = 80
+ *              final stage of DCT is hardcoded to shuffle data into the proper order
+ *                for the polyphase filterbank
+ *              fully unrolled stage 1, for max precision (scale the 1/cos() factors
+ *                differently, depending on magnitude)
+ *              guard bit analysis verified by exhaustive testing of all 2^32
+ *                combinations of max pos/max neg values in x[]
+ **********************************************************************************************************************/
+ 
+const m_COS0_0: i32 = 0x4013c251;  /* Q31 */
+const m_COS0_1: i32 = 0x40b345bd;  /* Q31 */
+const m_COS0_2: i32 = 0x41fa2d6d;  /* Q31 */
+const m_COS0_3: i32 = 0x43f93421;  /* Q31 */
+const m_COS0_4: i32 = 0x46cc1bc4;  /* Q31 */
+const m_COS0_5: i32 = 0x4a9d9cf0;  /* Q31 */
+const m_COS0_6: i32 = 0x4fae3711;  /* Q31 */
+const m_COS0_7: i32 = 0x56601ea7;  /* Q31 */
+const m_COS0_8: i32 = 0x5f4cf6eb;  /* Q31 */
+const m_COS0_9: i32 = 0x6b6fcf26;  /* Q31 */
+const m_COS0_10: i32= 0x7c7d1db3;  /* Q31 */
+const m_COS0_11: i32= 0x4ad81a97;  /* Q30 */
+const m_COS0_12: i32= 0x5efc8d96;  /* Q30 */
+const m_COS0_13: i32= 0x41d95790;  /* Q29 */
+const m_COS0_14: i32= 0x6d0b20cf;  /* Q29 */
+const m_COS0_15: i32= 0x518522fb;  /* Q27 */
+const m_COS1_0: i32 = 0x404f4672;  /* Q31 */
+const m_COS1_1: i32 = 0x42e13c10;  /* Q31 */
+const m_COS1_2: i32 = 0x48919f44;  /* Q31 */
+const m_COS1_3: i32 = 0x52cb0e63;  /* Q31 */
+const m_COS1_4: i32 = 0x64e2402e;  /* Q31 */
+const m_COS1_5: i32 = 0x43e224a9;  /* Q30 */
+const m_COS1_6: i32 = 0x6e3c92c1;  /* Q30 */
+const m_COS1_7: i32 = 0x519e4e04;  /* Q28 */
+const m_COS2_0: i32 = 0x4140fb46;  /* Q31 */
+const m_COS2_1: i32 = 0x4cf8de88;  /* Q31 */
+const m_COS2_2: i32 = 0x73326bbf;  /* Q31 */
+const m_COS2_3: i32 = 0x52036742;  /* Q29 */
+const m_COS3_0: i32 = 0x4545e9ef;  /* Q31 */
+const m_COS3_1: i32 = 0x539eba45;  /* Q30 */
+const m_COS4_0: i32 = 0x5a82799a;  /* Q31 */
+
+const m_dcttab:[i32; 48] = [ // faster in ROM
+    /* first pass */
+     m_COS0_0,  m_COS0_15, m_COS1_0,    /* 31, 27, 31 */
+     m_COS0_1,  m_COS0_14, m_COS1_1,    /* 31, 29, 31 */
+     m_COS0_2,  m_COS0_13, m_COS1_2,    /* 31, 29, 31 */
+     m_COS0_3,  m_COS0_12, m_COS1_3,    /* 31, 30, 31 */
+     m_COS0_4,  m_COS0_11, m_COS1_4,    /* 31, 30, 31 */
+     m_COS0_5,  m_COS0_10, m_COS1_5,    /* 31, 31, 30 */
+     m_COS0_6,  m_COS0_9,  m_COS1_6,    /* 31, 31, 30 */
+     m_COS0_7,  m_COS0_8,  m_COS1_7,    /* 31, 31, 28 */
+    /* second pass */
+     m_COS2_0,  m_COS2_3,  m_COS3_0,   /* 31, 29, 31 */
+     m_COS2_1,  m_COS2_2,  m_COS3_1,   /* 31, 31, 30 */
+    -m_COS2_0, -m_COS2_3,  m_COS3_0,   /* 31, 29, 31 */
+    -m_COS2_1, -m_COS2_2,  m_COS3_1,   /* 31, 31, 30 */
+     m_COS2_0,  m_COS2_3,  m_COS3_0,   /* 31, 29, 31 */
+     m_COS2_1,  m_COS2_2,  m_COS3_1,   /* 31, 31, 30 */
+    -m_COS2_0, -m_COS2_3,  m_COS3_0,   /* 31, 29, 31 */
+    -m_COS2_1, -m_COS2_2,  m_COS3_1,   /* 31, 31, 30 */
+];
+
+#[allow(non_upper_case_globals)]
+const FDCT32s1s2: [u8; 16] = [5,3,3,2,2,1,1,1, 1,1,1,1,1,2,2,4];
+
 #[cfg(test)]
 mod tests {
     use crate::mp3_decoder::clip_to_short;

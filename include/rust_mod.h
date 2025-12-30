@@ -29,6 +29,8 @@ uint64_t xSAR64(uint64_t x, int n);
 int MULSHIFT32(int x, int y);
 uint64_t MADD64(uint64_t sum64, int x, int y);
 
+
+void FDCT32(int *buf, int *dest, int offset, int oddBlock, int gb);
 short ClipToShort(int x, int fracBits);
 
 void PolyphaseStereo(short *pcm, int *vbuf, const uint32_t *coefBase);
