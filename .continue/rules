@@ -1,0 +1,10 @@
+# Project Architecture
+
+This is a yoradio conversion project:
+  - `src` contains old c++/arduino files about to be rewritten
+  - `crabio` contains new safe rust implementation of routines for yoradio
+  - `rust_mod` contains initial pre-safe rust implementation and after tests and making it safe onlu glue code lefts, final implementation goes to `crabio`
+  - `include` contains additional header files for glue code
+
+# External Resources
+  - [yoradio source](https://github.com/e2002/yoradio)
