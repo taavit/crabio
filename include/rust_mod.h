@@ -32,6 +32,7 @@ uint64_t MADD64(uint64_t sum64, int x, int y);
 
 void FDCT32(int *buf, int *dest, int offset, int oddBlock, int gb);
 short ClipToShort(int x, int fracBits);
+int FreqInvertRescale(int *y, int *xPrev, int blockIdx, int es);
 
 void PolyphaseStereo(short *pcm, int *vbuf, const uint32_t *coefBase);
 void PolyphaseMono(short *pcm, int *vbuf, const uint32_t *coefBase);

@@ -2647,57 +2647,6 @@ void WinPrevious(int *xPrev, int *xPrevWin, int btPrev){
 }
 
 /***********************************************************************************************************************
- * Function:    FreqInvertRescale
- *
- * Description: do frequency inversion (odd samples of odd blocks) and rescale
- *                if necessary (extra guard bits added before IMDCT)
- *
- * Inputs:      output vector y (18 new samples, spaced NBANDS apart)
- *              previous sample vector xPrev (9 samples)
- *              index of current block
- *              number of extra shifts added before IMDCT (usually 0)
- *
- * Outputs:     inverted and rescaled (as necessary) outputs
- *              rescaled (as necessary) previous samples
- *
- * Return:      updated mOut (from new outputs y)
- **********************************************************************************************************************/
-
-int FreqInvertRescale(int *y, int *xPrev, int blockIdx, int es) {
-
-	if (es == 0) {
-		/* fast case - frequency invert only (no rescaling) */
-		if (blockIdx & 0x01) {
-			y += m_NBANDS;
-            for (int i = 0; i < 9; i++) {
-    			*y = - *y;	y += 2 * m_NBANDS;
-            }
-		}
-		return 0;
-	}
-
-    int d, mOut;
-    /* undo pre-IMDCT scaling, clipping if necessary */
-    mOut = 0;
-    if (blockIdx & 0x01) {
-        /* frequency invert */
-        for (int i = 0; i < 9; i++) {
-            d = *y;		CLIP_2N(d, (31 - es));	*y = d << es;	mOut |= FASTABS(*y);	y += m_NBANDS;
-            d = -*y;	CLIP_2N(d, (31 - es));	*y = d << es;	mOut |= FASTABS(*y);	y += m_NBANDS;
-            d = *xPrev;	CLIP_2N(d, (31 - es));	*xPrev++ = d << es;
-        }
-    } else {
-        for (int i = 0; i < 9; i++) {
-            d = *y;		CLIP_2N(d, (31 - es));	*y = d << es;	mOut |= FASTABS(*y);	y += m_NBANDS;
-            d = *y;		CLIP_2N(d, (31 - es));	*y = d << es;	mOut |= FASTABS(*y);	y += m_NBANDS;
-            d = *xPrev;	CLIP_2N(d, (31 - es));	*xPrev++ = d << es;
-        }
-    }
-    return mOut;
-
-}
-
-/***********************************************************************************************************************
  * Function:    IMDCT36
  *
  * Description: 36-point modified DCT, with windowing and overlap-add (50% overlap)

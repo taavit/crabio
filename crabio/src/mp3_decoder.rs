@@ -1027,6 +1027,65 @@ pub fn fdct_32(buf_slice: &mut[i32], dest_slice: &mut[i32], offset: i32, odd_blo
     }
 }
 
+pub fn freq_invert_rescale(
+    mut y_slice: &mut [i32],
+    x_prev: &mut [i32],
+    block_idx: i32,
+    es: i32,
+) -> i32 {
+    if es == 0 {
+        /* fast case - frequency invert only (no rescaling) */
+        if (block_idx & 0x01) == 0x01 {
+            y_slice
+                .iter_mut()
+                .skip(NBANDS)
+                .step_by(2 * NBANDS)
+                .take(9)
+                .for_each(|e| *e = -*e);
+        }
+        return 0;
+    }
+
+    /* undo pre-IMDCT scaling, clipping if necessary */
+    let mut m_out = 0;
+    let mut d;
+    if (block_idx & 0x01) == 0x01 {
+        /* frequency invert */
+        for i in x_prev.iter_mut() {
+            d = y_slice[0];
+            clip_2n(d, (31 - es) as u32);
+            y_slice[0] = d << es;
+            m_out |= y_slice[0].abs();
+            y_slice = &mut y_slice[NBANDS..];
+            d = -y_slice[0];
+            clip_2n(d, (31 - es) as u32);
+            y_slice[0] = d << es;
+            m_out |= y_slice[0].abs();
+            y_slice = &mut y_slice[NBANDS..];
+            d = *i;
+            clip_2n(d, (31 - es) as u32);
+            *i = d << es;
+        }
+    } else {
+        for i in x_prev.iter_mut() {
+            d = y_slice[0];
+            clip_2n(d, (31 - es) as u32);
+            y_slice[0] = d << es;
+            m_out |= y_slice[0].abs();
+            y_slice = &mut y_slice[NBANDS..];
+            d = y_slice[0];
+            clip_2n(d, (31 - es) as u32);
+            y_slice[0] = d << es;
+            m_out |= y_slice[0].abs();
+            y_slice = &mut y_slice[NBANDS..];
+            d = *i;
+            clip_2n(d, (31 - es) as u32);
+            *i = d << es;
+        }
+    }
+    return m_out;
+}
+
 #[cfg(test)]
 mod tests {
     use crate::mp3_decoder::clip_to_short;

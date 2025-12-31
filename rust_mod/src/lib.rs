@@ -3,7 +3,7 @@
 use core::panic::PanicInfo;
 
 use crabio::mp3_decoder::{
-    BitStreamInfo, MAX_NCHAN, NBANDS, POLY_COEF, VBUF_LENGTH, clip_2n, clip_to_short, fdct_32, get_bits, idct_9, imdct_12, madd_64, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, polyphase_mono, polyphase_stereo, refill_bitstream_cache, sar_64
+    BitStreamInfo, MAX_NCHAN, NBANDS, POLY_COEF, VBUF_LENGTH, clip_2n, clip_to_short, fdct_32, freq_invert_rescale, get_bits, idct_9, imdct_12, madd_64, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, polyphase_mono, polyphase_stereo, refill_bitstream_cache, sar_64
 };
 
 #[repr(C)]
@@ -217,4 +217,34 @@ pub fn FDCT32(buf: *mut i32, dest: *mut i32, offset: i32, odd_block: i32, gb: i3
     let dest_slice = unsafe { core::slice::from_raw_parts_mut(dest, VBUF_LENGTH * 2) };
 
     fdct_32(buf_slice, dest_slice, offset, odd_block, gb);
+}
+
+/***********************************************************************************************************************
+ * Function:    FreqInvertRescale
+ *
+ * Description: do frequency inversion (odd samples of odd blocks) and rescale
+ *                if necessary (extra guard bits added before IMDCT)
+ *
+ * Inputs:      output vector y (18 new samples, spaced NBANDS apart)
+ *              previous sample vector xPrev (9 samples)
+ *              index of current block
+ *              number of extra shifts added before IMDCT (usually 0)
+ *
+ * Outputs:     inverted and rescaled (as necessary) outputs
+ *              rescaled (as necessary) previous samples
+ *
+ * Return:      updated mOut (from new outputs y)
+ **********************************************************************************************************************/
+#[unsafe(no_mangle)]
+#[allow(non_snake_case)]
+pub unsafe fn FreqInvertRescale(
+    y: *mut i32,
+    x_prev: *mut i32,
+    block_idx: i32,
+    es: i32,
+) -> i32 {
+    let y_slice = unsafe { core::slice::from_raw_parts_mut(y, 9 * NBANDS * 2 + NBANDS) };
+    let x_prev: &mut [i32] = unsafe { core::slice::from_raw_parts_mut(x_prev, 9) };
+    
+    freq_invert_rescale(y_slice, x_prev, block_idx, es)
 }
