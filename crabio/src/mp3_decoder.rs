@@ -1086,6 +1086,96 @@ pub fn freq_invert_rescale(
     return m_out;
 }
 
+/***********************************************************************************************************************
+ * Function:    WinPrevious
+ *
+ * Description: apply specified window to second half of previous IMDCT (overlap part)
+ *
+ * Inputs:      vector of 9 coefficients (xPrev)
+ *
+ * Outputs:     18 windowed output coefficients (gain 1 integer bit)
+ *              window type (0, 1, 2, 3)
+ *
+ * Return:      none
+ *
+ * Notes:       produces 9 output samples from 18 input samples via symmetry
+ *              all blocks gain at least 1 guard bit via window (long blocks get extra
+ *                sign bit, short blocks can have one addition but max gain < 1.0)
+ **********************************************************************************************************************/
+
+const IMDCT_WIN: [[u32;36];4] = [
+    [
+    0x02aace8b, 0x07311c28, 0x0a868fec, 0x0c913b52, 0x0d413ccd, 0x0c913b52, 0x0a868fec, 0x07311c28,
+    0x02aace8b, 0xfd16d8dd, 0xf6a09e66, 0xef7a6275, 0xe7dbc161, 0xe0000000, 0xd8243e9f, 0xd0859d8b,
+    0xc95f619a, 0xc2e92723, 0xbd553175, 0xb8cee3d8, 0xb5797014, 0xb36ec4ae, 0xb2bec333, 0xb36ec4ae,
+    0xb5797014, 0xb8cee3d8, 0xbd553175, 0xc2e92723, 0xc95f619a, 0xd0859d8b, 0xd8243e9f, 0xe0000000,
+    0xe7dbc161, 0xef7a6275, 0xf6a09e66, 0xfd16d8dd  ],
+    [
+    0x02aace8b, 0x07311c28, 0x0a868fec, 0x0c913b52, 0x0d413ccd, 0x0c913b52, 0x0a868fec, 0x07311c28,
+    0x02aace8b, 0xfd16d8dd, 0xf6a09e66, 0xef7a6275, 0xe7dbc161, 0xe0000000, 0xd8243e9f, 0xd0859d8b,
+    0xc95f619a, 0xc2e92723, 0xbd44ef14, 0xb831a052, 0xb3aa3837, 0xafb789a4, 0xac6145bb, 0xa9adecdc,
+    0xa864491f, 0xad1868f0, 0xb8431f49, 0xc8f42236, 0xdda8e6b1, 0xf47755dc, 0x00000000, 0x00000000,
+    0x00000000, 0x00000000, 0x00000000, 0x00000000  ],
+    [
+    0x07311c28, 0x0d413ccd, 0x07311c28, 0xf6a09e66, 0xe0000000, 0xc95f619a, 0xb8cee3d8, 0xb2bec333,
+    0xb8cee3d8, 0xc95f619a, 0xe0000000, 0xf6a09e66, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+    0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+    0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+    0x00000000, 0x00000000, 0x00000000, 0x00000000  ],
+    [
+    0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x028e9709, 0x04855ec0,
+    0x026743a1, 0xfcde2c10, 0xf515dc82, 0xec93e53b, 0xe4c880f8, 0xdd5d0b08, 0xd63510b7, 0xcf5e834a,
+    0xc8e6b562, 0xc2da4105, 0xbd553175, 0xb8cee3d8, 0xb5797014, 0xb36ec4ae, 0xb2bec333, 0xb36ec4ae,
+    0xb5797014, 0xb8cee3d8, 0xbd553175, 0xc2e92723, 0xc95f619a, 0xd0859d8b, 0xd8243e9f, 0xe0000000,
+    0xe7dbc161, 0xef7a6275, 0xf6a09e66, 0xfd16d8dd  ],
+];
+
+
+#[allow(non_snake_case)]
+pub fn win_previous(x_prev: &mut [i32; 9], x_prev_win: &mut [i32; 18], bt_prev: i32) {
+    if bt_prev == 2 {
+        // Special case for short blocks – explicit unrolled version matching the original
+        let w = IMDCT_WIN[2];
+
+        x_prev_win[0]  = mulshift_32(w[6] as i32,  x_prev[2]) + mulshift_32(w[0] as i32,  x_prev[6]);
+        x_prev_win[1]  = mulshift_32(w[7] as i32,  x_prev[1]) + mulshift_32(w[1] as i32,  x_prev[7]);
+        x_prev_win[2]  = mulshift_32(w[8] as i32,  x_prev[0]) + mulshift_32(w[2] as i32,  x_prev[8]);
+        x_prev_win[3]  = mulshift_32(w[9] as i32,  x_prev[0]) + mulshift_32(w[3] as i32,  x_prev[8]);
+        x_prev_win[4]  = mulshift_32(w[10] as i32, x_prev[1]) + mulshift_32(w[4] as i32,  x_prev[7]);
+        x_prev_win[5]  = mulshift_32(w[11] as i32, x_prev[2]) + mulshift_32(w[5] as i32,  x_prev[6]);
+        x_prev_win[6]  = mulshift_32(w[6] as i32,  x_prev[5]);
+        x_prev_win[7]  = mulshift_32(w[7] as i32,  x_prev[4]);
+        x_prev_win[8]  = mulshift_32(w[8] as i32,  x_prev[3]);
+        x_prev_win[9]  = mulshift_32(w[9] as i32,  x_prev[3]);
+        x_prev_win[10] = mulshift_32(w[10] as i32, x_prev[4]);
+        x_prev_win[11] = mulshift_32(w[11] as i32, x_prev[5]);
+
+        // Zero the unused upper part (original sets 12..17 to 0)
+        x_prev_win[12..18].fill(0);
+    } else {
+        // Long blocks (0, 1, 3) – symmetric windowing
+        // wpLo points to imdctWin[btPrev] + 18
+        // wpHi points to imdctWin[btPrev] + 35 (i.e. wpLo + 17 backwards)
+        let win = &IMDCT_WIN[bt_prev as usize];
+        let wp_lo = &win[18..36];  // 18 elements forward
+        let wp_hi = &win[18..36][..18]; // same range, but we will iterate backwards
+
+        let mut lo_idx = 0;
+        let mut hi_idx = 17;
+
+        for &x in x_prev.iter() {
+            let w_lo = wp_lo[lo_idx];
+            let w_hi = wp_hi[hi_idx];
+
+            x_prev_win[lo_idx] = mulshift_32(w_lo as i32, x);
+            x_prev_win[17 - lo_idx] = mulshift_32(w_hi as i32, x);
+
+            lo_idx += 1;
+            hi_idx -= 1;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::mp3_decoder::clip_to_short;

@@ -2585,68 +2585,6 @@ void AntiAlias(int *x, int nBfly){
 }
 
 /***********************************************************************************************************************
- * Function:    WinPrevious
- *
- * Description: apply specified window to second half of previous IMDCT (overlap part)
- *
- * Inputs:      vector of 9 coefficients (xPrev)
- *
- * Outputs:     18 windowed output coefficients (gain 1 integer bit)
- *              window type (0, 1, 2, 3)
- *
- * Return:      none
- *
- * Notes:       produces 9 output samples from 18 input samples via symmetry
- *              all blocks gain at least 1 guard bit via window (long blocks get extra
- *                sign bit, short blocks can have one addition but max gain < 1.0)
- **********************************************************************************************************************/
-
-void WinPrevious(int *xPrev, int *xPrevWin, int btPrev){
-    int i, x, *xp, *xpwLo, *xpwHi, wLo, wHi;
-    const uint32_t *wpLo, *wpHi;
-
-    xp = xPrev;
-    /* mapping (see IMDCT12x3): xPrev[0-2] = sum[6-8], xPrev[3-8] = sum[12-17] */
-    if (btPrev == 2) {
-        /* this could be reordered for minimum loads/stores */
-        wpLo = imdctWin[btPrev];
-        xPrevWin[0] = MULSHIFT32(wpLo[6], xPrev[2])
-                + MULSHIFT32(wpLo[0], xPrev[6]);
-        xPrevWin[1] = MULSHIFT32(wpLo[7], xPrev[1])
-                + MULSHIFT32(wpLo[1], xPrev[7]);
-        xPrevWin[2] = MULSHIFT32(wpLo[8], xPrev[0])
-                + MULSHIFT32(wpLo[2], xPrev[8]);
-        xPrevWin[3] = MULSHIFT32(wpLo[9], xPrev[0])
-                + MULSHIFT32(wpLo[3], xPrev[8]);
-        xPrevWin[4] = MULSHIFT32(wpLo[10], xPrev[1])
-                + MULSHIFT32(wpLo[4], xPrev[7]);
-        xPrevWin[5] = MULSHIFT32(wpLo[11], xPrev[2])
-                + MULSHIFT32(wpLo[5], xPrev[6]);
-        xPrevWin[6] = MULSHIFT32(wpLo[6], xPrev[5]);
-        xPrevWin[7] = MULSHIFT32(wpLo[7], xPrev[4]);
-        xPrevWin[8] = MULSHIFT32(wpLo[8], xPrev[3]);
-        xPrevWin[9] = MULSHIFT32(wpLo[9], xPrev[3]);
-        xPrevWin[10] = MULSHIFT32(wpLo[10], xPrev[4]);
-        xPrevWin[11] = MULSHIFT32(wpLo[11], xPrev[5]);
-        xPrevWin[12] = xPrevWin[13] = xPrevWin[14] = xPrevWin[15] =
-                xPrevWin[16] = xPrevWin[17] = 0;
-    } else {
-        /* use ARM-style pointers (*ptr++) so that ADS compiles well */
-        wpLo = imdctWin[btPrev] + 18;
-        wpHi = wpLo + 17;
-        xpwLo = xPrevWin;
-        xpwHi = xPrevWin + 17;
-        for (i = 9; i > 0; i--) {
-            x = *xp++;
-            wLo = *wpLo++;
-            wHi = *wpHi--;
-            *xpwLo++ = MULSHIFT32(wLo, x);
-            *xpwHi-- = MULSHIFT32(wHi, x);
-        }
-    }
-}
-
-/***********************************************************************************************************************
  * Function:    IMDCT36
  *
  * Description: 36-point modified DCT, with windowing and overlap-add (50% overlap)

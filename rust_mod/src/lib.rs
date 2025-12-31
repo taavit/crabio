@@ -3,7 +3,7 @@
 use core::panic::PanicInfo;
 
 use crabio::mp3_decoder::{
-    BitStreamInfo, MAX_NCHAN, NBANDS, POLY_COEF, VBUF_LENGTH, clip_2n, clip_to_short, fdct_32, freq_invert_rescale, get_bits, idct_9, imdct_12, madd_64, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, polyphase_mono, polyphase_stereo, refill_bitstream_cache, sar_64
+    BitStreamInfo, MAX_NCHAN, NBANDS, POLY_COEF, VBUF_LENGTH, clip_2n, clip_to_short, fdct_32, freq_invert_rescale, get_bits, idct_9, imdct_12, madd_64, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, polyphase_mono, polyphase_stereo, refill_bitstream_cache, sar_64, win_previous
 };
 
 #[repr(C)]
@@ -247,4 +247,13 @@ pub unsafe fn FreqInvertRescale(
     let x_prev: &mut [i32] = unsafe { core::slice::from_raw_parts_mut(x_prev, 9) };
     
     freq_invert_rescale(y_slice, x_prev, block_idx, es)
+}
+
+#[unsafe(no_mangle)]
+#[allow(non_snake_case)]
+pub fn WinPrevious(xPrev: *mut i32, xPrevWin: *mut i32, bt_prev: i32) {
+    let x_prev: &mut [i32; 9] = unsafe { &mut *xPrev.cast::<[i32; 9]>() };
+    let x_prev_win: &mut [i32; 18] = unsafe { &mut *xPrevWin.cast::<[i32; 18]>() };
+    
+    win_previous(x_prev, x_prev_win, bt_prev);
 }

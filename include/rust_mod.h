@@ -36,6 +36,7 @@ int FreqInvertRescale(int *y, int *xPrev, int blockIdx, int es);
 
 void PolyphaseStereo(short *pcm, int *vbuf, const uint32_t *coefBase);
 void PolyphaseMono(short *pcm, int *vbuf, const uint32_t *coefBase);
+void WinPrevious(int *xPrev, int *xPrevWin, int btPrev);
 
 #ifdef __cplusplus
 }
