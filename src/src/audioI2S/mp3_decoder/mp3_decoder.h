@@ -454,7 +454,6 @@ bool MP3Decoder_AllocateBuffers(void);
 void MP3Decoder_FreeBuffers();
 int  MP3Decode( unsigned char *inbuf, int *bytesLeft, short *outbuf, int useSize);
 void MP3GetLastFrameInfo();
-int  MP3GetNextFrameInfo(unsigned char *buf);
 int  MP3FindSyncWord(unsigned char *buf, int nBytes);
 int  MP3GetSampRate();
 int  MP3GetChannels();

@@ -1099,27 +1099,7 @@ int MP3GetChannels(){return m_MP3FrameInfo->nChans;}
 int MP3GetBitsPerSample(){return m_MP3FrameInfo->bitsPerSample;}
 int MP3GetBitrate(){return m_MP3FrameInfo->bitrate;}
 int MP3GetOutputSamps(){return m_MP3FrameInfo->outputSamps;}
-/***********************************************************************************************************************
- * Function:    MP3GetNextFrameInfo
- *
- * Description: parse MP3 frame header
- *
- * Inputs:        pointer to buffer containing valid MP3 frame header (located using
- *                MP3FindSyncWord(), above)
- *
- * Outputs:     filled-in MP3FrameInfo struct
- *
- * Return:      error code, defined in mp3dec.h (0 means no error, < 0 means error)
- **********************************************************************************************************************/
-int MP3GetNextFrameInfo(unsigned char *buf) {
 
-    if (UnpackFrameHeader( buf) == -1 || m_MP3DecInfo->layer != 3)
-        return ERR_MP3_INVALID_FRAMEHEADER;
-
-    MP3GetLastFrameInfo();
-
-    return ERR_MP3_NONE;
-}
 /***********************************************************************************************************************
  * Function:    MP3ClearBadFrame
  *
