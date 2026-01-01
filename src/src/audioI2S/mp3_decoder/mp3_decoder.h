@@ -452,7 +452,7 @@ const uint32_t csa[8][2] PROGMEM = {
 // prototypes
 bool MP3Decoder_AllocateBuffers(void);
 void MP3Decoder_FreeBuffers();
-int  MP3Decode( unsigned char *inbuf, int *bytesLeft, short *outbuf, int useSize);
+int  MP3Decode( unsigned char *inbuf, size_t inbuf_len, int *bytesLeft, short *outbuf, int useSize);
 void MP3GetLastFrameInfo();
 int  MP3FindSyncWord(unsigned char *buf, int nBytes);
 int  MP3GetSampRate();
@@ -475,7 +475,7 @@ void IntensityProcMPEG2(int x[m_MAX_NCHAN][m_MAX_NSAMP], int nSamps, ScaleFactor
 void FDCT32(int *x, int *d, int offset, int oddBlock, int gb);// __attribute__ ((section (".data")));
 void FreeBuffers();
 int CheckPadBit();
-int UnpackFrameHeader(unsigned char *buf);
+int UnpackFrameHeader(unsigned char *buf, size_t inbuf_len);
 int UnpackSideInfo(unsigned char *buf);
 int DecodeHuffman( unsigned char *buf, int *bitOffset, int huffBlockBits, int gr, int ch);
 int MP3Dequantize( int gr);

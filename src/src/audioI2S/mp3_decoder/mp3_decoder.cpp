@@ -645,7 +645,7 @@ int CheckPadBit(){
     return (m_FrameHeader->paddingBit ? 1 : 0);
 }
 //----------------------------------------------------------------------------------------------------------------------
-int UnpackFrameHeader(unsigned char *buf){
+int UnpackFrameHeader(unsigned char *buf, size_t inbuf_len){
     int verIdx;
     /* validate pointers and sync word */
     if ((buf[0] & m_SYNCWORDH) != m_SYNCWORDH || (buf[1] & m_SYNCWORDL) != m_SYNCWORDL)  return -1;
@@ -1136,13 +1136,13 @@ void MP3ClearBadFrame( short *outbuf) {
  * Notes:       switching useSize on and off between frames in the same stream
  *                is not supported (bit reservoir is not maintained if useSize on)
  **********************************************************************************************************************/
-int MP3Decode( unsigned char *inbuf, int *bytesLeft, short *outbuf, int useSize){
+int MP3Decode( unsigned char *inbuf, size_t inbuf_len, int *bytesLeft, short *outbuf, int useSize){
     int offset, bitOffset, mainBits, gr, ch, fhBytes, siBytes, freeFrameBytes;
     int prevBitOffset, sfBlockBits, huffBlockBits;
     unsigned char *mainPtr;
 
     /* unpack frame header */
-    fhBytes = UnpackFrameHeader(inbuf);
+    fhBytes = UnpackFrameHeader(inbuf, inbuf_len);
     if (fhBytes < 0)
         return ERR_MP3_INVALID_FRAMEHEADER; /* don't clear outbuf since we don't know size (failed to parse header) */
     inbuf += fhBytes;

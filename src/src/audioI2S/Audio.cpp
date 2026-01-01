@@ -4250,7 +4250,7 @@ int Audio::sendBytes(uint8_t* data, size_t len) {
                              if(getBitsPerSample() == 16) m_validSamples = len / (2 * getChannels());
                              if(getBitsPerSample() == 8 ) m_validSamples = len / 2;
                              bytesLeft = 0; break;
-        case CODEC_MP3:      ret = MP3Decode(data, &bytesLeft, m_outBuff, 0); break;
+        case CODEC_MP3:      ret = MP3Decode(data, len, &bytesLeft, m_outBuff, 0); break;
         case CODEC_AAC:      ret = AACDecode(data, &bytesLeft, m_outBuff);    break;
         case CODEC_M4A:      ret = AACDecode(data, &bytesLeft, m_outBuff);    break;
         case CODEC_FLAC:     ret = FLACDecode(data, &bytesLeft, m_outBuff);   break;
