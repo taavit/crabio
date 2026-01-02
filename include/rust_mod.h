@@ -56,6 +56,60 @@ typedef struct MP3DecInfo {
     int part23Length[m_MAX_NGRAN][m_MAX_NCHAN];
 } MP3DecInfo_t;
 
+/* indexing = [version][layer][bitrate index]
+ * bitrate (kbps) of frame
+ *   - bitrate index == 0 is "free" mode (bitrate determined on the fly by
+ *       counting bits between successive sync words)
+ */
+const short bitrateTab[3][3][15] PROGMEM = { {
+/* MPEG-1 */
+{ 0, 32, 64, 96, 128, 160, 192, 224, 256, 288, 320, 352, 384, 416, 448 }, /* Layer 1 */
+{ 0, 32, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384 }, /* Layer 2 */
+{ 0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320 }, /* Layer 3 */
+}, {
+/* MPEG-2 */
+{ 0, 32, 48, 56, 64, 80, 96, 112, 128, 144, 160, 176, 192, 224, 256 }, /* Layer 1 */
+{ 0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160 }, /* Layer 2 */
+{ 0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160 }, /* Layer 3 */
+}, {
+/* MPEG-2.5 */
+{ 0, 32, 48, 56, 64, 80, 96, 112, 128, 144, 160, 176, 192, 224, 256 }, /* Layer 1 */
+{ 0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160 }, /* Layer 2 */
+{ 0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160 }, /* Layer 3 */
+}, };
+
+/* indexing = [version][sampleRate][bitRate]
+ * for layer3, nSlots = floor(samps/frame * bitRate / sampleRate / 8)
+ *   - add one pad slot if necessary
+ */
+const short slotTab[3][3][15] PROGMEM = {
+    { /* MPEG-1 */
+        { 0, 104, 130, 156, 182, 208, 261, 313, 365, 417, 522, 626, 731, 835, 1044 }, /* 44 kHz */
+        { 0, 96, 120, 144, 168, 192, 240, 288, 336, 384, 480, 576, 672, 768, 960 }, /* 48 kHz */
+        { 0, 144, 180, 216, 252, 288, 360, 432, 504, 576, 720, 864, 1008, 1152, 1440 }, /* 32 kHz */
+    },
+    { /* MPEG-2 */
+        { 0, 26, 52, 78, 104, 130, 156, 182, 208, 261, 313, 365, 417, 470, 522 }, /* 22 kHz */
+        { 0, 24, 48, 72, 96, 120, 144, 168, 192, 240, 288, 336, 384, 432, 480 }, /* 24 kHz */
+        { 0, 36, 72, 108, 144, 180, 216, 252, 288, 360, 432, 504, 576, 648, 720 }, /* 16 kHz */
+    },
+    { /* MPEG-2.5 */
+        { 0, 52, 104, 156, 208, 261, 313, 365, 417, 522, 626, 731, 835, 940, 1044 }, /* 11 kHz */
+        { 0, 48, 96, 144, 192, 240, 288, 336, 384, 480, 576, 672, 768, 864, 960 }, /* 12 kHz */
+        { 0, 72, 144, 216, 288, 360, 432, 504, 576, 720, 864, 1008, 1152, 1296, 1440 }, /*  8 kHz */
+    },
+};
+
+
+
+/* indexing = [version][layer]
+ * number of samples in one frame (per channel)
+ */
+const int/*short*/samplesPerFrameTab[3][3] PROGMEM = { { 384, 1152, 1152 }, /* MPEG1 */
+{ 384, 1152, 576 }, /* MPEG2 */
+{ 384, 1152, 576 }, /* MPEG2.5 */
+};
+
 /* indexing = [version][samplerate index]
  * sample rate of frame (Hz)
  */
@@ -134,6 +188,15 @@ int CLIP_2N(int y, uint32_t n);
 
 int MP3FindSyncWord(unsigned char *buf, int nBytes);
 int MP3FindFreeSync(unsigned char *buf, unsigned char firstFH[4], int nBytes);
+int UnpackFrameHeader(
+    unsigned char *buf,
+    size_t inbuf_len,
+    FrameHeader_t *m_FrameHeader,
+    MP3DecInfo *m_MP3DecInfo,
+    MPEGVersion_t *m_MPEGVersion,
+    StereoMode_t *m_sMode,
+    SFBandTable *m_SFBandTable
+);
 
 void RefillBitstreamCache(BitStreamInfo_t *bsi);
 unsigned int GetBits(BitStreamInfo_t *bsi, int nBits);

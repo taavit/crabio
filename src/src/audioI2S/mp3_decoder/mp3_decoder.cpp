@@ -529,50 +529,6 @@ const unsigned char quadTable[64+16] PROGMEM = {
     0x4f, 0x4e, 0x4d, 0x4c, 0x4b, 0x4a, 0x49, 0x48, 0x47, 0x46, 0x45, 0x44, 0x43, 0x42, 0x41, 0x40,
 };
 
-/* indexing = [version][layer][bitrate index]
- * bitrate (kbps) of frame
- *   - bitrate index == 0 is "free" mode (bitrate determined on the fly by
- *       counting bits between successive sync words)
- */
-const short bitrateTab[3][3][15] PROGMEM = { {
-/* MPEG-1 */
-{ 0, 32, 64, 96, 128, 160, 192, 224, 256, 288, 320, 352, 384, 416, 448 }, /* Layer 1 */
-{ 0, 32, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384 }, /* Layer 2 */
-{ 0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320 }, /* Layer 3 */
-}, {
-/* MPEG-2 */
-{ 0, 32, 48, 56, 64, 80, 96, 112, 128, 144, 160, 176, 192, 224, 256 }, /* Layer 1 */
-{ 0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160 }, /* Layer 2 */
-{ 0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160 }, /* Layer 3 */
-}, {
-/* MPEG-2.5 */
-{ 0, 32, 48, 56, 64, 80, 96, 112, 128, 144, 160, 176, 192, 224, 256 }, /* Layer 1 */
-{ 0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160 }, /* Layer 2 */
-{ 0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160 }, /* Layer 3 */
-}, };
-
-/* indexing = [version][sampleRate][bitRate]
- * for layer3, nSlots = floor(samps/frame * bitRate / sampleRate / 8)
- *   - add one pad slot if necessary
- */
-const short slotTab[3][3][15] PROGMEM = {
-    { /* MPEG-1 */
-        { 0, 104, 130, 156, 182, 208, 261, 313, 365, 417, 522, 626, 731, 835, 1044 }, /* 44 kHz */
-        { 0, 96, 120, 144, 168, 192, 240, 288, 336, 384, 480, 576, 672, 768, 960 }, /* 48 kHz */
-        { 0, 144, 180, 216, 252, 288, 360, 432, 504, 576, 720, 864, 1008, 1152, 1440 }, /* 32 kHz */
-    },
-    { /* MPEG-2 */
-        { 0, 26, 52, 78, 104, 130, 156, 182, 208, 261, 313, 365, 417, 470, 522 }, /* 22 kHz */
-        { 0, 24, 48, 72, 96, 120, 144, 168, 192, 240, 288, 336, 384, 432, 480 }, /* 24 kHz */
-        { 0, 36, 72, 108, 144, 180, 216, 252, 288, 360, 432, 504, 576, 648, 720 }, /* 16 kHz */
-    },
-    { /* MPEG-2.5 */
-        { 0, 52, 104, 156, 208, 261, 313, 365, 417, 522, 626, 731, 835, 940, 1044 }, /* 11 kHz */
-        { 0, 48, 96, 144, 192, 240, 288, 336, 384, 480, 576, 672, 768, 864, 960 }, /* 12 kHz */
-        { 0, 72, 144, 216, 288, 360, 432, 504, 576, 720, 864, 1008, 1152, 1296, 1440 }, /*  8 kHz */
-    },
-};
-
 const uint32_t imdctWin[4][36] PROGMEM = {
     {
     0x02aace8b, 0x07311c28, 0x0a868fec, 0x0c913b52, 0x0d413ccd, 0x0c913b52, 0x0a868fec, 0x07311c28,
@@ -643,67 +599,6 @@ int CalcBitsUsed(BitStreamInfo_t *bsi, unsigned char *startBuf, int startOffset)
 //----------------------------------------------------------------------------------------------------------------------
 int CheckPadBit(){
     return (m_FrameHeader->paddingBit ? 1 : 0);
-}
-//----------------------------------------------------------------------------------------------------------------------
-int UnpackFrameHeader(
-    unsigned char *buf,
-    size_t inbuf_len,
-    FrameHeader_t *m_FrameHeader,
-    MP3DecInfo *m_MP3DecInfo,
-    MPEGVersion_t *m_MPEGVersion,
-    StereoMode_t *m_sMode,
-    SFBandTable *m_SFBandTable
-){
-    int verIdx;
-    /* validate pointers and sync word */
-    if ((buf[0] & m_SYNCWORDH) != m_SYNCWORDH || (buf[1] & m_SYNCWORDL) != m_SYNCWORDL)  return -1;
-    /* read header fields - use bitmasks instead of GetBits() for speed, since format never varies */
-    verIdx = (buf[1] >> 3) & 0x03;
-    *m_MPEGVersion = (MPEGVersion_t) (verIdx == 0 ? MPEG25 : ((verIdx & 0x01) ? MPEG1 : MPEG2));
-    m_FrameHeader->layer = 4 - ((buf[1] >> 1) & 0x03); /* easy mapping of index to layer number, 4 = error */
-    m_FrameHeader->crc = 1 - ((buf[1] >> 0) & 0x01);
-    m_FrameHeader->brIdx = (buf[2] >> 4) & 0x0f;
-    m_FrameHeader->srIdx = (buf[2] >> 2) & 0x03;
-    m_FrameHeader->paddingBit = (buf[2] >> 1) & 0x01;
-    m_FrameHeader->privateBit = (buf[2] >> 0) & 0x01;
-    *m_sMode = (StereoMode_t) ((buf[3] >> 6) & 0x03); /* maps to correct enum (see definition) */
-    m_FrameHeader->modeExt = (buf[3] >> 4) & 0x03;
-    m_FrameHeader->copyFlag = (buf[3] >> 3) & 0x01;
-    m_FrameHeader->origFlag = (buf[3] >> 2) & 0x01;
-    m_FrameHeader->emphasis = (buf[3] >> 0) & 0x03;
-    /* check parameters to avoid indexing tables with bad values */
-    if (m_FrameHeader->srIdx == 3 || m_FrameHeader->layer == 4 || m_FrameHeader->brIdx == 15) return -1;
-    /* for readability (we reference sfBandTable many times in decoder) */
-    *m_SFBandTable = sfBandTable[*m_MPEGVersion][m_FrameHeader->srIdx];
-    if (*m_sMode != Joint) /* just to be safe (dequant, stproc check fh->modeExt) */
-        m_FrameHeader->modeExt = 0;
-    /* init user-accessible data */
-    m_MP3DecInfo->nChans = (*m_sMode == Mono ? 1 : 2);
-    m_MP3DecInfo->samprate = samplerateTab[*m_MPEGVersion][m_FrameHeader->srIdx];
-    m_MP3DecInfo->nGrans = (*m_MPEGVersion == MPEG1 ? m_NGRANS_MPEG1 : m_NGRANS_MPEG2);
-    m_MP3DecInfo->nGranSamps = ((int) samplesPerFrameTab[*m_MPEGVersion][m_FrameHeader->layer - 1])/m_MP3DecInfo->nGrans;
-    m_MP3DecInfo->layer = m_FrameHeader->layer;
-
-    /* get bitrate and nSlots from table, unless brIdx == 0 (free mode) in which case caller must figure it out himself
-     * question - do we want to overwrite mp3DecInfo->bitrate with 0 each time if it's free mode, and
-     *  copy the pre-calculated actual free bitrate into it in mp3dec.c (according to the spec,
-     *  this shouldn't be necessary, since it should be either all frames free or none free)
-     */
-    if (m_FrameHeader->brIdx) {
-        m_MP3DecInfo->bitrate=((int) bitrateTab[*m_MPEGVersion][m_FrameHeader->layer - 1][m_FrameHeader->brIdx]) * 1000;
-        /* nSlots = total frame bytes (from table) - sideInfo bytes - header - CRC (if present) + pad (if present) */
-        m_MP3DecInfo->nSlots= (int) slotTab[*m_MPEGVersion][m_FrameHeader->srIdx][m_FrameHeader->brIdx]
-                - (int) sideBytesTab[*m_MPEGVersion][(*m_sMode == Mono ? 0 : 1)] - 4
-                - (m_FrameHeader->crc ? 2 : 0) + (m_FrameHeader->paddingBit ? 1 : 0);
-    }
-    /* load crc word, if enabled, and return length of frame header (in bytes) */
-    if (m_FrameHeader->crc) {
-        m_FrameHeader->CRCWord = ((int) buf[4] << 8 | (int) buf[5] << 0);
-        return 6;
-    } else {
-        m_FrameHeader->CRCWord = 0;
-        return 4;
-    }
 }
 //----------------------------------------------------------------------------------------------------------------------
 int UnpackSideInfo( unsigned char *buf) {

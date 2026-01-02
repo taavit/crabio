@@ -258,22 +258,6 @@ const ERR_MP3_INVALID_IMDCT: i8 =        -11;
 const ERR_MP3_INVALID_SUBBAND: i8 =      -12;
 const ERR_UNKNOWN: i8 =                  -127;
 
-
-pub struct MP3FrameInfo {
-    bitrate: i32,
-    nChans: i32,
-    samprate: i32,
-    bitsPerSample: i32,
-    outputSamps: i32,
-    layer: i32,
-    version: i32,
-}
-
-struct SFBandTable {
-    l: [i32; 23],
-    s: [i32; 14],
-}
-
 pub struct BitStreamInfo<'a> {
     pub bytes: &'a [u8],
     pub cache: u32,
@@ -281,21 +265,9 @@ pub struct BitStreamInfo<'a> {
 }
 
 #[repr(C)]
-enum StereoMode {          /* map these to the corresponding 2-bit values in the frame header */
-    Stereo = 0x00,      /* two independent channels, but L and R frames might have different # of bits */
-    Joint = 0x01,       /* coupled channels - layer III: mix of M-S and intensity, Layers I/II: intensity and direct coding only */
-    Dual = 0x02,        /* two independent channels, L and R always have exactly 1/2 the total bitrate */
-    Mono = 0x03         /* one channel */
-}
-
-#[repr(C)]
-enum MPEGVersion {          /* map to 0,1,2 to make table indexing easier */
-    MPEG1 =  0,
-    MPEG2 =  1,
-    MPEG25 = 2
-}
-
-struct FrameHeader {
+#[allow(non_snake_case)]
+#[derive(Default)]
+pub struct FrameHeader {
     layer: i32,              /* layer index (1, 2, or 3) */
     crc: i32,                /* CRC flag: 0 = disabled, 1 = enabled */
     brIdx: i32,              /* bitrate index (0 - 15) */
@@ -402,26 +374,6 @@ struct ScaleFactorJS { /* used in MPEG 2, 2.5 intensity (joint) stereo only */
 struct SubbandInfo {
     vbuf: [i32; MAX_NCHAN * VBUF_LENGTH],      /* vbuf for fast DCT-based synthesis PQMF - double size for speed (no modulo indexing) */
     vindex: i32,                             /* internal index for tracking position in vbuf */
-}
-
-struct MP3DecInfo {
-    /* buffer which must be large enough to hold largest possible main_data section */
-    main_buf: [u8; MAINBUF_SIZE],
-    /* special info for "free" bitrate files */
-    free_bitrate_flag: i32,
-    free_bitrate_slots: i32,
-    /* user-accessible info */
-    bitrate: i32,
-    n_chans: i32,
-    samprate: i32,
-    n_grans: i32,             /* granules per frame */
-    n_gran_samps: i32,         /* samples per granule */
-    n_slots: i32,
-    layer: i32,
-
-    main_data_begin: i32,
-    main_data_bytes: i32,
-    part23_length: [[i32; MAX_NGRAN]; MAX_NCHAN],
 }
 
 pub fn get_bits(bsi: &mut BitStreamInfo<'_>, mut n_bits: u32) -> u32 {
@@ -1176,6 +1128,301 @@ pub fn win_previous(x_prev: &mut [i32; 9], x_prev_win: &mut [i32; 18], bt_prev: 
     }
 }
 
+#[repr(C)]
+#[allow(non_snake_case)]
+#[derive(Debug)]
+pub struct MP3DecInfo {
+    /* buffer which must be large enough to hold largest possible main_data section */
+    mainBuf: [u8; MAINBUF_SIZE],
+    /* special info for "free" bitrate files */
+    freeBitrateFlag: i32,
+    freeBitrateSlots: i32,
+    /* user-accessible info */
+    bitrate: i32,
+    nChans: i32,
+    samprate: i32,
+    nGrans: i32,             /* granules per frame */
+    nGranSamps: i32,         /* samples per granule */
+    nSlots: i32,
+    layer: i32,
+
+    mainDataBegin: i32,
+    mainDataBytes: i32,
+    part23Length: [[i32; MAX_NCHAN]; MAX_NGRAN],
+}
+
+pub const SAMPLERATE_TAB: [[i32; 3]; 3] = [
+        [ 44100, 48000, 32000 ], /* MPEG-1 */
+        [ 22050, 24000, 16000 ], /* MPEG-2 */
+        [ 11025, 12000, 8000  ], /* MPEG-2.5 */
+];
+
+/* indexing = [version][mono/stereo]
+ * number of bytes in side info section of bitstream
+ */
+const sideBytesTab: [[i32; 2]; 3] = [
+    [ 17, 32 ], /* MPEG-1:   mono, stereo */
+    [ 9, 17 ], /* MPEG-2:   mono, stereo */
+    [ 9, 17 ], /* MPEG-2.5: mono, stereo */
+];
+
+/* indexing = [version][sampleRate][long (.l) or short (.s) block]
+ *   sfBandTable[v][s].l[cb] = index of first bin in critical band cb (long blocks)
+ *   sfBandTable[v][s].s[cb] = index of first bin in critical band cb (short blocks)
+ */
+const sfBandTable: [[SFBandTable; 3]; 3] = [
+    [ /* MPEG-1 (44, 48, 32 kHz) */
+        SFBandTable {
+            l: [0, 4, 8, 12, 16, 20, 24, 30, 36, 44, 52,  62,  74,  90, 110, 134, 162, 196, 238, 288, 342, 418, 576 ],
+            s: [0, 4, 8, 12, 16, 22, 30, 40, 52, 66, 84, 106, 136, 192]
+        },
+        SFBandTable {
+            l: [0, 4, 8, 12, 16, 20, 24, 30, 36, 42, 50,  60,  72,  88, 106, 128, 156, 190, 230, 276, 330, 384, 576 ],
+            s: [0, 4, 8, 12, 16, 22, 28, 38, 50, 64, 80, 100, 126, 192]
+        },
+        SFBandTable {
+            l: [0, 4, 8, 12, 16, 20, 24, 30, 36, 44,  54,  66,  82, 102, 126, 156, 194, 240, 296, 364, 448, 550, 576 ],
+            s: [0, 4, 8, 12, 16, 22, 30, 42, 58, 78, 104, 138, 180, 192]
+        }
+    ],
+    [ /* MPEG-2 (22, 24, 16 kHz) */
+        SFBandTable   {
+            l: [0, 6, 12, 18, 24, 30, 36, 44, 54, 66,  80,  96, 116, 140, 168, 200, 238, 284, 336, 396, 464, 522, 576 ],
+            s: [0, 4,  8, 12, 18, 24, 32, 42, 56, 74, 100, 132, 174, 192]
+        },
+        SFBandTable {
+            l: [0, 6, 12, 18, 24, 30, 36, 44, 54, 66,  80,  96, 114, 136, 162, 194, 232, 278, 332, 394, 464, 540, 576 ],
+            s: [0, 4,  8, 12, 18, 26, 36, 48, 62, 80, 104, 136, 180, 192]
+        },
+        SFBandTable {
+            l: [0, 6, 12, 18, 24, 30, 36, 44, 54, 66,  80, 96,  116, 140, 168, 200, 238, 284, 336, 396, 464, 522, 576 ],
+            s: [0, 4,  8, 12, 18, 26, 36, 48, 62, 80, 104, 134, 174, 192]
+        },
+    ],
+    [ /* MPEG-2.5 (11, 12, 8 kHz) */
+        SFBandTable {
+            l :[0, 6, 12, 18, 24, 30, 36, 44, 54, 66,  80,  96, 116, 140, 168, 200, 238, 284, 336, 396, 464, 522, 576 ],
+            s: [0, 4,  8, 12, 18, 26, 36, 48, 62, 80, 104, 134, 174, 192 ]
+        },
+        SFBandTable {
+            l: [0, 6, 12, 18, 24, 30, 36, 44, 54, 66,  80,  96, 116, 140, 168, 200, 238, 284, 336, 396, 464, 522, 576 ],
+            s: [0, 4,  8, 12, 18, 26, 36, 48, 62, 80, 104, 134, 174, 192 ]
+        },
+        SFBandTable {
+            l: [0, 12, 24, 36, 48, 60, 72, 88, 108, 132, 160, 192, 232, 280, 336, 400, 476, 566, 568, 570, 572, 574, 576 ],
+            s: [0,  8, 16, 24, 36, 52, 72, 96, 124, 160, 162, 164, 166, 192]
+        }
+    ],
+];
+
+/* indexing = [version][layer]
+ * number of samples in one frame (per channel)
+ */
+const samplesPerFrameTab: [[i32; 3]; 3] = [
+    [ 384, 1152, 1152 ], /* MPEG1 */
+    [ 384, 1152, 576 ], /* MPEG2 */
+    [ 384, 1152, 576 ], /* MPEG2.5 */
+];
+
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+#[repr(C)]
+pub enum MPEGVersion {          /* map to 0,1,2 to make table indexing easier */
+    MPEG1 =  0,
+    MPEG2 =  1,
+    MPEG25 = 2
+}
+
+#[repr(C)]
+pub struct MP3FrameInfo {
+    bitrate: i32,
+    nChans: i32,
+    samprate: i32,
+    bitsPerSample: i32,
+    outputSamps: i32,
+    layer: i32,
+    version: i32,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct SFBandTable {
+    l: [i32; 23],
+    s: [i32; 14],
+}
+
+#[repr(C)]
+#[derive(Debug, PartialEq)]
+pub enum StereoMode {          /* map these to the corresponding 2-bit values in the frame header */
+    Stereo = 0x00,      /* two independent channels, but L and R frames might have different # of bits */
+    Joint = 0x01,       /* coupled channels - layer III: mix of M-S and intensity, Layers I/II: intensity and direct coding only */
+    Dual = 0x02,        /* two independent channels, L and R always have exactly 1/2 the total bitrate */
+    Mono = 0x03         /* one channel */
+}
+
+/* indexing = [version][layer][bitrate index]
+ * bitrate (kbps) of frame
+ *   - bitrate index == 0 is "free" mode (bitrate determined on the fly by
+ *       counting bits between successive sync words)
+ */
+const bitrateTab: [[[i16; 15]; 3]; 3] = [[
+/* MPEG-1 */
+[ 0, 32, 64, 96, 128, 160, 192, 224, 256, 288, 320, 352, 384, 416, 448 ], /* Layer 1 */
+[ 0, 32, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384 ], /* Layer 2 */
+[ 0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320 ], /* Layer 3 */
+], [
+/* MPEG-2 */
+[ 0, 32, 48, 56, 64, 80, 96, 112, 128, 144, 160, 176, 192, 224, 256 ], /* Layer 1 */
+[ 0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160 ], /* Layer 2 */
+[ 0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160 ], /* Layer 3 */
+], [
+/* MPEG-2.5 */
+[ 0, 32, 48, 56, 64, 80, 96, 112, 128, 144, 160, 176, 192, 224, 256 ], /* Layer 1 */
+[ 0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160 ], /* Layer 2 */
+[ 0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160 ], /* Layer 3 */
+]];
+
+/* indexing = [version][sampleRate][bitRate]
+ * for layer3, nSlots = floor(samps/frame * bitRate / sampleRate / 8)
+ *   - add one pad slot if necessary
+ */
+const slotTab: [[[i16; 15]; 3]; 3] = [
+    [ /* MPEG-1 */
+        [ 0, 104, 130, 156, 182, 208, 261, 313, 365, 417, 522, 626, 731, 835, 1044 ], /* 44 kHz */
+        [ 0, 96, 120, 144, 168, 192, 240, 288, 336, 384, 480, 576, 672, 768, 960 ], /* 48 kHz */
+        [ 0, 144, 180, 216, 252, 288, 360, 432, 504, 576, 720, 864, 1008, 1152, 1440 ], /* 32 kHz */
+    ],
+    [ /* MPEG-2 */
+        [ 0, 26, 52, 78, 104, 130, 156, 182, 208, 261, 313, 365, 417, 470, 522 ], /* 22 kHz */
+        [ 0, 24, 48, 72, 96, 120, 144, 168, 192, 240, 288, 336, 384, 432, 480 ], /* 24 kHz */
+        [ 0, 36, 72, 108, 144, 180, 216, 252, 288, 360, 432, 504, 576, 648, 720 ], /* 16 kHz */
+    ],
+    [ /* MPEG-2.5 */
+        [ 0, 52, 104, 156, 208, 261, 313, 365, 417, 522, 626, 731, 835, 940, 1044 ], /* 11 kHz */
+        [ 0, 48, 96, 144, 192, 240, 288, 336, 384, 480, 576, 672, 768, 864, 960 ], /* 12 kHz */
+        [ 0, 72, 144, 216, 288, 360, 432, 504, 576, 720, 864, 1008, 1152, 1296, 1440 ], /*  8 kHz */
+    ],
+];
+
+
+pub fn unpack_frame_header(
+    buf: &[u8],
+    m_FrameHeader: &mut FrameHeader,
+    m_MP3DecInfo: &mut MP3DecInfo,
+    m_MPEGVersion: &mut MPEGVersion,
+    m_sMode: &mut StereoMode,
+    m_SFBandTable: &mut SFBandTable,
+) -> i32 {
+/* validate pointers and sync word */
+    if (buf[0] & SYNCWORDH) != SYNCWORDH || (buf[1] & SYNCWORDL) != SYNCWORDL {
+        return -1;
+    }
+    /* read header fields - use bitmasks instead of GetBits() for speed, since format never varies */
+    let verIdx = (buf[1] >> 3) & 0x03;
+    *m_MPEGVersion = if verIdx == 0 {
+        MPEGVersion::MPEG25
+    } else if verIdx & 0x01 == 0x01 {
+        MPEGVersion::MPEG1
+    } else {
+        MPEGVersion::MPEG2
+    };
+    m_FrameHeader.layer = 4 - ((buf[1] as i32 >> 1) & 0x03); /* easy mapping of index to layer number, 4 = error */
+    m_FrameHeader.crc = 1 - ((buf[1] as i32>> 0) & 0x01);
+    m_FrameHeader.brIdx = (buf[2] as i32 >> 4) & 0x0f;
+    m_FrameHeader.srIdx = (buf[2] as i32 >> 2) & 0x03;
+    m_FrameHeader.paddingBit = (buf[2] as i32 >> 1) & 0x01;
+    m_FrameHeader.privateBit = (buf[2] as i32 >> 0) & 0x01;
+    *m_sMode = match (buf[3] >> 6) & 0x03 {
+        0x00 => StereoMode::Stereo,
+        0x01 => StereoMode::Joint,
+        0x02 => StereoMode::Dual,
+        0x03 => StereoMode::Mono,
+        _ => { return -1 }
+    }; /* maps to correct enum (see definition) */
+    m_FrameHeader.modeExt = (buf[3] as i32>> 4) & 0x03;
+    m_FrameHeader.copyFlag = (buf[3] as i32 >> 3) & 0x01;
+    m_FrameHeader.origFlag = (buf[3] as i32 >> 2) & 0x01;
+    m_FrameHeader.emphasis = (buf[3] as i32 >> 0) & 0x03;
+    /* check parameters to avoid indexing tables with bad values */
+    if m_FrameHeader.srIdx == 3 || m_FrameHeader.layer == 4 || m_FrameHeader.brIdx == 15 {
+        return -1;
+    }
+    /* for readability (we reference sfBandTable many times in decoder) */
+    *m_SFBandTable = sfBandTable[*m_MPEGVersion as usize][m_FrameHeader.srIdx as usize];
+    if *m_sMode != StereoMode::Joint { /* just to be safe (dequant, stproc check fh->modeExt) */
+        m_FrameHeader.modeExt = 0;
+    }
+    /* init user-accessible data */
+    m_MP3DecInfo.nChans = if *m_sMode == StereoMode::Mono { 1 } else { 2 };
+    m_MP3DecInfo.samprate = SAMPLERATE_TAB[*m_MPEGVersion as usize][m_FrameHeader.srIdx as usize];
+    m_MP3DecInfo.nGrans = if *m_MPEGVersion == MPEGVersion::MPEG1 { NGRANS_MPEG1 as i32 } else { NGRANS_MPEG2 as i32 };
+    m_MP3DecInfo.nGranSamps = (samplesPerFrameTab[*m_MPEGVersion as usize][(m_FrameHeader.layer - 1) as usize])/m_MP3DecInfo.nGrans;
+    m_MP3DecInfo.layer = m_FrameHeader.layer;
+
+    /* get bitrate and nSlots from table, unless brIdx == 0 (free mode) in which case caller must figure it out himself
+     * question - do we want to overwrite mp3DecInfo->bitrate with 0 each time if it's free mode, and
+     *  copy the pre-calculated actual free bitrate into it in mp3dec.c (according to the spec,
+     *  this shouldn't be necessary, since it should be either all frames free or none free)
+     */
+    if m_FrameHeader.brIdx != 0 {
+        m_MP3DecInfo.bitrate=
+            ((bitrateTab[*m_MPEGVersion as usize][m_FrameHeader.layer as usize - 1][m_FrameHeader.brIdx as usize])) as i32 * 1000;
+        /* nSlots = total frame bytes (from table) - sideInfo bytes - header - CRC (if present) + pad (if present) */
+        m_MP3DecInfo.nSlots= slotTab[*m_MPEGVersion as usize][m_FrameHeader.srIdx as usize][m_FrameHeader.brIdx as usize]  as i32
+                - sideBytesTab[*m_MPEGVersion as usize][if *m_sMode == StereoMode::Mono { 0 } else { 1 }] - 4
+                - (if m_FrameHeader.crc != 0 { 2 } else { 0 }) + (if m_FrameHeader.paddingBit != 0 { 1 } else { 0 });
+    }
+    /* load crc word, if enabled, and return length of frame header (in bytes) */
+    if m_FrameHeader.crc != 0 {
+        m_FrameHeader.CRCWord = (buf[4] as i32) << 8 | (buf[5] as i32) << 0;
+        return 6;
+    } else {
+        m_FrameHeader.CRCWord = 0;
+        return 4;
+    }
+}
+
+#[cfg(test)]
+mod unpack_frame_header_test {
+    use crate::mp3_decoder::{MAINBUF_SIZE, MAX_NCHAN, MAX_NGRAN, unpack_frame_header};
+    #[test]
+    fn test_unpack_frame() {
+        let buf: [u8; 4] = [0xFF,0xFB,0x92, 0x64];
+        let mut m_FrameHeader = super::FrameHeader::default();
+        let mut m_MP3DecInfo = super::MP3DecInfo {
+            bitrate: 0,
+            freeBitrateFlag: 0,
+            freeBitrateSlots: 0,
+            layer: 0,
+            mainBuf: [0; MAINBUF_SIZE],
+            mainDataBegin: 0,
+            mainDataBytes: 0,
+            nChans: 0,
+            nGranSamps: 0,
+            nGrans: 0,
+            nSlots: 0,
+            part23Length: [[0; MAX_NCHAN]; MAX_NGRAN],
+            samprate: 0,
+        };
+        let mut  m_MPEGVersion = super::MPEGVersion::MPEG1;
+        let mut  m_sMode = super::StereoMode::Stereo;
+        let mut  m_SFBandTable = super::SFBandTable {
+                l: [0; 23],
+                s: [0; 14],
+        };
+        let res = unpack_frame_header(
+            &buf,
+            &mut m_FrameHeader,
+            &mut m_MP3DecInfo,
+            &mut m_MPEGVersion,
+            &mut m_sMode,
+            &mut m_SFBandTable
+        );
+
+        assert_eq!(m_MP3DecInfo.bitrate, 128000);
+        assert_eq!(res, 4);
+    }
+}
 #[cfg(test)]
 mod tests {
     use crate::mp3_decoder::clip_to_short;

@@ -264,14 +264,6 @@ const HuffTabLookup_t huffTabLookup[m_HUFF_PAIRTABS] PROGMEM = {
 const int quadTabOffset[2] PROGMEM = {0, 64};
 const int quadTabMaxBits[2] PROGMEM = {6, 4};
 
-/* indexing = [version][layer]
- * number of samples in one frame (per channel)
- */
-const int/*short*/samplesPerFrameTab[3][3] PROGMEM = { { 384, 1152, 1152 }, /* MPEG1 */
-{ 384, 1152, 576 }, /* MPEG2 */
-{ 384, 1152, 576 }, /* MPEG2.5 */
-};
-
 /* layers 1, 2, 3 */
 const short bitsPerSlotTab[3] = { 32, 8, 8 };
 
