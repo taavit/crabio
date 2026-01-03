@@ -281,21 +281,22 @@ pub struct FrameHeader {
     pub CRCWord: i32,            /* CRC word (16 bits, 0 if crc not enabled) */
 }
 
-struct SideInfoSub {
-    part23_length: i32,       /* number of bits in main data */
-    n_bigvals: i32,           /* 2x this = first set of Huffman cw's (maximum amplitude can be > 1) */
-    global_gain: i32,         /* overall gain for dequantizer */
-    sfCompress: i32,         /* unpacked to figure out number of bits in scale factors */
-    win_switch_flag: i32,      /* window switching flag */
-    blockType: i32,          /* block type */
-    mixedBlock: i32,         /* 0 = regular block (all short or long), 1 = mixed block */
-    tableSelect: [i32; 3],     /* index of Huffman tables for the big values regions */
-    subBlockGain: [i32; 3],    /* subblock gain offset, relative to global gain */
-    region0Count: i32,       /* 1+region0Count = num scale factor bands in first region of bigvals */
-    region1Count: i32,       /* 1+region1Count = num scale factor bands in second region of bigvals */
-    preFlag: i32,            /* for optional high frequency boost */
-    sfactScale: i32,         /* scaling of the scalefactors */
-    count1TableSelect: i32,  /* index of Huffman table for quad codewords */
+#[repr(C)]
+pub struct SideInfoSub {
+    pub part23_length: i32,       /* number of bits in main data */
+    pub n_bigvals: i32,           /* 2x this = first set of Huffman cw's (maximum amplitude can be > 1) */
+    pub global_gain: i32,         /* overall gain for dequantizer */
+    pub sfCompress: i32,         /* unpacked to figure out number of bits in scale factors */
+    pub win_switch_flag: i32,      /* window switching flag */
+    pub blockType: i32,          /* block type */
+    pub mixedBlock: i32,         /* 0 = regular block (all short or long), 1 = mixed block */
+    pub tableSelect: [i32; 3],     /* index of Huffman tables for the big values regions */
+    pub subBlockGain: [i32; 3],    /* subblock gain offset, relative to global gain */
+    pub region0Count: i32,       /* 1+region0Count = num scale factor bands in first region of bigvals */
+    pub region1Count: i32,       /* 1+region1Count = num scale factor bands in second region of bigvals */
+    pub preFlag: i32,            /* for optional high frequency boost */
+    pub sfactScale: i32,         /* scaling of the scalefactors */
+    pub count1TableSelect: i32,  /* index of Huffman table for quad codewords */
 }
 
 struct SideInfo {
@@ -1133,22 +1134,22 @@ pub fn win_previous(x_prev: &mut [i32; 9], x_prev_win: &mut [i32; 18], bt_prev: 
 #[derive(Debug)]
 pub struct MP3DecInfo {
     /* buffer which must be large enough to hold largest possible main_data section */
-    mainBuf: [u8; MAINBUF_SIZE],
+    pub mainBuf: [u8; MAINBUF_SIZE],
     /* special info for "free" bitrate files */
-    freeBitrateFlag: i32,
-    freeBitrateSlots: i32,
+    pub freeBitrateFlag: i32,
+    pub freeBitrateSlots: i32,
     /* user-accessible info */
-    bitrate: i32,
-    nChans: i32,
-    samprate: i32,
-    nGrans: i32,             /* granules per frame */
-    nGranSamps: i32,         /* samples per granule */
-    nSlots: i32,
-    layer: i32,
+    pub bitrate: i32,
+    pub nChans: i32,
+    pub samprate: i32,
+    pub nGrans: i32,             /* granules per frame */
+    pub nGranSamps: i32,         /* samples per granule */
+    pub nSlots: i32,
+    pub layer: i32,
 
-    mainDataBegin: i32,
-    mainDataBytes: i32,
-    part23Length: [[i32; MAX_NCHAN]; MAX_NGRAN],
+    pub mainDataBegin: i32,
+    pub mainDataBytes: i32,
+    pub part23Length: [[i32; MAX_NCHAN]; MAX_NGRAN],
 }
 
 pub const SAMPLERATE_TAB: [[i32; 3]; 3] = [

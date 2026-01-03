@@ -24,29 +24,6 @@ enum {
     ERR_UNKNOWN =                  -9999
 };
 
-typedef struct SideInfoSub {
-    int part23Length;       /* number of bits in main data */
-    int nBigvals;           /* 2x this = first set of Huffman cw's (maximum amplitude can be > 1) */
-    int globalGain;         /* overall gain for dequantizer */
-    int sfCompress;         /* unpacked to figure out number of bits in scale factors */
-    int winSwitchFlag;      /* window switching flag */
-    int blockType;          /* block type */
-    int mixedBlock;         /* 0 = regular block (all short or long), 1 = mixed block */
-    int tableSelect[3];     /* index of Huffman tables for the big values regions */
-    int subBlockGain[3];    /* subblock gain offset, relative to global gain */
-    int region0Count;       /* 1+region0Count = num scale factor bands in first region of bigvals */
-    int region1Count;       /* 1+region1Count = num scale factor bands in second region of bigvals */
-    int preFlag;            /* for optional high frequency boost */
-    int sfactScale;         /* scaling of the scalefactors */
-    int count1TableSelect;  /* index of Huffman table for quad codewords */
-} SideInfoSub_t;
-
-typedef struct SideInfo {
-    int mainDataBegin;
-    int privateBits;
-    int scfsi[m_MAX_NCHAN][m_MAX_SCFBD];                /* 4 scalefactor bands per channel */
-} SideInfo_t;
-
 typedef struct {
     int cbType;             /* pure long = 0, pure short = 1, mixed = 2 */
     int cbEndS[3];          /* number nonzero short cb's, per subbblock */
@@ -353,7 +330,7 @@ int UnpackFrameHeader(
     StereoMode_t *m_sMode,
     SFBandTable *m_SFBandTable
 );
-int UnpackSideInfo(unsigned char *buf);
+
 int DecodeHuffman( unsigned char *buf, int *bitOffset, int huffBlockBits, int gr, int ch);
 int MP3Dequantize( int gr);
 int IMDCT( int gr, int ch);

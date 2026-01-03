@@ -577,78 +577,6 @@ const int ISFMpeg2[2][2][16] PROGMEM = {
 };
 
 //----------------------------------------------------------------------------------------------------------------------
-int UnpackSideInfo( unsigned char *buf) {
-    int gr, ch, bd, nBytes;
-    BitStreamInfo_t bitStreamInfo, *bsi;
-
-    SideInfoSub_t *sis;
-    /* validate pointers and sync word */
-    bsi = &bitStreamInfo;
-    if (m_MPEGVersion == MPEG1) {
-        /* MPEG 1 */
-        nBytes=(m_sMode == Mono ? m_SIBYTES_MPEG1_MONO : m_SIBYTES_MPEG1_STEREO);
-        SetBitstreamPointer(bsi, nBytes, buf);
-        m_SideInfo->mainDataBegin = GetBits(bsi, 9);
-        m_SideInfo->privateBits= GetBits(bsi, (m_sMode == Mono ? 5 : 3));
-        for (ch = 0; ch < m_MP3DecInfo->nChans; ch++)
-            for (bd = 0; bd < m_MAX_SCFBD; bd++) m_SideInfo->scfsi[ch][bd] = GetBits(bsi, 1);
-    } else {
-        /* MPEG 2, MPEG 2.5 */
-        nBytes=(m_sMode == Mono ? m_SIBYTES_MPEG2_MONO : m_SIBYTES_MPEG2_STEREO);
-        SetBitstreamPointer(bsi, nBytes, buf);
-        m_SideInfo->mainDataBegin = GetBits(bsi, 8);
-        m_SideInfo->privateBits = GetBits(bsi, (m_sMode == Mono ? 1 : 2));
-    }
-    for (gr = 0; gr < m_MP3DecInfo->nGrans; gr++) {
-        for (ch = 0; ch < m_MP3DecInfo->nChans; ch++) {
-            sis = &m_SideInfoSub[gr][ch]; /* side info subblock for this granule, channel */
-            sis->part23Length = GetBits(bsi, 12);
-            sis->nBigvals = GetBits(bsi, 9);
-            sis->globalGain = GetBits(bsi, 8);
-            sis->sfCompress = GetBits(bsi, (m_MPEGVersion == MPEG1 ? 4 : 9));
-            sis->winSwitchFlag = GetBits(bsi, 1);
-            if (sis->winSwitchFlag) {
-                /* this is a start, stop, short, or mixed block */
-                sis->blockType = GetBits(bsi, 2); /* 0 = normal, 1 = start, 2 = short, 3 = stop */
-                sis->mixedBlock = GetBits(bsi, 1); /* 0 = not mixed, 1 = mixed */
-                sis->tableSelect[0] = GetBits(bsi, 5);
-                sis->tableSelect[1] = GetBits(bsi, 5);
-                sis->tableSelect[2] = 0; /* unused */
-                sis->subBlockGain[0] = GetBits(bsi, 3);
-                sis->subBlockGain[1] = GetBits(bsi, 3);
-                sis->subBlockGain[2] = GetBits(bsi, 3);
-                if (sis->blockType == 0) {
-                    /* this should not be allowed, according to spec */
-                    sis->nBigvals = 0;
-                    sis->part23Length = 0;
-                    sis->sfCompress = 0;
-                } else if (sis->blockType == 2 && sis->mixedBlock == 0) {
-                    /* short block, not mixed */
-                    sis->region0Count = 8;
-                } else {
-                    /* start, stop, or short-mixed */
-                    sis->region0Count = 7;
-                }
-                sis->region1Count = 20 - sis->region0Count;
-            } else {
-                /* this is a normal block */
-                sis->blockType = 0;
-                sis->mixedBlock = 0;
-                sis->tableSelect[0] = GetBits(bsi, 5);
-                sis->tableSelect[1] = GetBits(bsi, 5);
-                sis->tableSelect[2] = GetBits(bsi, 5);
-                sis->region0Count = GetBits(bsi, 4);
-                sis->region1Count = GetBits(bsi, 3);
-            }
-            sis->preFlag = (m_MPEGVersion == MPEG1 ? GetBits(bsi, 1) : 0);
-            sis->sfactScale = GetBits(bsi, 1);
-            sis->count1TableSelect = GetBits(bsi, 1);
-        }
-    }
-    m_MP3DecInfo->mainDataBegin = m_SideInfo->mainDataBegin; /* needed by main decode loop */
-    assert(nBytes == CalcBitsUsed(bsi, buf, 0) >> 3);
-    return nBytes;
-}
 /***********************************************************************************************************************
  * Function:    UnpackSFMPEG1
  *
@@ -1026,7 +954,13 @@ int MP3Decode( unsigned char *inbuf, size_t inbuf_len, int *bytesLeft, short *ou
         return ERR_MP3_INVALID_FRAMEHEADER; /* don't clear outbuf since we don't know size (failed to parse header) */
     inbuf += fhBytes;
     /* unpack side info */
-    siBytes = UnpackSideInfo( inbuf);
+    siBytes = UnpackSideInfo( inbuf,
+        m_SideInfo,
+        &m_SideInfoSub,
+        m_MP3DecInfo,
+        m_MPEGVersion,     // 1 = MPEG1, 0 = MPEG2/2.5
+        m_sMode
+);
     if (siBytes < 0) {
         MP3ClearBadFrame(outbuf);
         return ERR_MP3_INVALID_SIDEINFO;

@@ -198,6 +198,30 @@ int UnpackFrameHeader(
     SFBandTable *m_SFBandTable
 );
 
+typedef struct SideInfoSub {
+    int part23Length;       /* number of bits in main data */
+    int nBigvals;           /* 2x this = first set of Huffman cw's (maximum amplitude can be > 1) */
+    int globalGain;         /* overall gain for dequantizer */
+    int sfCompress;         /* unpacked to figure out number of bits in scale factors */
+    int winSwitchFlag;      /* window switching flag */
+    int blockType;          /* block type */
+    int mixedBlock;         /* 0 = regular block (all short or long), 1 = mixed block */
+    int tableSelect[3];     /* index of Huffman tables for the big values regions */
+    int subBlockGain[3];    /* subblock gain offset, relative to global gain */
+    int region0Count;       /* 1+region0Count = num scale factor bands in first region of bigvals */
+    int region1Count;       /* 1+region1Count = num scale factor bands in second region of bigvals */
+    int preFlag;            /* for optional high frequency boost */
+    int sfactScale;         /* scaling of the scalefactors */
+    int count1TableSelect;  /* index of Huffman table for quad codewords */
+} SideInfoSub_t;
+
+typedef struct SideInfo {
+    int mainDataBegin;
+    int privateBits;
+    int scfsi[m_MAX_NCHAN][m_MAX_SCFBD];                /* 4 scalefactor bands per channel */
+} SideInfo_t;
+
+
 void RefillBitstreamCache(BitStreamInfo_t *bsi);
 unsigned int GetBits(BitStreamInfo_t *bsi, int nBits);
 void SetBitstreamPointer(BitStreamInfo_t *bsi, int nBytes, unsigned char *buf);
@@ -222,6 +246,15 @@ int FreqInvertRescale(int *y, int *xPrev, int blockIdx, int es);
 void PolyphaseStereo(short *pcm, int *vbuf, const uint32_t *coefBase);
 void PolyphaseMono(short *pcm, int *vbuf, const uint32_t *coefBase);
 void WinPrevious(int *xPrev, int *xPrevWin, int btPrev);
+
+int UnpackSideInfo(
+    unsigned char *buf,
+    SideInfo_t *m_SideInfo,
+    SideInfoSub_t (*m_SideInfoSub)[m_MAX_NCHAN][m_MAX_NGRAN],
+    MP3DecInfo_t *m_MP3DecInfo,
+    int m_MPEGVersion,     // 1 = MPEG1, 0 = MPEG2/2.5
+    int m_sMode
+);
 
 #ifdef __cplusplus
 }

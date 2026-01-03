@@ -3,7 +3,7 @@
 use core::panic::PanicInfo;
 
 use crabio::mp3_decoder::{
-    BitStreamInfo, FrameHeader, MAX_NCHAN,MP3DecInfo, MPEGVersion, NBANDS, POLY_COEF, SFBandTable, StereoMode, VBUF_LENGTH, clip_2n, clip_to_short, fdct_32, freq_invert_rescale, get_bits, idct_9, imdct_12, madd_64, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, polyphase_mono, polyphase_stereo, refill_bitstream_cache, sar_64, unpack_frame_header, win_previous
+    BitStreamInfo, FrameHeader, MAX_NCHAN, MAX_NGRAN, MAX_SCFBD, MP3DecInfo, MPEGVersion, NBANDS, POLY_COEF, SFBandTable, SIBYTES_MPEG1_MONO, SIBYTES_MPEG1_STEREO, SIBYTES_MPEG2_MONO, SIBYTES_MPEG2_STEREO, SideInfoSub, StereoMode, VBUF_LENGTH, clip_2n, clip_to_short, fdct_32, freq_invert_rescale, get_bits, idct_9, imdct_12, madd_64, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, polyphase_mono, polyphase_stereo, refill_bitstream_cache, sar_64, unpack_frame_header, win_previous
 };
 
 #[repr(C)]
@@ -309,4 +309,106 @@ pub fn CheckPadBit(m_FrameHeader: *const FrameHeader) -> i32 {
      } else {
         0
     }
+}
+
+#[repr(C)]
+pub struct SideInfo {
+    mainDataBegin: i32,
+    privateBits: i32,
+    scfsi: [[i32; MAX_SCFBD]; MAX_NCHAN],                /* 4 scalefactor bands per channel */
+}
+
+#[unsafe(no_mangle)]
+pub unsafe fn UnpackSideInfo(
+    buf: *const u8,
+    m_SideInfo: *mut SideInfo,
+    m_SideInfoSub: *mut [[SideInfoSub; MAX_NCHAN]; MAX_NGRAN],
+    // m_SideInfoSub: *mut SideInfoSub,
+    m_MP3DecInfo: *mut MP3DecInfo,
+    m_MPEGVersion: i32,     // 1 = MPEG1, 0 = MPEG2/2.5
+    m_sMode: i32,
+) -> i32 {
+    let mut gr: i32;
+    let mut ch: i32;
+    let mut bd: i32;
+    let mut nBytes: i32;
+
+    let m_SideInfoSub = unsafe { &mut *m_SideInfoSub };
+    let m_SideInfo = unsafe { &mut *m_SideInfo };
+    let m_MP3DecInfo = unsafe { &mut *m_MP3DecInfo };
+
+    let mut bitStreamInfo: BitStreamInfoC = core::mem::zeroed();
+    let mut bsi: *mut BitStreamInfoC = &mut bitStreamInfo;
+
+    /* validate pointers and sync word */
+    if (m_MPEGVersion == MPEGVersion::MPEG1 as i32) {
+        /* MPEG 1 */
+        nBytes= if m_sMode == StereoMode::Mono as i32 { SIBYTES_MPEG1_MONO as i32 } else { SIBYTES_MPEG1_STEREO as i32 };
+        SetBitstreamPointer(bsi, nBytes, buf);
+        m_SideInfo.mainDataBegin = GetBits(bsi, 9) as i32;
+        m_SideInfo.privateBits= GetBits(
+            bsi,
+            (if m_sMode == StereoMode::Mono as i32 { 5 } else { 3 })
+        ) as i32;
+        for ch in 0..m_MP3DecInfo.nChans {
+            for bd in 0..MAX_SCFBD {
+                m_SideInfo.scfsi[ch as usize][bd] = GetBits(bsi, 1) as i32;
+            }
+        }
+    } else {
+        /* MPEG 2, MPEG 2.5 */
+        nBytes = if m_sMode == StereoMode::Mono as i32 { SIBYTES_MPEG2_MONO as i32 } else { SIBYTES_MPEG2_STEREO as i32};
+        SetBitstreamPointer(bsi, nBytes, buf);
+        m_SideInfo.mainDataBegin = GetBits(bsi, 8) as i32;
+        m_SideInfo.privateBits = GetBits(bsi, if m_sMode == StereoMode::Mono as i32 { 1 } else { 2 }) as i32;
+    }
+    for gr in 0..m_MP3DecInfo.nGrans {
+        for ch in  0..m_MP3DecInfo.nChans {
+            let mut sis =  &mut m_SideInfoSub[gr as usize][ch as usize]; /* side info subblock for this granule, channel */
+            sis.part23_length = GetBits(bsi, 12) as i32;
+            sis.n_bigvals = GetBits(bsi, 9) as i32;
+            sis.global_gain = GetBits(bsi, 8) as i32;
+            sis.sfCompress = GetBits(bsi, if m_MPEGVersion == MPEGVersion::MPEG1 as i32 { 4 } else { 9 }) as i32;
+            sis.win_switch_flag = GetBits(bsi, 1) as i32;
+            if (sis.win_switch_flag != 0) {
+                /* this is a start, stop, short, or mixed block */
+                sis.blockType = GetBits(bsi, 2) as i32; /* 0 = normal, 1 = start, 2 = short, 3 = stop */
+                sis.mixedBlock = GetBits(bsi, 1) as i32; /* 0 = not mixed, 1 = mixed */
+                sis.tableSelect[0] = GetBits(bsi, 5) as i32;
+                sis.tableSelect[1] = GetBits(bsi, 5) as i32;
+                sis.tableSelect[2] = 0; /* unused */
+                sis.subBlockGain[0] = GetBits(bsi, 3) as i32;
+                sis.subBlockGain[1] = GetBits(bsi, 3) as i32;
+                sis.subBlockGain[2] = GetBits(bsi, 3) as i32;
+                if (sis.blockType == 0) {
+                    /* this should not be allowed, according to spec */
+                    sis.n_bigvals = 0;
+                    sis.part23_length = 0;
+                    sis.sfCompress = 0;
+                } else if (sis.blockType == 2 && sis.mixedBlock == 0) {
+                    /* short block, not mixed */
+                    sis.region0Count = 8;
+                } else {
+                    /* start, stop, or short-mixed */
+                    sis.region0Count = 7;
+                }
+                sis.region1Count = 20 - sis.region0Count;
+            } else {
+                /* this is a normal block */
+                sis.blockType = 0;
+                sis.mixedBlock = 0;
+                sis.tableSelect[0] = GetBits(bsi, 5) as i32;
+                sis.tableSelect[1] = GetBits(bsi, 5) as i32;
+                sis.tableSelect[2] = GetBits(bsi, 5) as i32;
+                sis.region0Count = GetBits(bsi, 4) as i32;
+                sis.region1Count = GetBits(bsi, 3) as i32;
+            }
+            sis.preFlag = if m_MPEGVersion == MPEGVersion::MPEG1 as i32 { GetBits(bsi, 1) as i32 } else { 0 };
+            sis.sfactScale = GetBits(bsi, 1) as i32;
+            sis.count1TableSelect = GetBits(bsi, 1) as i32;
+        }
+    }
+    m_MP3DecInfo.mainDataBegin = m_SideInfo.mainDataBegin; /* needed by main decode loop */
+    // assert(nBytes == CalcBitsUsed(bsi, buf, 0) >> 3);
+    return nBytes;
 }
