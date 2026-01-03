@@ -277,3 +277,36 @@ pub unsafe fn UnpackFrameHeader(
     
     unpack_frame_header(buf, m_FrameHeader, m_MP3DecInfo, m_MPEGVersion, m_sMode, m_SFBandTable)
 }
+
+/***********************************************************************************************************************
+ * B I T S T R E A M
+ **********************************************************************************************************************/
+#[unsafe(no_mangle)]
+pub unsafe fn SetBitstreamPointer(bsi: *mut BitStreamInfoC, nBytes: i32, buf: *const u8) {
+    let bsi = unsafe { &mut *bsi};
+    /* init bitstream */
+    bsi.byte_ptr = buf;
+    bsi.i_cache = 0; /* 4-byte unsigned int */
+    bsi.cached_bits = 0; /* i.e. zero bits in cache */
+    bsi.n_bytes = nBytes;
+}
+
+//----------------------------------------------------------------------------------------------------------------------
+#[unsafe(no_mangle)]
+pub unsafe fn CalcBitsUsed(bsi: *const BitStreamInfoC, startBuf: *const u8, startOffset: usize) -> i32 {
+    let bsi = unsafe { & *bsi};
+    let mut bitsUsed = unsafe { (bsi.byte_ptr.offset_from(startBuf) * 8) as i32 };
+    bitsUsed -= bsi.cached_bits;
+    bitsUsed -= startOffset as i32;
+    bitsUsed
+}
+//----------------------------------------------------------------------------------------------------------------------
+#[unsafe(no_mangle)]
+pub fn CheckPadBit(m_FrameHeader: *const FrameHeader) -> i32 {
+    let m_FrameHeader = unsafe { & *m_FrameHeader};
+    if m_FrameHeader.paddingBit != 0 {
+        1
+     } else {
+        0
+    }
+}

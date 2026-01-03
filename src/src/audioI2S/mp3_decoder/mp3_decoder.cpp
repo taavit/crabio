@@ -576,30 +576,6 @@ const int ISFMpeg2[2][2][16] PROGMEM = {
         0x05a82799, 0x03ffffff, 0x02d413cc, 0x01ffffff, 0x016a09e6, 0x00ffffff, 0x00b504f3, 0x007fffff }   }
 };
 
-/***********************************************************************************************************************
- * B I T S T R E A M
- **********************************************************************************************************************/
-
-void SetBitstreamPointer(BitStreamInfo_t *bsi, int nBytes, unsigned char *buf) {
-    /* init bitstream */
-    bsi->bytePtr = buf;
-    bsi->iCache = 0; /* 4-byte unsigned int */
-    bsi->cachedBits = 0; /* i.e. zero bits in cache */
-    bsi->nBytes = nBytes;
-}
-
-//----------------------------------------------------------------------------------------------------------------------
-int CalcBitsUsed(BitStreamInfo_t *bsi, unsigned char *startBuf, int startOffset){
-    int bitsUsed;
-    bitsUsed = (bsi->bytePtr - startBuf) * 8;
-    bitsUsed -= bsi->cachedBits;
-    bitsUsed -= startOffset;
-    return bitsUsed;
-}
-//----------------------------------------------------------------------------------------------------------------------
-int CheckPadBit(){
-    return (m_FrameHeader->paddingBit ? 1 : 0);
-}
 //----------------------------------------------------------------------------------------------------------------------
 int UnpackSideInfo( unsigned char *buf) {
     int gr, ch, bd, nBytes;

@@ -200,6 +200,9 @@ int UnpackFrameHeader(
 
 void RefillBitstreamCache(BitStreamInfo_t *bsi);
 unsigned int GetBits(BitStreamInfo_t *bsi, int nBits);
+void SetBitstreamPointer(BitStreamInfo_t *bsi, int nBytes, unsigned char *buf);
+int CheckPadBit();
+int CalcBitsUsed(BitStreamInfo_t *bsi, unsigned char *startBuf, int startOffset);
 
 uint64_t rust_add(uint64_t a, uint64_t b);
 

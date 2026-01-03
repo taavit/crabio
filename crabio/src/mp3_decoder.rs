@@ -268,17 +268,17 @@ pub struct BitStreamInfo<'a> {
 #[allow(non_snake_case)]
 #[derive(Default)]
 pub struct FrameHeader {
-    layer: i32,              /* layer index (1, 2, or 3) */
-    crc: i32,                /* CRC flag: 0 = disabled, 1 = enabled */
-    brIdx: i32,              /* bitrate index (0 - 15) */
-    srIdx: i32,              /* sample rate index (0 - 2) */
-    paddingBit: i32,         /* padding flag: 0 = no padding, 1 = single pad byte */
-    privateBit: i32,         /* unused */
-    modeExt: i32,            /* used to decipher joint stereo mode */
-    copyFlag: i32,           /* copyright flag: 0 = no, 1 = yes */
-    origFlag: i32,           /* original flag: 0 = copy, 1 = original */
-    emphasis: i32,           /* deemphasis mode */
-    CRCWord: i32,            /* CRC word (16 bits, 0 if crc not enabled) */
+    pub layer: i32,              /* layer index (1, 2, or 3) */
+    pub crc: i32,                /* CRC flag: 0 = disabled, 1 = enabled */
+    pub brIdx: i32,              /* bitrate index (0 - 15) */
+    pub srIdx: i32,              /* sample rate index (0 - 2) */
+    pub paddingBit: i32,         /* padding flag: 0 = no padding, 1 = single pad byte */
+    pub privateBit: i32,         /* unused */
+    pub modeExt: i32,            /* used to decipher joint stereo mode */
+    pub copyFlag: i32,           /* copyright flag: 0 = no, 1 = yes */
+    pub origFlag: i32,           /* original flag: 0 = copy, 1 = original */
+    pub emphasis: i32,           /* deemphasis mode */
+    pub CRCWord: i32,            /* CRC word (16 bits, 0 if crc not enabled) */
 }
 
 struct SideInfoSub {
