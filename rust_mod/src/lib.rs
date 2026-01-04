@@ -364,13 +364,13 @@ pub unsafe fn UnpackSideInfo(
     }
     for gr in 0..m_MP3DecInfo.nGrans {
         for ch in  0..m_MP3DecInfo.nChans {
-            let mut sis =  &mut m_SideInfoSub[gr as usize][ch as usize]; /* side info subblock for this granule, channel */
+            let sis =  &mut m_SideInfoSub[gr as usize][ch as usize]; /* side info subblock for this granule, channel */
             sis.part23_length = GetBits(bsi, 12) as i32;
             sis.n_bigvals = GetBits(bsi, 9) as i32;
             sis.global_gain = GetBits(bsi, 8) as i32;
             sis.sfCompress = GetBits(bsi, if m_MPEGVersion == MPEGVersion::MPEG1 as i32 { 4 } else { 9 }) as i32;
             sis.win_switch_flag = GetBits(bsi, 1) as i32;
-            if (sis.win_switch_flag != 0) {
+            if sis.win_switch_flag != 0 {
                 /* this is a start, stop, short, or mixed block */
                 sis.blockType = GetBits(bsi, 2) as i32; /* 0 = normal, 1 = start, 2 = short, 3 = stop */
                 sis.mixedBlock = GetBits(bsi, 1) as i32; /* 0 = not mixed, 1 = mixed */
@@ -411,4 +411,25 @@ pub unsafe fn UnpackSideInfo(
     m_MP3DecInfo.mainDataBegin = m_SideInfo.mainDataBegin; /* needed by main decode loop */
     // assert(nBytes == CalcBitsUsed(bsi, buf, 0) >> 3);
     return nBytes;
+}
+
+/***********************************************************************************************************************
+ * Function:    MP3ClearBadFrame
+ *
+ * Description: zero out pcm buffer if error decoding MP3 frame
+ *
+ * Inputs:      mp3DecInfo struct with correct frame size parameters filled in
+ *              pointer pcm output buffer
+ *
+ * Outputs:     zeroed out pcm buffer
+ *
+ * Return:      none
+ **********************************************************************************************************************/
+#[unsafe(no_mangle)]
+pub unsafe fn MP3ClearBadFrame(m_MP3DecInfo: *const MP3DecInfo, outbuf: *mut i16) {
+    let m_MP3DecInfo = unsafe { &*m_MP3DecInfo };
+    let outbuf = unsafe {
+        core::slice::from_raw_parts_mut(outbuf, (m_MP3DecInfo.nGrans * m_MP3DecInfo.nGranSamps * m_MP3DecInfo.nChans) as usize)
+    };
+    outbuf.iter_mut().for_each(|e| *e = 0 );
 }

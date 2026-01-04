@@ -246,6 +246,7 @@ int FreqInvertRescale(int *y, int *xPrev, int blockIdx, int es);
 void PolyphaseStereo(short *pcm, int *vbuf, const uint32_t *coefBase);
 void PolyphaseMono(short *pcm, int *vbuf, const uint32_t *coefBase);
 void WinPrevious(int *xPrev, int *xPrevWin, int btPrev);
+void MP3ClearBadFrame(MP3DecInfo_t *m_MP3DecInfo, short *outbuf);
 
 int UnpackSideInfo(
     unsigned char *buf,
