@@ -346,6 +346,7 @@ struct IMDCTInfo {
     gb: [i32; MAX_NCHAN],
 }
 
+#[repr(C)]
 struct BlockCount {
     n_blocks_long: i32,
     n_blocks_total: i32,
@@ -357,12 +358,14 @@ struct BlockCount {
     gb_out: i32,
 }
 
-struct ScaleFactorInfoSub {    /* max bits in scalefactors = 5, so use char's to save space */
-    l: [u8; 23],            /* [band] */
-    s: [[u8; 13]; 3],         /* [band][window] */
+#[repr(C)]
+pub struct ScaleFactorInfoSub {    /* max bits in scalefactors = 5, so use char's to save space */
+    pub l: [u8; 23],            /* [band] */
+    pub s: [[u8; 3]; 13],         /* [band][window] */
 }
 
-struct ScaleFactorJS { /* used in MPEG 2, 2.5 intensity (joint) stereo only */
+#[repr(C)]
+pub struct ScaleFactorJS { /* used in MPEG 2, 2.5 intensity (joint) stereo only */
     intensity_scale: i32,
     slen: [i32; 4],
     nr: [i32; 4],

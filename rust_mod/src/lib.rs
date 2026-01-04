@@ -3,7 +3,7 @@
 use core::panic::PanicInfo;
 
 use crabio::mp3_decoder::{
-    BitStreamInfo, FrameHeader, MAX_NCHAN, MAX_NGRAN, MAX_SCFBD, MP3DecInfo, MPEGVersion, NBANDS, POLY_COEF, SFBandTable, SIBYTES_MPEG1_MONO, SIBYTES_MPEG1_STEREO, SIBYTES_MPEG2_MONO, SIBYTES_MPEG2_STEREO, SideInfoSub, StereoMode, VBUF_LENGTH, clip_2n, clip_to_short, fdct_32, freq_invert_rescale, get_bits, idct_9, imdct_12, madd_64, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, polyphase_mono, polyphase_stereo, refill_bitstream_cache, sar_64, unpack_frame_header, win_previous
+    BitStreamInfo, FrameHeader, MAX_NCHAN, MAX_NGRAN, MAX_SCFBD, MP3DecInfo, MPEGVersion, NBANDS, POLY_COEF, SFBandTable, SIBYTES_MPEG1_MONO, SIBYTES_MPEG1_STEREO, SIBYTES_MPEG2_MONO, SIBYTES_MPEG2_STEREO, ScaleFactorInfoSub, SideInfoSub, StereoMode, VBUF_LENGTH, clip_2n, clip_to_short, fdct_32, freq_invert_rescale, get_bits, idct_9, imdct_12, madd_64, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, polyphase_mono, polyphase_stereo, refill_bitstream_cache, sar_64, unpack_frame_header, win_previous
 };
 
 #[repr(C)]
@@ -432,4 +432,154 @@ pub unsafe fn MP3ClearBadFrame(m_MP3DecInfo: *const MP3DecInfo, outbuf: *mut i16
         core::slice::from_raw_parts_mut(outbuf, (m_MP3DecInfo.nGrans * m_MP3DecInfo.nGranSamps * m_MP3DecInfo.nChans) as usize)
     };
     outbuf.iter_mut().for_each(|e| *e = 0 );
+}
+
+const m_SFLenTab: [[u8; 2]; 16] = [
+    [0, 0],
+    [0, 1],
+    [0, 2],
+    [0, 3],
+    [3, 0],
+    [1, 1],
+    [1, 2],
+    [1, 3],
+    [2, 1],
+    [2, 2],
+    [2, 3],
+    [3, 1],
+    [3, 2],
+    [3, 3],
+    [4, 2],
+    [4, 3]
+];
+
+//----------------------------------------------------------------------------------------------------------------------
+/***********************************************************************************************************************
+ * Function:    UnpackSFMPEG1
+ *
+ * Description: unpack MPEG 1 scalefactors from bitstream
+ *
+ * Inputs:      BitStreamInfo, SideInfoSub, ScaleFactorInfoSub structs for this
+ *                granule/channel
+ *              vector of scfsi flags from side info, length = 4 (MAX_SCFBD)
+ *              index of current granule
+ *              ScaleFactorInfoSub from granule 0 (for granule 1, if scfsi[i] is set,
+ *                then we just replicate the scale factors from granule 0 in the
+ *                i'th set of scalefactor bands)
+ *
+ * Outputs:     updated BitStreamInfo struct
+ *              scalefactors in sfis (short and/or long arrays, as appropriate)
+ *
+ * Return:      none
+ *
+ * Notes:       set order of short blocks to s[band][window] instead of s[window][band]
+ *                so that we index through consectutive memory locations when unpacking
+ *                (make sure dequantizer follows same convention)
+ *              Illegal Intensity Position = 7 (always) for MPEG1 scale factors
+ **********************************************************************************************************************/
+#[unsafe(no_mangle)]
+pub unsafe fn UnpackSFMPEG1(bsi: *mut BitStreamInfoC, sis: *mut SideInfoSub,
+                   sfis: *mut ScaleFactorInfoSub, scfsi: *const i32, gr: i32, sfisGr0: *mut ScaleFactorInfoSub) {
+    let mut sfb: i32;
+    let mut slen0: i32;
+    let mut slen1: i32;
+
+    let sis = unsafe { &*sis };
+    let bsi = unsafe { &mut *bsi };
+    let sfis = unsafe { &mut *sfis };
+    let scfsi = unsafe { core::slice::from_raw_parts(scfsi, 4) };
+    let sfisGr0 = unsafe { &* sfisGr0 };
+    /* these can be 0, so make sure GetBits(bsi, 0) returns 0 (no >> 32 or anything) */
+    slen0 = m_SFLenTab[sis.sfCompress as usize][0] as i32;
+    slen1 = m_SFLenTab[sis.sfCompress as usize][1] as i32;
+    if (sis.blockType == 2){
+        /* short block, type 2 (implies winSwitchFlag == 1) */
+        if (sis.mixedBlock != 0){
+            /* do long block portion */
+            for sfb in 0..8 {
+                sfis.l[sfb]= GetBits(bsi, slen0 as u32) as u8;
+            }
+            sfb=3;
+        }
+        else {
+            /* all short blocks */
+            sfb=0;
+        }
+        for sfb in sfb..6 {
+            sfis.s[sfb as usize][0] = GetBits(bsi, slen0 as u32) as u8;
+            sfis.s[sfb as usize][1] = GetBits(bsi, slen0 as u32) as u8;
+            sfis.s[sfb as usize][2] = GetBits(bsi, slen0 as u32) as u8;
+        }
+        for sfb in 6..12 {
+            sfis.s[sfb][0] = GetBits(bsi, slen1 as u32) as u8;
+            sfis.s[sfb][1] = GetBits(bsi, slen1 as u32) as u8;
+            sfis.s[sfb][2] = GetBits(bsi, slen1 as u32) as u8;
+        }
+        /* last sf band not transmitted */
+        sfis.s[12][0] = 0;
+        sfis.s[12][1] = 0;
+        sfis.s[12][2] = 0;
+    }
+    else{
+        /* long blocks, type 0, 1, or 3 */
+        if(gr == 0) {
+            /* first granule */
+            for sfb in 0..11 {
+                sfis.l[sfb] = GetBits(bsi, slen0 as u32) as u8;
+            }
+            for sfb in 11..21 {
+                sfis.l[sfb] = GetBits(bsi, slen1 as u32) as u8;
+            }
+            return;
+        }
+        else{
+            /* second granule
+             * scfsi: 0 = different scalefactors for each granule,
+             *        1 = copy sf's from granule 0 into granule 1
+             * for block type == 2, scfsi is always 0
+             */
+            sfb = 0;
+            if(scfsi[0] != 0) {
+                for sfb in 0..6 {
+                    sfis.l[sfb] = sfisGr0.l[sfb];
+                }
+            } else {
+                for sfb in 0..6 {
+                    sfis.l[sfb] = GetBits(bsi, slen0 as u32) as u8;
+                }
+            }
+
+            if(scfsi[1] != 0) {
+                for sfb in 6..11 {
+                    sfis.l[sfb] = sfisGr0.l[sfb];
+                }
+            } else {
+                for sfb in 6..11 {
+                    sfis.l[sfb] = GetBits(bsi, slen0 as u32) as u8;
+                }
+            }
+            if(scfsi[2] != 0) {
+                for sfb in 11..16 {
+                    sfis.l[sfb] = sfisGr0.l[sfb];
+                }
+            } else {
+                for sfb in 11..16 {
+                    sfis.l[sfb] = GetBits(bsi, slen1 as u32) as u8;
+                }
+            }
+
+            if(scfsi[3] != 0) {
+                for sfb in 16..21 {
+                    sfis.l[sfb] = sfisGr0.l[sfb];
+                }
+            } else {
+                for sfb in 16..21 {
+                    sfis.l[sfb] = GetBits(bsi, slen1 as u32) as u8;
+                }
+            }
+        }
+        /* last sf band not transmitted */
+        sfis.l[21] = 0;
+        sfis.l[22] = 0;
+    }
 }

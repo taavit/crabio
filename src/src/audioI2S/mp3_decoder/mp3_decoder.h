@@ -76,11 +76,6 @@ typedef struct BlockCount {
     int gbOut;
 } BlockCount_t;
 
-typedef struct ScaleFactorInfoSub {    /* max bits in scalefactors = 5, so use char's to save space */
-    char l[23];            /* [band] */
-    char s[13][3];         /* [band][window] */
-} ScaleFactorInfoSub_t;
-
 typedef struct ScaleFactorJS { /* used in MPEG 2, 2.5 intensity (joint) stereo only */
     int intensityScale;
     int slen[4];
