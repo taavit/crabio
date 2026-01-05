@@ -15,6 +15,12 @@ static const uint8_t  m_MAX_NGRAN              =2;     // max granules
 static const uint8_t  m_MAX_NCHAN              =2;     // max channels
 static const uint16_t m_MAX_NSAMP              =576;   // max samples per channel, per granule
 
+typedef struct ScaleFactorJS { /* used in MPEG 2, 2.5 intensity (joint) stereo only */
+    int intensityScale;
+    int slen[4];
+    int nr[4];
+} ScaleFactorJS_t;
+
 typedef struct ScaleFactorInfoSub {    /* max bits in scalefactors = 5, so use char's to save space */
     char l[23];            /* [band] */
     char s[13][3];         /* [band][window] */
@@ -253,6 +259,7 @@ void PolyphaseMono(short *pcm, int *vbuf, const uint32_t *coefBase);
 void WinPrevious(int *xPrev, int *xPrevWin, int btPrev);
 void MP3ClearBadFrame(MP3DecInfo_t *m_MP3DecInfo, short *outbuf);
 void UnpackSFMPEG1(BitStreamInfo_t *bsi, SideInfoSub_t *sis, ScaleFactorInfoSub_t *sfis, int *scfsi, int gr, ScaleFactorInfoSub_t *sfisGr0);
+void UnpackSFMPEG2(BitStreamInfo_t *bsi, SideInfoSub_t *sis, ScaleFactorInfoSub_t *sfis, int gr, int ch, int modeExt, ScaleFactorJS_t *sfjs);
 
 int UnpackSideInfo(
     unsigned char *buf,
@@ -262,6 +269,8 @@ int UnpackSideInfo(
     int m_MPEGVersion,     // 1 = MPEG1, 0 = MPEG2/2.5
     int m_sMode
 );
+
+int DecodeHuffmanPairs(int *xy, int nVals, int tabIdx, int bitsLeft, unsigned char *buf, int bitOffset);
 
 #ifdef __cplusplus
 }

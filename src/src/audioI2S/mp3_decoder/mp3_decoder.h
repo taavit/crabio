@@ -76,12 +76,6 @@ typedef struct BlockCount {
     int gbOut;
 } BlockCount_t;
 
-typedef struct ScaleFactorJS { /* used in MPEG 2, 2.5 intensity (joint) stereo only */
-    int intensityScale;
-    int slen[4];
-    int nr[4];
-} ScaleFactorJS_t;
-
 /* NOTE - could get by with smaller vbuf if memory is more important than speed
  *  (in Subband, instead of replicating each block in FDCT32 you would do a memmove on the
  *   last 15 blocks to shift them down one, a hardware style FIFO)

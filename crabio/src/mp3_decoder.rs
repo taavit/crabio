@@ -316,13 +316,16 @@ struct DequantInfo {
     work_buf: [i32; MAX_REORDER_SAMPS],             /* workbuf for reordering short blocks */
 }
 
-struct HuffmanInfo {
+#[repr(C)]
+pub struct HuffmanInfo {
     huff_dec_buf: [[i32; MAX_NCHAN]; MAX_NSAMP],       /* used both for decoded Huffman values and dequantized coefficients */
     non_zero_bound: [i32; MAX_NCHAN],                /* number of coeffs in huffDecBuf[ch] which can be > 0 */
     gb: [i32; MAX_NCHAN],                          /* minimum number of guard bits in huffDecBuf[ch] */
 }
 
-enum HuffTabType {
+#[repr(C)]
+#[derive(Debug, PartialEq)]
+pub enum HuffTabType {
     NoBits,
     OneShot,
     LoopNoLinbits,
@@ -332,9 +335,10 @@ enum HuffTabType {
     InvalidTab
 }
 
-struct HuffTabLookup {
-    lin_bits: i32,
-    tab_type: i32, /*HuffTabType*/
+#[repr(C)]
+pub struct HuffTabLookup {
+    pub lin_bits: i32,
+    pub tab_type: i32, /*HuffTabType*/
 }
 
 struct IMDCTInfo {
@@ -366,9 +370,9 @@ pub struct ScaleFactorInfoSub {    /* max bits in scalefactors = 5, so use char'
 
 #[repr(C)]
 pub struct ScaleFactorJS { /* used in MPEG 2, 2.5 intensity (joint) stereo only */
-    intensity_scale: i32,
-    slen: [i32; 4],
-    nr: [i32; 4],
+    pub intensity_scale: i32,
+    pub slen: [i32; 4],
+    pub nr: [i32; 4],
 }
 
 /* NOTE - could get by with smaller vbuf if memory is more important than speed
