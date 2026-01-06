@@ -782,7 +782,13 @@ int MP3Decode( unsigned char *inbuf, size_t inbuf_len, int *bytesLeft, short *ou
             }
             /* decode Huffman code words */
             prevBitOffset = bitOffset;
-            offset = DecodeHuffman( mainPtr, &bitOffset, huffBlockBits, gr, ch);
+            offset = DecodeHuffman(
+                mainPtr, &bitOffset, huffBlockBits, gr, ch,
+                m_HuffmanInfo,
+                &m_SFBandTable,
+                &m_SideInfoSub,
+                &m_MPEGVersion
+            );
             if (offset < 0) {
                 MP3ClearBadFrame(m_MP3DecInfo, outbuf);
                 return ERR_MP3_INVALID_HUFFCODES;
@@ -952,14 +958,19 @@ void MP3Decoder_FreeBuffers()
  *                out of bits prematurely (invalid bitstream)
  **********************************************************************************************************************/
 // .data about 1ms faster per frame
-int DecodeHuffman(unsigned char *buf, int *bitOffset, int huffBlockBits, int gr, int ch){
+int DecodeHuffman(
+    unsigned char *buf, int *bitOffset, int huffBlockBits, int gr, int ch,
+    HuffmanInfo_t *m_HuffmanInfo,
+    SFBandTable_t *m_SFBandTable,
+    SideInfoSub_t (*m_SideInfoSub)[2][2],
+    MPEGVersion_t *m_MPEGVersion
+){
 
     int r1Start, r2Start, rEnd[4]; /* region boundaries */
     int i, w, bitsUsed, bitsLeft;
     unsigned char *startBuf = buf;
 
-    SideInfoSub_t *sis;
-    sis = &m_SideInfoSub[gr][ch];
+    SideInfoSub_t* sis = &(*m_SideInfoSub)[gr][ch];
     //hi = (HuffmanInfo_t*) (m_MP3DecInfo->HuffmanInfoPS);
 
     if (huffBlockBits < 0)
@@ -968,20 +979,20 @@ int DecodeHuffman(unsigned char *buf, int *bitOffset, int huffBlockBits, int gr,
     /* figure out region boundaries (the first 2*bigVals coefficients divided into 3 regions) */
     if (sis->winSwitchFlag && sis->blockType == 2) {
         if (sis->mixedBlock == 0) {
-            r1Start = m_SFBandTable.s[(sis->region0Count + 1) / 3] * 3;
+            r1Start = m_SFBandTable->s[(sis->region0Count + 1) / 3] * 3;
         } else {
-            if (m_MPEGVersion == MPEG1) {
-                r1Start = m_SFBandTable.l[sis->region0Count + 1];
+            if (*m_MPEGVersion == MPEG1) {
+                r1Start = m_SFBandTable->l[sis->region0Count + 1];
             } else {
                 /* see MPEG2 spec for explanation */
-                w = m_SFBandTable.s[4] - m_SFBandTable.s[3];
-                r1Start = m_SFBandTable.l[6] + 2 * w;
+                w = m_SFBandTable->s[4] - m_SFBandTable->s[3];
+                r1Start = m_SFBandTable->l[6] + 2 * w;
             }
         }
         r2Start = m_MAX_NSAMP; /* short blocks don't have region 2 */
     } else {
-        r1Start = m_SFBandTable.l[sis->region0Count + 1];
-        r2Start = m_SFBandTable.l[sis->region0Count + 1 + sis->region1Count + 1];
+        r1Start = m_SFBandTable->l[sis->region0Count + 1];
+        r2Start = m_SFBandTable->l[sis->region0Count + 1 + sis->region1Count + 1];
     }
 
     /* offset rEnd index by 1 so first region = rEnd[1] - rEnd[0], etc. */

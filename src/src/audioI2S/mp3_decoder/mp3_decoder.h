@@ -320,7 +320,12 @@ int UnpackFrameHeader(
     SFBandTable *m_SFBandTable
 );
 
-int DecodeHuffman( unsigned char *buf, int *bitOffset, int huffBlockBits, int gr, int ch);
+int DecodeHuffman(
+    unsigned char *buf, int *bitOffset, int huffBlockBits, int gr, int ch, HuffmanInfo_t *m_HuffmanInfo,
+    SFBandTable *m_SFBandTable,
+    SideInfoSub_t (*m_SideInfoSub)[2][2],
+    MPEGVersion_t *m_MPEGVersion
+);
 int MP3Dequantize( int gr);
 int IMDCT( int gr, int ch);
 int UnpackScaleFactors( unsigned char *buf, int *bitOffset, int bitsAvail, int gr, int ch);
