@@ -35,12 +35,6 @@ typedef struct DequantInfo {
     int workBuf[m_MAX_REORDER_SAMPS];             /* workbuf for reordering short blocks */
 } DequantInfo_t;
 
-typedef struct HuffmanInfo {
-    int huffDecBuf[m_MAX_NCHAN][m_MAX_NSAMP];       /* used both for decoded Huffman values and dequantized coefficients */
-    int nonZeroBound[m_MAX_NCHAN];                /* number of coeffs in huffDecBuf[ch] which can be > 0 */
-    int gb[m_MAX_NCHAN];                          /* minimum number of guard bits in huffDecBuf[ch] */
-} HuffmanInfo_t;
-
 typedef enum HuffTabType {
     noBits,
     oneShot,

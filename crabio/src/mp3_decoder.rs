@@ -318,9 +318,9 @@ struct DequantInfo {
 
 #[repr(C)]
 pub struct HuffmanInfo {
-    huff_dec_buf: [[i32; MAX_NCHAN]; MAX_NSAMP],       /* used both for decoded Huffman values and dequantized coefficients */
-    non_zero_bound: [i32; MAX_NCHAN],                /* number of coeffs in huffDecBuf[ch] which can be > 0 */
-    gb: [i32; MAX_NCHAN],                          /* minimum number of guard bits in huffDecBuf[ch] */
+    pub huff_dec_buf: [[i32; MAX_NCHAN]; MAX_NSAMP],       /* used both for decoded Huffman values and dequantized coefficients */
+    pub non_zero_bound: [i32; MAX_NCHAN],                /* number of coeffs in huffDecBuf[ch] which can be > 0 */
+    pub gb: [i32; MAX_NCHAN],                          /* minimum number of guard bits in huffDecBuf[ch] */
 }
 
 #[repr(C)]
@@ -1255,8 +1255,8 @@ pub struct MP3FrameInfo {
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct SFBandTable {
-    l: [i32; 23],
-    s: [i32; 14],
+    pub l: [i32; 23],
+    pub s: [i32; 14],
 }
 
 #[repr(C)]

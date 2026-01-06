@@ -973,39 +973,24 @@ int DecodeHuffman(
     SideInfoSub_t* sis = &(*m_SideInfoSub)[gr][ch];
     //hi = (HuffmanInfo_t*) (m_MP3DecInfo->HuffmanInfoPS);
 
-    if (huffBlockBits < 0)
+    if (huffBlockBits < 0) {
         return -1;
-
-    /* figure out region boundaries (the first 2*bigVals coefficients divided into 3 regions) */
-    if (sis->winSwitchFlag && sis->blockType == 2) {
-        if (sis->mixedBlock == 0) {
-            r1Start = m_SFBandTable->s[(sis->region0Count + 1) / 3] * 3;
-        } else {
-            if (*m_MPEGVersion == MPEG1) {
-                r1Start = m_SFBandTable->l[sis->region0Count + 1];
-            } else {
-                /* see MPEG2 spec for explanation */
-                w = m_SFBandTable->s[4] - m_SFBandTable->s[3];
-                r1Start = m_SFBandTable->l[6] + 2 * w;
-            }
-        }
-        r2Start = m_MAX_NSAMP; /* short blocks don't have region 2 */
-    } else {
-        r1Start = m_SFBandTable->l[sis->region0Count + 1];
-        r2Start = m_SFBandTable->l[sis->region0Count + 1 + sis->region1Count + 1];
     }
 
-    /* offset rEnd index by 1 so first region = rEnd[1] - rEnd[0], etc. */
-    rEnd[3] = (m_MAX_NSAMP < (2 * sis->nBigvals) ? m_MAX_NSAMP : (2 * sis->nBigvals));
-    rEnd[2] = (r2Start < rEnd[3] ? r2Start : rEnd[3]);
-    rEnd[1] = (r1Start < rEnd[3] ? r1Start : rEnd[3]);
-    rEnd[0] = 0;
+    DecodeHuffmanH1(
+        sis,
+        m_SFBandTable,
+        &r1Start,
+        &r2Start,
+        &w,
+        m_MPEGVersion,
+        &rEnd,
+        m_HuffmanInfo,
+        huffBlockBits,
+        ch,
+        &bitsLeft
+    );
 
-    /* rounds up to first all-zero pair (we don't check last pair for (x,y) == (non-zero, zero)) */
-    m_HuffmanInfo->nonZeroBound[ch] = rEnd[3];
-
-    /* decode Huffman pairs (rEnd[i] are always even numbers) */
-    bitsLeft = huffBlockBits;
     for (i = 0; i < 3; i++) {
         bitsUsed = DecodeHuffmanPairs(m_HuffmanInfo->huffDecBuf[ch] + rEnd[i],
                 rEnd[i + 1] - rEnd[i], sis->tableSelect[i], bitsLeft, buf,

@@ -15,6 +15,12 @@ static const uint8_t  m_MAX_NGRAN              =2;     // max granules
 static const uint8_t  m_MAX_NCHAN              =2;     // max channels
 static const uint16_t m_MAX_NSAMP              =576;   // max samples per channel, per granule
 
+typedef struct HuffmanInfo {
+    int huffDecBuf[m_MAX_NCHAN][m_MAX_NSAMP];       /* used both for decoded Huffman values and dequantized coefficients */
+    int nonZeroBound[m_MAX_NCHAN];                /* number of coeffs in huffDecBuf[ch] which can be > 0 */
+    int gb[m_MAX_NCHAN];                          /* minimum number of guard bits in huffDecBuf[ch] */
+} HuffmanInfo_t;
+
 typedef struct ScaleFactorJS { /* used in MPEG 2, 2.5 intensity (joint) stereo only */
     int intensityScale;
     int slen[4];
@@ -272,6 +278,20 @@ int UnpackSideInfo(
 
 int DecodeHuffmanPairs(int *xy, int nVals, int tabIdx, int bitsLeft, unsigned char *buf, int bitOffset);
 int DecodeHuffmanQuads(int *vwxy, int nVals, int tabIdx, int bitsLeft, unsigned char *buf, int bitOffset);
+
+void DecodeHuffmanH1(
+    SideInfoSub_t* sis,
+    SFBandTable_t *m_SFBandTable,
+    int *r1Start,
+    int *r2Start,
+    int *w,
+    MPEGVersion_t *m_MPEGVersion,
+    int (*rEnd)[4],
+    HuffmanInfo_t *m_HuffmanInfo,
+    int huffBlockBits,
+    int ch,
+    int *bitsLeft
+);
 
 #ifdef __cplusplus
 }

@@ -3,7 +3,7 @@
 use core::panic::PanicInfo;
 
 use crabio::mp3_decoder::{
-    BitStreamInfo, FrameHeader, HUFF_PAIRTABS, HuffTabLookup, HuffTabType, MAX_NCHAN, MAX_NGRAN, MAX_SCFBD, MP3DecInfo, MPEGVersion, NBANDS, POLY_COEF, SFBandTable, SIBYTES_MPEG1_MONO, SIBYTES_MPEG1_STEREO, SIBYTES_MPEG2_MONO, SIBYTES_MPEG2_STEREO, ScaleFactorInfoSub, ScaleFactorJS, SideInfoSub, StereoMode, VBUF_LENGTH, clip_2n, clip_to_short, fdct_32, freq_invert_rescale, get_bits, idct_9, imdct_12, madd_64, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, polyphase_mono, polyphase_stereo, refill_bitstream_cache, sar_64, unpack_frame_header, win_previous
+    BitStreamInfo, FrameHeader, HUFF_PAIRTABS, HuffTabLookup, HuffTabType, HuffmanInfo, MAX_NCHAN, MAX_NGRAN, MAX_NSAMP, MAX_SCFBD, MP3DecInfo, MPEGVersion, NBANDS, POLY_COEF, SFBandTable, SIBYTES_MPEG1_MONO, SIBYTES_MPEG1_STEREO, SIBYTES_MPEG2_MONO, SIBYTES_MPEG2_STEREO, ScaleFactorInfoSub, ScaleFactorJS, SideInfoSub, StereoMode, VBUF_LENGTH, clip_2n, clip_to_short, fdct_32, freq_invert_rescale, get_bits, idct_9, imdct_12, madd_64, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, polyphase_mono, polyphase_stereo, refill_bitstream_cache, sar_64, unpack_frame_header, win_previous
 };
 
 #[repr(C)]
@@ -1613,4 +1613,60 @@ pub unsafe fn DecodeHuffmanQuads(mut vwxy: *mut i32, nVals: i32, tabIdx: i32, mu
     }
 
     i
+}
+
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn DecodeHuffmanH1(
+    sis: *mut SideInfoSub,              // SideInfoSub_t* sis (mut, bo odczytujemy pola)
+    m_SFBandTable: *const SFBandTable,  // SFBandTable_t*
+    r1Start: *mut i32,                  // int*
+    r2Start: *mut i32,                  // int*
+    w: *mut i32,                        // int* – używane tylko w MPEG2 mixed block
+    m_MPEGVersion: *const MPEGVersion,  // MPEGVersion_t*
+    rEnd: *mut i32,
+    m_HuffmanInfo: *mut HuffmanInfo,
+    huffBlockBits: i32,
+    ch: i32,
+    bitsLeft: *mut i32
+) {
+    let sis = &*sis;                // &SideInfoSub
+    let sf = &*m_SFBandTable;       // &SFBandTable
+    let version = *m_MPEGVersion;
+    let rEnd= unsafe { core::slice::from_raw_parts_mut(rEnd, 4) };
+
+    if sis.win_switch_flag != 0 && sis.blockType == 2 {
+        // Short blocks lub mixed blocks
+        if sis.mixedBlock == 0 {
+            // Czyste short blocks
+            *r1Start = sf.s[((sis.region0Count + 1) / 3) as usize] as i32 * 3;
+        } else {
+            // Mixed block
+            if version == MPEGVersion::MPEG1 {
+                *r1Start = sf.l[(sis.region0Count + 1) as usize] as i32;
+            } else {
+                // MPEG2 / MPEG2.5 – spec wymaga specjalnego obliczenia
+                *w = sf.s[4] as i32 - sf.s[3] as i32;
+                *r1Start = sf.l[6] as i32 + 2 * *w;
+            }
+        }
+        *r2Start = MAX_NSAMP as i32; // short blocks nie mają regionu 2
+    } else {
+        // Long blocks
+        *r1Start = sf.l[(sis.region0Count + 1) as usize] as i32;
+        *r2Start = sf.l[(sis.region0Count + 1 + sis.region1Count + 1) as usize] as i32;
+    }
+
+    /* offset rEnd index by 1 so first region = rEnd[1] - rEnd[0], etc. */
+    rEnd[3] = if MAX_NSAMP < (2 * sis.n_bigvals as usize) { MAX_NSAMP as i32 } else {2 * sis.n_bigvals };
+    rEnd[2] = if *r2Start < rEnd[3]  { *r2Start } else { rEnd[3] };
+    rEnd[1] = if *r1Start < rEnd[3] { *r1Start } else { rEnd[3] };
+    rEnd[0] = 0;
+
+    
+    /* rounds up to first all-zero pair (we don't check last pair for (x,y) == (non-zero, zero)) */
+    (*m_HuffmanInfo).non_zero_bound[ch as usize] = rEnd[3];
+
+    /* decode Huffman pairs (rEnd[i] are always even numbers) */
+    *bitsLeft = huffBlockBits;
 }
