@@ -1628,8 +1628,13 @@ pub unsafe extern "C" fn DecodeHuffmanH1(
     m_HuffmanInfo: *mut HuffmanInfo,
     huffBlockBits: i32,
     ch: i32,
-    bitsLeft: *mut i32
-) {
+    bitsLeft: *mut i32,
+
+    mut buf: *mut u8,
+    startBuf: *const u8,
+    bitOffset: *mut i32,
+) -> i32 {
+    let m_HuffmanInfo =  &mut *m_HuffmanInfo;
     let sis = &*sis;                // &SideInfoSub
     let sf = &*m_SFBandTable;       // &SFBandTable
     let version = *m_MPEGVersion;
@@ -1669,22 +1674,22 @@ pub unsafe extern "C" fn DecodeHuffmanH1(
 
     /* decode Huffman pairs (rEnd[i] are always even numbers) */
     *bitsLeft = huffBlockBits;
-}
 
-#[unsafe(no_mangle)]
-pub unsafe fn DecodeHuffmanH2(
-    m_HuffmanInfo: *mut HuffmanInfo,
-    ch: i32,
-    mut buf: *mut u8,
-    startBuf: *const u8,
-    bitsLeft: *mut i32,
-    bitOffset: *mut i32,
-    rEnd: *mut i32,
-    sis: *mut SideInfoSub,              // SideInfoSub_t* sis (mut, bo odczytujemy pola)
-) -> i32 {
-    let m_HuffmanInfo =  &mut *m_HuffmanInfo;
-    let rEnd= unsafe { core::slice::from_raw_parts_mut(rEnd, 4) };
-    let sis = &*sis;                // &SideInfoSub
+    let mut bitsUsed = 0;
+    for i in 0..3 {
+        bitsUsed = DecodeHuffmanPairs(m_HuffmanInfo.huffDecBuf[ch as usize].as_mut_ptr().add(rEnd[i] as usize),
+                rEnd[i + 1] - rEnd[i], sis.tableSelect[i], *bitsLeft, buf,
+                *bitOffset);
+        if (bitsUsed < 0 || bitsUsed > *bitsLeft) /* error - overran end of bitstream */ {
+            return -1;
+        }
+
+        /* update bitstream position */
+        buf = buf.add((bitsUsed + *bitOffset) as usize >> 3);
+        *bitOffset = (bitsUsed + *bitOffset) & 0x07;
+        *bitsLeft -= bitsUsed;
+    }
+
         /* decode Huffman quads (if any) */
     m_HuffmanInfo.nonZeroBound[ch as usize] += DecodeHuffmanQuads(
         m_HuffmanInfo.huffDecBuf[ch as usize].as_mut_ptr().add(rEnd[3] as usize),
@@ -1708,4 +1713,5 @@ pub unsafe fn DecodeHuffmanH2(
     *bitOffset = (*bitsLeft + *bitOffset) & 0x07;
 
     buf.offset_from(startBuf) as i32
+
 }

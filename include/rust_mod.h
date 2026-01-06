@@ -279,7 +279,7 @@ int UnpackSideInfo(
 int DecodeHuffmanPairs(int *xy, int nVals, int tabIdx, int bitsLeft, unsigned char *buf, int bitOffset);
 int DecodeHuffmanQuads(int *vwxy, int nVals, int tabIdx, int bitsLeft, unsigned char *buf, int bitOffset);
 
-void DecodeHuffmanH1(
+int DecodeHuffmanH1(
     SideInfoSub_t* sis,
     SFBandTable_t *m_SFBandTable,
     int *r1Start,
@@ -290,18 +290,10 @@ void DecodeHuffmanH1(
     HuffmanInfo_t *m_HuffmanInfo,
     int huffBlockBits,
     int ch,
-    int *bitsLeft
-);
-
-int DecodeHuffmanH2(
-    HuffmanInfo_t *m_HuffmanInfo,
-    int ch,
+    int *bitsLeft,
     unsigned char *buf,
     unsigned char *startBuf,
-    int *bitsLeft,
-    int *bitOffset,
-    int (*rEnd)[4],
-    SideInfoSub_t* sis
+    int *bitOffset
 );
 
 #ifdef __cplusplus

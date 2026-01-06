@@ -977,7 +977,7 @@ int DecodeHuffman(
         return -1;
     }
 
-    DecodeHuffmanH1(
+    return DecodeHuffmanH1(
         sis,
         m_SFBandTable,
         &r1Start,
@@ -988,31 +988,10 @@ int DecodeHuffman(
         m_HuffmanInfo,
         huffBlockBits,
         ch,
-        &bitsLeft
-    );
-
-    for (i = 0; i < 3; i++) {
-        bitsUsed = DecodeHuffmanPairs(m_HuffmanInfo->huffDecBuf[ch] + rEnd[i],
-                rEnd[i + 1] - rEnd[i], sis->tableSelect[i], bitsLeft, buf,
-                *bitOffset);
-        if (bitsUsed < 0 || bitsUsed > bitsLeft) /* error - overran end of bitstream */
-            return -1;
-
-        /* update bitstream position */
-        buf += (bitsUsed + *bitOffset) >> 3;
-        *bitOffset = (bitsUsed + *bitOffset) & 0x07;
-        bitsLeft -= bitsUsed;
-    }
-
-    return DecodeHuffmanH2(
-        m_HuffmanInfo,
-        ch,
+        &bitsLeft,
         buf,
         startBuf,
-        &bitsLeft,
-        bitOffset,
-        &rEnd,
-        sis
+        bitOffset
     );
 }
 
