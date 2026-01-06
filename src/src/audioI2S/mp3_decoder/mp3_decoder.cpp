@@ -934,67 +934,6 @@ void MP3Decoder_FreeBuffers()
  * H U F F M A N N
  **********************************************************************************************************************/
 
-
-/***********************************************************************************************************************
- * Function:    DecodeHuffman
- *
- * Description: decode one granule, one channel worth of Huffman codes
- *
- * Inputs:      MP3DecInfo structure filled by UnpackFrameHeader(), UnpackSideInfo(),
- *                and UnpackScaleFactors() (for this granule)
- *              buffer pointing to start of Huffman data in MP3 frame
- *              pointer to bit offset (0-7) indicating starting bit in buf[0]
- *              number of bits in the Huffman data section of the frame
- *                (could include padding bits)
- *              index of current granule and channel
- *
- * Outputs:     decoded coefficients in hi->huffDecBuf[ch] (hi pointer in mp3DecInfo)
- *              updated bitOffset
- *
- * Return:      length (in bytes) of Huffman codes
- *              bitOffset also returned in parameter (0 = MSB, 7 = LSB of
- *                byte located at buf + offset)
- *              -1 if null input pointers, huffBlockBits < 0, or decoder runs
- *                out of bits prematurely (invalid bitstream)
- **********************************************************************************************************************/
-// .data about 1ms faster per frame
-int DecodeHuffman(
-    unsigned char *buf, int *bitOffset, int huffBlockBits, int gr, int ch,
-    HuffmanInfo_t *m_HuffmanInfo,
-    SFBandTable_t *m_SFBandTable,
-    SideInfoSub_t (*m_SideInfoSub)[2][2],
-    MPEGVersion_t *m_MPEGVersion
-){
-
-    int r1Start, r2Start, rEnd[4]; /* region boundaries */
-    int i, w, bitsUsed, bitsLeft;
-    unsigned char *startBuf = buf;
-
-    SideInfoSub_t* sis = &(*m_SideInfoSub)[gr][ch];
-    //hi = (HuffmanInfo_t*) (m_MP3DecInfo->HuffmanInfoPS);
-
-    if (huffBlockBits < 0) {
-        return -1;
-    }
-
-    return DecodeHuffmanH1(
-        sis,
-        m_SFBandTable,
-        &r1Start,
-        &r2Start,
-        &w,
-        m_MPEGVersion,
-        &rEnd,
-        m_HuffmanInfo,
-        huffBlockBits,
-        ch,
-        &bitsLeft,
-        buf,
-        startBuf,
-        bitOffset
-    );
-}
-
 /***********************************************************************************************************************
  * D E Q U A N T
  **********************************************************************************************************************/

@@ -279,21 +279,16 @@ int UnpackSideInfo(
 int DecodeHuffmanPairs(int *xy, int nVals, int tabIdx, int bitsLeft, unsigned char *buf, int bitOffset);
 int DecodeHuffmanQuads(int *vwxy, int nVals, int tabIdx, int bitsLeft, unsigned char *buf, int bitOffset);
 
-int DecodeHuffmanH1(
-    SideInfoSub_t* sis,
-    SFBandTable_t *m_SFBandTable,
-    int *r1Start,
-    int *r2Start,
-    int *w,
-    MPEGVersion_t *m_MPEGVersion,
-    int (*rEnd)[4],
-    HuffmanInfo_t *m_HuffmanInfo,
-    int huffBlockBits,
-    int ch,
-    int *bitsLeft,
+int DecodeHuffman(
     unsigned char *buf,
-    unsigned char *startBuf,
-    int *bitOffset
+    int *bitOffset,
+    int huffBlockBits,
+    int gr,
+    int ch,
+    HuffmanInfo_t *m_HuffmanInfo,
+    SFBandTable_t *m_SFBandTable,
+    SideInfoSub_t (*m_SideInfoSub)[2][2],
+    MPEGVersion_t *m_MPEGVersion
 );
 
 #ifdef __cplusplus
