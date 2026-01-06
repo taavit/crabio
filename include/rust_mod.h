@@ -271,6 +271,7 @@ int UnpackSideInfo(
 );
 
 int DecodeHuffmanPairs(int *xy, int nVals, int tabIdx, int bitsLeft, unsigned char *buf, int bitOffset);
+int DecodeHuffmanQuads(int *vwxy, int nVals, int tabIdx, int bitsLeft, unsigned char *buf, int bitOffset);
 
 #ifdef __cplusplus
 }

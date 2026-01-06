@@ -1447,3 +1447,170 @@ pub unsafe extern "C" fn DecodeHuffmanPairs(
 
     -1
 }
+
+#[inline(always)]
+unsafe fn pgm_read_byte(ptr: *const u8) -> u8 {
+    *ptr
+}
+
+/* tables for quadruples
+ * format 0xAB
+ *  A = length of codeword
+ *  B = codeword
+ */
+const quadTable: [u8; 64+16] = [
+    /* table A */
+    0x6b, 0x6f, 0x6d, 0x6e, 0x67, 0x65, 0x59, 0x59, 0x56, 0x56, 0x53, 0x53, 0x5a, 0x5a, 0x5c, 0x5c,
+    0x42, 0x42, 0x42, 0x42, 0x41, 0x41, 0x41, 0x41, 0x44, 0x44, 0x44, 0x44, 0x48, 0x48, 0x48, 0x48,
+    0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10,
+    0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10,
+    /* table B */
+    0x4f, 0x4e, 0x4d, 0x4c, 0x4b, 0x4a, 0x49, 0x48, 0x47, 0x46, 0x45, 0x44, 0x43, 0x42, 0x41, 0x40,
+];
+
+
+/***********************************************************************************************************************
+ * Function:    DecodeHuffmanQuads
+ *
+ * Description: decode 4-way vector Huffman codes in the "count1" region of spectrum
+ *
+ * Inputs:      valid BitStreamInfo struct, pointing to start of quadword codes
+ *              pointer to vwxy buffer to received decoded values
+ *              maximum number of codewords to decode
+ *              index of quadword table (0 = table A, 1 = table B)
+ *              number of bits remaining in bitstream
+ *
+ * Outputs:     quadruples of decoded coefficients in vwxy
+ *              updated BitStreamInfo struct
+ *
+ * Return:      index of the first "zero_part" value (index of the first sample
+ *                of the quad word after which all samples are 0)
+ *
+ * Notes:        si_huff.bit tests every vwxy output in both quad tables
+ **********************************************************************************************************************/
+// no improvement with section=data
+#[unsafe(no_mangle)]
+pub unsafe fn DecodeHuffmanQuads(mut vwxy: *mut i32, nVals: i32, tabIdx: i32, mut bits_left: i32, mut buf: *mut u8, bitOffset: i32) -> i32 {
+    let mut v: i32;
+    let mut w: i32;
+    let mut x: i32;
+    let mut y: i32;
+    let mut len: i32;
+    let maxBits: i32;
+    let mut cachedBits: i32;
+    let mut padBits: i32;
+    let mut cache: u32;
+    let mut cw: u8;
+
+    if bits_left <= 0 {
+        return 0;
+    }
+
+    // Pobieranie bazy tabeli i parametrów (zakładamy dostęp do globalnych tablic)
+    // tBase = (unsigned char *) quadTable + quadTabOffset[tabIdx];
+    let t_base = (quadTable.as_ptr() as *const u8)
+        .add(quadTabOffset[tabIdx as usize] as usize);
+    maxBits = quadTabMaxBits[tabIdx as usize] as i32;
+
+    /* Inicjalizacja cache partial byte */
+    cache = 0;
+    cachedBits = (8 - bitOffset) & 0x07;
+    if cachedBits != 0 {
+        cache = (*buf as u32) << (32 - cachedBits);
+        buf = buf.add(1);
+    }
+    bits_left -= cachedBits;
+
+    let mut i = 0;
+    padBits = 0;
+
+    while i < (nVals - 3) {
+        /* Uzupełnianie cache - ładowanie 16 bitów */
+        if bits_left >= 16 {
+            cache |= (*buf as u32) << (24 - cachedBits);
+            buf = buf.add(1);
+            cache |= (*buf as u32) << (16 - cachedBits);
+            buf = buf.add(1);
+            cachedBits += 16;
+            bits_left -= 16;
+        } else {
+            /* Ostatnia partia bitów, wyrównanie i padBits */
+            if cachedBits + bits_left <= 0 {
+                return i;
+            }
+            if bits_left > 0 {
+                cache |= (*buf as u32) << (24 - cachedBits);
+                buf = buf.add(1);
+            }
+            if bits_left > 8 {
+                cache |= (*buf as u32) << (16 - cachedBits);
+                buf = buf.add(1);
+            }
+            cachedBits += bits_left;
+            bits_left = 0;
+
+            // cache &= (signed int) 0x80000000 >> (cachedBits - 1);
+            // W Rust przesunięcie i32 jest arytmetyczne (zachowuje bit znaku)
+            let mask = ((0x80000000u32 as i32) >> (cachedBits.wrapping_sub(1))) as u32;
+            cache &= mask;
+            
+            padBits = 10;
+            cachedBits += padBits;
+        }
+
+        /* Dekodowanie kwadratów */
+        while i < (nVals - 3) && cachedBits >= 10 {
+            // cw = pgm_read_byte(&tBase[cache >> (32 - maxBits)]);
+            cw = pgm_read_byte(t_base.add((cache >> (32 - maxBits)) as usize));
+            
+            len = ((cw >> 4) & 0x0f) as i32;
+            cachedBits -= len;
+            cache <<= len;
+
+            // V
+            v = ((cw >> 3) & 0x01) as i32;
+            if v != 0 {
+                v |= (cache & 0x80000000) as i32;
+                cache <<= 1;
+                cachedBits -= 1;
+            }
+            
+            // W
+            w = ((cw >> 2) & 0x01) as i32;
+            if w != 0 {
+                w |= (cache & 0x80000000) as i32;
+                cache <<= 1;
+                cachedBits -= 1;
+            }
+
+            // X
+            x = ((cw >> 1) & 0x01) as i32;
+            if x != 0 {
+                x |= (cache & 0x80000000) as i32;
+                cache <<= 1;
+                cachedBits -= 1;
+            }
+
+            // Y
+            y = ((cw >> 0) & 0x01) as i32;
+            if y != 0 {
+                y |= (cache & 0x80000000) as i32;
+                cache <<= 1;
+                cachedBits -= 1;
+            }
+
+            if cachedBits < padBits {
+                return i;
+            }
+
+            // Zapis do bufora i inkrementacja wskaźnika (jak vwxy++)
+            *vwxy = v; vwxy = vwxy.add(1);
+            *vwxy = w; vwxy = vwxy.add(1);
+            *vwxy = x; vwxy = vwxy.add(1);
+            *vwxy = y; vwxy = vwxy.add(1);
+            i += 4;
+        }
+    }
+
+    i
+}

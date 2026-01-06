@@ -514,21 +514,6 @@ const uint32_t fastWin36[18] PROGMEM = {
         0x4a868feb, 0xef7a6275, 0x47311c28, 0xf6a09e67, 0x42aace8b, 0xfd16d8dd
 };
 
-/* tables for quadruples
- * format 0xAB
- *  A = length of codeword
- *  B = codeword
- */
-const unsigned char quadTable[64+16] PROGMEM = {
-    /* table A */
-    0x6b, 0x6f, 0x6d, 0x6e, 0x67, 0x65, 0x59, 0x59, 0x56, 0x56, 0x53, 0x53, 0x5a, 0x5a, 0x5c, 0x5c,
-    0x42, 0x42, 0x42, 0x42, 0x41, 0x41, 0x41, 0x41, 0x44, 0x44, 0x44, 0x44, 0x48, 0x48, 0x48, 0x48,
-    0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10,
-    0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10,
-    /* table B */
-    0x4f, 0x4e, 0x4d, 0x4c, 0x4b, 0x4a, 0x49, 0x48, 0x47, 0x46, 0x45, 0x44, 0x43, 0x42, 0x41, 0x40,
-};
-
 const uint32_t imdctWin[4][36] PROGMEM = {
     {
     0x02aace8b, 0x07311c28, 0x0a868fec, 0x0c913b52, 0x0d413ccd, 0x0c913b52, 0x0a868fec, 0x07311c28,
@@ -943,115 +928,6 @@ void MP3Decoder_FreeBuffers()
  * H U F F M A N N
  **********************************************************************************************************************/
 
-
-/***********************************************************************************************************************
- * Function:    DecodeHuffmanQuads
- *
- * Description: decode 4-way vector Huffman codes in the "count1" region of spectrum
- *
- * Inputs:      valid BitStreamInfo struct, pointing to start of quadword codes
- *              pointer to vwxy buffer to received decoded values
- *              maximum number of codewords to decode
- *              index of quadword table (0 = table A, 1 = table B)
- *              number of bits remaining in bitstream
- *
- * Outputs:     quadruples of decoded coefficients in vwxy
- *              updated BitStreamInfo struct
- *
- * Return:      index of the first "zero_part" value (index of the first sample
- *                of the quad word after which all samples are 0)
- *
- * Notes:        si_huff.bit tests every vwxy output in both quad tables
- **********************************************************************************************************************/
-// no improvement with section=data
-int DecodeHuffmanQuads(int *vwxy, int nVals, int tabIdx, int bitsLeft, unsigned char *buf, int bitOffset){
-    int i, v, w, x, y;
-    int len, maxBits, cachedBits, padBits;
-    unsigned int cache;
-    unsigned char cw, *tBase;
-
-    if(bitsLeft<=0) return 0;
-
-    tBase = (unsigned char *) quadTable + quadTabOffset[tabIdx];
-    maxBits = quadTabMaxBits[tabIdx];
-
-    /* initially fill cache with any partial byte */
-    cache = 0;
-    cachedBits=(8-bitOffset) & 0x07;
-    if(cachedBits)cache=(unsigned int)(*buf++) << (32 - cachedBits);
-    bitsLeft -= cachedBits;
-
-    i = padBits = 0;
-    while (i < (nVals - 3)) {
-        /* refill cache - assumes cachedBits <= 16 */
-        if (bitsLeft >= 16) {
-            /* load 2 new bytes into left-justified cache */
-            cache |= (unsigned int) (*buf++) << (24 - cachedBits);
-            cache |= (unsigned int) (*buf++) << (16 - cachedBits);
-            cachedBits += 16;
-            bitsLeft -= 16;
-        } else {
-            /* last time through, pad cache with zeros and drain cache */
-            if(cachedBits+bitsLeft <= 0) return i;
-            if(bitsLeft>0) cache |= (unsigned int)(*buf++)<<(24-cachedBits);
-            if (bitsLeft > 8) cache |= (unsigned int)(*buf++)<<(16 - cachedBits);
-            cachedBits += bitsLeft;
-            bitsLeft = 0;
-
-            cache &= (signed int) 0x80000000 >> (cachedBits - 1);
-            padBits = 10;
-            cachedBits += padBits; /* okay if this is > 32 (0's automatically shifted in from right) */
-        }
-
-        /* largest maxBits = 6, plus 4 for sign bits, so make sure cache has at least 10 bits */
-        while(i < (nVals - 3) && cachedBits >= 10){
-            cw = pgm_read_byte(&tBase[cache >> (32 - maxBits)]);
-            len=(int)( (((unsigned char)(cw)) >> 4) & 0x0f);
-            cachedBits -= len;
-            cache <<= len;
-
-            v=(int)( (((unsigned char)(cw)) >> 3) & 0x01);
-            if (v) {
-                (v) |= ((cache) & 0x80000000);
-                cache <<= 1;
-                cachedBits--;
-            }
-            w=(int)( (((unsigned char)(cw)) >> 2) & 0x01);
-            if (w) {
-                (w) |= ((cache) & 0x80000000);
-                cache <<= 1;
-                cachedBits--;
-            }
-
-            x=(int)( (((unsigned char)(cw)) >> 1) & 0x01);
-            if (x) {
-                (x) |= ((cache) & 0x80000000);
-                cache <<= 1;
-                cachedBits--;
-            }
-
-            y=(int)( (((unsigned char)(cw)) >> 0) & 0x01);
-            if (y) {
-                (y) |= ((cache) & 0x80000000);
-                cache <<= 1;
-                cachedBits--;
-            }
-
-            /* ran out of bits - okay (means we're done) */
-            if (cachedBits < padBits)
-                return i;
-
-            *vwxy++ = v;
-            *vwxy++ = w;
-            *vwxy++ = x;
-            *vwxy++ = y;
-            i += 4;
-        }
-    }
-
-    /* decoded max number of quad values */
-    return i;
-}
 
 /***********************************************************************************************************************
  * Function:    DecodeHuffman

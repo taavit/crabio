@@ -3867,17 +3867,17 @@ bool Audio::parseHttpResponseHeader() { // this is the response to a GET / reque
 }
 //---------------------------------------------------------------------------------------------------------------------
 bool Audio:: initializeDecoder(){
-    switch(m_codec){
+    switch(this->m_codec){
         case CODEC_MP3:
             if(!MP3Decoder_AllocateBuffers()) goto exit;
             AUDIO_INFO("MP3Decoder has been initialized, free Heap: %u bytes", ESP.getFreeHeap());
-            InBuff.changeMaxBlockSize(m_frameSizeMP3);
+            InBuff.changeMaxBlockSize(this->m_frameSizeMP3);
             break;
         case CODEC_AAC:
             if(!AACDecoder_IsInit()){
                 if(!AACDecoder_AllocateBuffers()) goto exit;
                 AUDIO_INFO("AACDecoder has been initialized, free Heap: %u bytes", ESP.getFreeHeap());
-                InBuff.changeMaxBlockSize(m_frameSizeAAC);
+                InBuff.changeMaxBlockSize(this->m_frameSizeAAC);
             }
             break;
         case CODEC_M4A:
