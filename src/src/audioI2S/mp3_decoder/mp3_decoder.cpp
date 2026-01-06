@@ -1004,22 +1004,16 @@ int DecodeHuffman(
         bitsLeft -= bitsUsed;
     }
 
-    /* decode Huffman quads (if any) */
-    m_HuffmanInfo->nonZeroBound[ch] += DecodeHuffmanQuads(m_HuffmanInfo->huffDecBuf[ch] + rEnd[3],
-            m_MAX_NSAMP - rEnd[3], sis->count1TableSelect, bitsLeft, buf,
-            *bitOffset);
-
-    assert(m_HuffmanInfo->nonZeroBound[ch] <= m_MAX_NSAMP);
-    for (i = m_HuffmanInfo->nonZeroBound[ch]; i < m_MAX_NSAMP; i++)
-        m_HuffmanInfo->huffDecBuf[ch][i] = 0;
-
-    /* If bits used for 576 samples < huffBlockBits, then the extras are considered
-     *  to be stuffing bits (throw away, but need to return correct bitstream position)
-     */
-    buf += (bitsLeft + *bitOffset) >> 3;
-    *bitOffset = (bitsLeft + *bitOffset) & 0x07;
-
-    return (buf - startBuf);
+    return DecodeHuffmanH2(
+        m_HuffmanInfo,
+        ch,
+        buf,
+        startBuf,
+        &bitsLeft,
+        bitOffset,
+        &rEnd,
+        sis
+    );
 }
 
 /***********************************************************************************************************************

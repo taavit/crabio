@@ -318,8 +318,8 @@ struct DequantInfo {
 
 #[repr(C)]
 pub struct HuffmanInfo {
-    pub huff_dec_buf: [[i32; MAX_NCHAN]; MAX_NSAMP],       /* used both for decoded Huffman values and dequantized coefficients */
-    pub non_zero_bound: [i32; MAX_NCHAN],                /* number of coeffs in huffDecBuf[ch] which can be > 0 */
+    pub huffDecBuf: [[i32; MAX_NSAMP]; MAX_NCHAN],       /* used both for decoded Huffman values and dequantized coefficients */
+    pub nonZeroBound: [i32; MAX_NCHAN],                /* number of coeffs in huffDecBuf[ch] which can be > 0 */
     pub gb: [i32; MAX_NCHAN],                          /* minimum number of guard bits in huffDecBuf[ch] */
 }
 

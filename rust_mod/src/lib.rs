@@ -1665,8 +1665,47 @@ pub unsafe extern "C" fn DecodeHuffmanH1(
 
     
     /* rounds up to first all-zero pair (we don't check last pair for (x,y) == (non-zero, zero)) */
-    (*m_HuffmanInfo).non_zero_bound[ch as usize] = rEnd[3];
+    (*m_HuffmanInfo).nonZeroBound[ch as usize] = rEnd[3];
 
     /* decode Huffman pairs (rEnd[i] are always even numbers) */
     *bitsLeft = huffBlockBits;
+}
+
+#[unsafe(no_mangle)]
+pub unsafe fn DecodeHuffmanH2(
+    m_HuffmanInfo: *mut HuffmanInfo,
+    ch: i32,
+    mut buf: *mut u8,
+    startBuf: *const u8,
+    bitsLeft: *mut i32,
+    bitOffset: *mut i32,
+    rEnd: *mut i32,
+    sis: *mut SideInfoSub,              // SideInfoSub_t* sis (mut, bo odczytujemy pola)
+) -> i32 {
+    let m_HuffmanInfo =  &mut *m_HuffmanInfo;
+    let rEnd= unsafe { core::slice::from_raw_parts_mut(rEnd, 4) };
+    let sis = &*sis;                // &SideInfoSub
+        /* decode Huffman quads (if any) */
+    m_HuffmanInfo.nonZeroBound[ch as usize] += DecodeHuffmanQuads(
+        m_HuffmanInfo.huffDecBuf[ch as usize].as_mut_ptr().add(rEnd[3] as usize),
+        MAX_NSAMP as i32 - rEnd[3],
+        sis.count1TableSelect,
+        *bitsLeft,
+        buf,
+        *bitOffset
+    );
+
+    assert!(m_HuffmanInfo.nonZeroBound[ch as usize] <= MAX_NSAMP as i32);
+
+
+    for i in m_HuffmanInfo.nonZeroBound[ch as usize]..MAX_NSAMP as i32{
+        m_HuffmanInfo.huffDecBuf[ch as usize][i as usize] = 0;
+    }
+    /* If bits used for 576 samples < huffBlockBits, then the extras are considered
+     *  to be stuffing bits (throw away, but need to return correct bitstream position)
+     */
+    buf = buf.add((*bitsLeft + *bitOffset) as usize >> 3);
+    *bitOffset = (*bitsLeft + *bitOffset) & 0x07;
+
+    buf.offset_from(startBuf) as i32
 }

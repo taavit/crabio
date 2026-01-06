@@ -293,6 +293,17 @@ void DecodeHuffmanH1(
     int *bitsLeft
 );
 
+int DecodeHuffmanH2(
+    HuffmanInfo_t *m_HuffmanInfo,
+    int ch,
+    unsigned char *buf,
+    unsigned char *startBuf,
+    int *bitsLeft,
+    int *bitOffset,
+    int (*rEnd)[4],
+    SideInfoSub_t* sis
+);
+
 #ifdef __cplusplus
 }
 #endif
