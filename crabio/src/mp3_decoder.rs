@@ -312,8 +312,9 @@ struct CriticalBandInfo {
     cbEndL: i32,             /* number nonzero long cb's  */
 }
 
-struct DequantInfo {
-    work_buf: [i32; MAX_REORDER_SAMPS],             /* workbuf for reordering short blocks */
+#[repr(C)]
+pub struct DequantInfo {
+    pub work_buf: [i32; MAX_REORDER_SAMPS],             /* workbuf for reordering short blocks */
 }
 
 #[repr(C)]

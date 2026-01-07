@@ -24,10 +24,6 @@ enum {
     ERR_UNKNOWN =                  -9999
 };
 
-typedef struct DequantInfo {
-    int workBuf[m_MAX_REORDER_SAMPS];             /* workbuf for reordering short blocks */
-} DequantInfo_t;
-
 typedef enum HuffTabType {
     noBits,
     oneShot,
@@ -247,7 +243,19 @@ int DecodeHuffman(
     SideInfoSub_t (*m_SideInfoSub)[2][2],
     MPEGVersion_t *m_MPEGVersion
 );
-int MP3Dequantize( int gr);
+int MP3Dequantize(
+    int gr,
+    MP3DecInfo_t *m_MP3DecInfo,
+    HuffmanInfo_t *m_HuffmanInfo,
+    DequantInfo_t *m_DequantInfo,
+    SideInfoSub_t (*m_SideInfoSub)[m_MAX_NGRAN][m_MAX_NCHAN],
+    ScaleFactorInfoSub_t (*m_ScaleFactorInfoSub)[m_MAX_NCHAN][m_MAX_NGRAN],
+    CriticalBandInfo_t (*CriticalBandInfo)[m_MAX_NCHAN],
+    FrameHeader_t *m_FrameHeader,
+    SFBandTable_t *m_SFBandTable,
+    ScaleFactorJS_t *m_ScaleFactorJS,
+    int m_MPEGVersion
+);
 int UnpackScaleFactors(
     unsigned char *buf, int *bitOffset, int bitsAvail, int gr, int ch,
     SideInfoSub_t (*m_SideInfoSub)[2][2],

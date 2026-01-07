@@ -256,7 +256,19 @@ int MP3Decode( unsigned char *inbuf, size_t inbuf_len, int *bytesLeft, short *ou
             mainBits -= (8 * offset - prevBitOffset + bitOffset);
         }
         /* dequantize coefficients, decode stereo, reorder short blocks */
-        if (MP3Dequantize( gr) < 0) {
+        if (MP3Dequantize(
+            gr,
+            m_MP3DecInfo,
+            m_HuffmanInfo,
+            m_DequantInfo,
+            &m_SideInfoSub,
+            &m_ScaleFactorInfoSub,
+            &m_CriticalBandInfo,
+            m_FrameHeader,
+            &m_SFBandTable,
+            m_ScaleFactorJS,
+            m_MPEGVersion
+        ) < 0) {
             MP3ClearBadFrame(m_MP3DecInfo, outbuf);
             return ERR_MP3_INVALID_DEQUANTIZE;
         }
@@ -403,99 +415,3 @@ void MP3Decoder_FreeBuffers()
  * D E Q U A N T
  **********************************************************************************************************************/
 
-/***********************************************************************************************************************
- * Function:    MP3Dequantize
- *
- * Description: dequantize coefficients, decode stereo, reorder short blocks
- *                (one granule-worth)
- *
- * Inputs:      index of current granule
- *
- * Outputs:     dequantized and reordered coefficients in hi->huffDecBuf
- *                (one granule-worth, all channels), format = Q26
- *              operates in-place on huffDecBuf but also needs di->workBuf
- *              updated hi->nonZeroBound index for both channels
- *
- * Return:      0 on success, -1 if null input pointers
- *
- * Notes:       In calling output Q(DQ_FRACBITS_OUT), we assume an implicit bias
- *                of 2^15. Some (floating-point) reference implementations factor this
- *                into the 2^(0.25 * gain) scaling explicitly. But to avoid precision
- *                loss, we don't do that. Instead take it into account in the final
- *                round to PCM (>> by 15 less than we otherwise would have).
- *              Equivalently, we can think of the dequantized coefficients as
- *                Q(DQ_FRACBITS_OUT - 15) with no implicit bias.
- **********************************************************************************************************************/
-int MP3Dequantize(int gr){
-    int i, ch, nSamps, mOut[2];
-    CriticalBandInfo_t *cbi;
-    cbi = &m_CriticalBandInfo[0];
-    mOut[0] = mOut[1] = 0;
-
-    /* dequantize all the samples in each channel */
-    for (ch = 0; ch < m_MP3DecInfo->nChans; ch++) {
-        m_HuffmanInfo->gb[ch] = DequantChannel(m_HuffmanInfo->huffDecBuf[ch], m_DequantInfo->workBuf,
-                &m_HuffmanInfo->nonZeroBound[ch], &m_SideInfoSub[gr][ch], &m_ScaleFactorInfoSub[gr][ch], &cbi[ch],
-                m_FrameHeader,
-                &m_SFBandTable,
-                m_MPEGVersion
-            );
-    }
-
-    /* joint stereo processing assumes one guard bit in input samples
-     * it's extremely rare not to have at least one gb, so if this is the case
-     *   just make a pass over the data and clip to [-2^30+1, 2^30-1]
-     * in practice this may never happen
-     */
-    if (m_FrameHeader->modeExt && (m_HuffmanInfo->gb[0] < 1 || m_HuffmanInfo->gb[1] < 1)) {
-        for (i = 0; i < m_HuffmanInfo->nonZeroBound[0]; i++) {
-            if (m_HuffmanInfo->huffDecBuf[0][i] < -0x3fffffff)  m_HuffmanInfo->huffDecBuf[0][i] = -0x3fffffff;
-            if (m_HuffmanInfo->huffDecBuf[0][i] >  0x3fffffff)  m_HuffmanInfo->huffDecBuf[0][i] =  0x3fffffff;
-        }
-        for (i = 0; i < m_HuffmanInfo->nonZeroBound[1]; i++) {
-            if (m_HuffmanInfo->huffDecBuf[1][i] < -0x3fffffff)  m_HuffmanInfo->huffDecBuf[1][i] = -0x3fffffff;
-            if (m_HuffmanInfo->huffDecBuf[1][i] >  0x3fffffff)  m_HuffmanInfo->huffDecBuf[1][i] =  0x3fffffff;
-        }
-    }
-
-    /* do mid-side stereo processing, if enabled */
-    if (m_FrameHeader->modeExt >> 1) {
-        if (m_FrameHeader->modeExt & 0x01) {
-            /* intensity stereo enabled - run mid-side up to start of right zero region */
-            if (cbi[1].cbType == 0)
-                nSamps = m_SFBandTable.l[cbi[1].cbEndL + 1];
-            else
-                nSamps = 3 * m_SFBandTable.s[cbi[1].cbEndSMax + 1];
-        } else {
-            /* intensity stereo disabled - run mid-side on whole spectrum */
-            nSamps = (m_HuffmanInfo->nonZeroBound[0] > m_HuffmanInfo->nonZeroBound[1] ?
-                                                       m_HuffmanInfo->nonZeroBound[0] : m_HuffmanInfo->nonZeroBound[1]);
-        }
-        MidSideProc(m_HuffmanInfo->huffDecBuf, nSamps, mOut);
-    }
-
-    /* do intensity stereo processing, if enabled */
-    if (m_FrameHeader->modeExt & 0x01) {
-        nSamps = m_HuffmanInfo->nonZeroBound[0];
-        if (m_MPEGVersion == MPEG1) {
-            IntensityProcMPEG1(m_HuffmanInfo->huffDecBuf, nSamps, &m_ScaleFactorInfoSub[gr][1], &m_CriticalBandInfo[0],
-                    m_FrameHeader->modeExt >> 1, m_SideInfoSub[gr][1].mixedBlock, mOut);
-        } else {
-            IntensityProcMPEG2(m_HuffmanInfo->huffDecBuf, nSamps, &m_ScaleFactorInfoSub[gr][1], &m_CriticalBandInfo[0],
-                    m_ScaleFactorJS, m_FrameHeader->modeExt >> 1, m_SideInfoSub[gr][1].mixedBlock, mOut);
-        }
-    }
-
-    /* adjust guard bit count and nonZeroBound if we did any stereo processing */
-    if (m_FrameHeader->modeExt) {
-        m_HuffmanInfo->gb[0] = CLZ(mOut[0]) - 1;
-        m_HuffmanInfo->gb[1] = CLZ(mOut[1]) - 1;
-        nSamps = (m_HuffmanInfo->nonZeroBound[0] > m_HuffmanInfo->nonZeroBound[1] ?
-                                                       m_HuffmanInfo->nonZeroBound[0] : m_HuffmanInfo->nonZeroBound[1]);
-        m_HuffmanInfo->nonZeroBound[0] = nSamps;
-        m_HuffmanInfo->nonZeroBound[1] = nSamps;
-    }
-
-    /* output format Q(DQ_FRACBITS_OUT) */
-    return 0;
-}

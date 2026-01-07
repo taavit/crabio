@@ -3,7 +3,7 @@
 use core::{panic::PanicInfo, ptr::null};
 
 use crabio::mp3_decoder::{
-    BLOCK_SIZE, BitStreamInfo, FrameHeader, HUFF_PAIRTABS, HuffTabLookup, HuffTabType, HuffmanInfo, IMDCT_SCALE, IMDCTInfo, MAX_NCHAN, MAX_NGRAN, MAX_NSAMP, MAX_SCFBD, MP3DecInfo, MPEGVersion, NBANDS, POLY_COEF, SFBandTable, SIBYTES_MPEG1_MONO, SIBYTES_MPEG1_STEREO, SIBYTES_MPEG2_MONO, SIBYTES_MPEG2_STEREO, SQRTHALF, ScaleFactorInfoSub, ScaleFactorJS, SideInfoSub, StereoMode, SubbandInfo, VBUF_LENGTH, clip_2n, clip_to_short, fdct_32, freq_invert_rescale, get_bits, idct_9, imdct_12, madd_64, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, polyphase_mono, polyphase_stereo, refill_bitstream_cache, sar_64, unpack_frame_header, win_previous
+    BLOCK_SIZE, BitStreamInfo, DequantInfo, FrameHeader, HUFF_PAIRTABS, HuffTabLookup, HuffTabType, HuffmanInfo, IMDCT_SCALE, IMDCTInfo, MAX_NCHAN, MAX_NGRAN, MAX_NSAMP, MAX_SCFBD, MP3DecInfo, MPEGVersion, NBANDS, POLY_COEF, SFBandTable, SIBYTES_MPEG1_MONO, SIBYTES_MPEG1_STEREO, SIBYTES_MPEG2_MONO, SIBYTES_MPEG2_STEREO, SQRTHALF, ScaleFactorInfoSub, ScaleFactorJS, SideInfoSub, StereoMode, SubbandInfo, VBUF_LENGTH, clip_2n, clip_to_short, fdct_32, freq_invert_rescale, get_bits, idct_9, imdct_12, madd_64, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, polyphase_mono, polyphase_stereo, refill_bitstream_cache, sar_64, unpack_frame_header, win_previous
 };
 
 #[repr(C)]
@@ -3026,4 +3026,114 @@ pub unsafe fn Subband(
     }
 
     return 0;
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn MP3Dequantize(
+    gr: i32,
+    dec_info: *mut MP3DecInfo,
+    huff_info: *mut HuffmanInfo,
+    dequant_info: *mut DequantInfo,
+    side_info_sub: *mut [[SideInfoSub; MAX_NCHAN]; MAX_NGRAN],
+    sf_info_sub: *mut [[ScaleFactorInfoSub; MAX_NCHAN]; MAX_NGRAN],
+    crit_band_info: *mut [CriticalBandInfo; MAX_NCHAN],
+    frame_header: *mut FrameHeader,
+    sf_band_table: *const SFBandTable,
+    sf_js: *mut ScaleFactorJS,
+    mpeg_version: i32,
+) -> i32 {
+    let di = &mut *dec_info;
+    let hi = &mut *huff_info;
+    let dqi = &mut *dequant_info;
+    let fh = &mut *frame_header;
+    let sfbt = &*sf_band_table;
+    let cbi = &mut *crit_band_info;
+
+    let mut m_out = [0i32; 2];
+    let gr_idx = gr as usize;
+
+    // 1. Dekwantyzacja każdego kanału
+    for ch in 0..di.nChans as usize {
+        hi.gb[ch] = DequantChannel(
+            hi.huffDecBuf[ch].as_mut_ptr(),
+            dqi.work_buf.as_mut_ptr(),
+            &mut hi.nonZeroBound[ch],
+            &mut (*side_info_sub)[gr_idx][ch],
+            &mut (*sf_info_sub)[gr_idx][ch],
+            &mut cbi[ch],
+            fh,
+            sfbt,
+            mpeg_version,
+        );
+    }
+
+    // 2. Obsługa rzadkich przypadków braku bitów strażniczych (clipping)
+    if fh.modeExt != 0 && (hi.gb[0] < 1 || hi.gb[1] < 1) {
+        for ch in 0..2 {
+            for i in 0..hi.nonZeroBound[ch] as usize {
+                if hi.huffDecBuf[ch][i] < -0x3fffffff { hi.huffDecBuf[ch][i] = -0x3fffffff; }
+                if hi.huffDecBuf[ch][i] > 0x3fffffff { hi.huffDecBuf[ch][i] = 0x3fffffff; }
+            }
+        }
+    }
+
+    // 3. Proces Mid-Side Stereo
+    if (fh.modeExt >> 1) != 0 {
+        let n_samps: i32;
+        if (fh.modeExt & 0x01) != 0 {
+            /* Intensity stereo włączone - Mid-Side tylko do początku regionu zero prawego kanału */
+            if cbi[1].cbType == 0 {
+                n_samps = sfbt.l[cbi[1].cbEndL as usize + 1];
+            } else {
+                n_samps = 3 * sfbt.s[cbi[1].cbEndSMax as usize + 1];
+            }
+        } else {
+            /* Intensity stereo wyłączone - Mid-Side na całym widmie */
+            n_samps = hi.nonZeroBound[0].max(hi.nonZeroBound[1]);
+        }
+        MidSideProc(hi.huffDecBuf.as_mut_ptr(), n_samps, m_out.as_mut_ptr());
+    }
+
+    // 4. Proces Intensity Stereo
+    if (fh.modeExt & 0x01) != 0 {
+        let n_samps = hi.nonZeroBound[0];
+        if mpeg_version == 0 { // MPEG1
+            IntensityProcMPEG1(
+                hi.huffDecBuf.as_mut_ptr(),
+                n_samps,
+                &mut (*sf_info_sub)[gr_idx][1],
+                cbi.as_mut_ptr(),
+                fh.modeExt >> 1,
+                (*side_info_sub)[gr_idx][1].mixedBlock,
+                m_out.as_mut_ptr(),
+                sfbt,
+            );
+        } else { // MPEG2
+            IntensityProcMPEG2(
+                hi.huffDecBuf.as_mut_ptr(),
+                n_samps,
+                &mut (*sf_info_sub)[gr_idx][1],
+                cbi.as_mut_ptr(),
+                sf_js,
+                fh.modeExt >> 1,
+                (*side_info_sub)[gr_idx][1].mixedBlock,
+                m_out.as_mut_ptr(),
+                sfbt
+            );
+        }
+    }
+
+    // 5. Aktualizacja Guard Bits i NonZeroBound po procesach stereo
+    if fh.modeExt != 0 {
+        // CLZ (Count Leading Zeros) - w Rust używamy leading_zeros()
+        // Pamiętaj o obsłudze abs() dla m_out
+        hi.gb[0] = (m_out[0].abs().leading_zeros() as i32) - 1;
+        hi.gb[1] = (m_out[1].abs().leading_zeros() as i32) - 1;
+
+        let max_n_samps = hi.nonZeroBound[0].max(hi.nonZeroBound[1]);
+        hi.nonZeroBound[0] = max_n_samps;
+        hi.nonZeroBound[1] = max_n_samps;
+    }
+
+    0
 }
