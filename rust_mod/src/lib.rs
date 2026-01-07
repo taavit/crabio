@@ -2600,3 +2600,275 @@ pub unsafe extern "C" fn DequantChannel(
 
     (gb_mask.leading_zeros() as i32) - 1
 }
+
+const ISFMpeg1: [[i32; 7]; 2] = [
+    [0x00000000, 0x0d8658ba, 0x176cf5d0, 0x20000000, 0x28930a2f, 0x3279a745, 0x40000000],
+    [0x00000000, 0x13207f5c, 0x2120fb83, 0x2d413ccc, 0x39617e16, 0x4761fa3d, 0x5a827999]
+];
+
+const ISFMpeg2: [[[i32; 16]; 2]; 2] = [
+[   [   /* intensityScale off, mid-side off */
+        0x40000000, 0x35d13f32, 0x2d413ccc, 0x260dfc14, 0x1fffffff, 0x1ae89f99, 0x16a09e66, 0x1306fe0a,
+        0x0fffffff, 0x0d744fcc, 0x0b504f33, 0x09837f05, 0x07ffffff, 0x06ba27e6, 0x05a82799, 0x04c1bf82 ],
+    [   /* intensityScale off, mid-side on */
+        0x5a827999, 0x4c1bf827, 0x3fffffff, 0x35d13f32, 0x2d413ccc, 0x260dfc13, 0x1fffffff, 0x1ae89f99,
+        0x16a09e66, 0x1306fe09, 0x0fffffff, 0x0d744fcc, 0x0b504f33, 0x09837f04, 0x07ffffff, 0x06ba27e6 ],  ],
+[   [   /* intensityScale on, mid-side off */
+        0x40000000, 0x2d413ccc, 0x20000000, 0x16a09e66, 0x10000000, 0x0b504f33, 0x08000000, 0x05a82799,
+        0x04000000, 0x02d413cc, 0x02000000, 0x016a09e6, 0x01000000, 0x00b504f3, 0x00800000, 0x005a8279 ],
+    [   /* intensityScale on, mid-side on */
+        0x5a827999, 0x3fffffff, 0x2d413ccc, 0x1fffffff, 0x16a09e66, 0x0fffffff, 0x0b504f33, 0x07ffffff,
+        0x05a82799, 0x03ffffff, 0x02d413cc, 0x01ffffff, 0x016a09e6, 0x00ffffff, 0x00b504f3, 0x007fffff ]   ]
+];
+/* indexing = [intensity scale on/off][left/right]
+ * format = Q30, range = [0.0, 1.414]
+ *
+ * illegal intensity position scalefactors (see comments on ISFMpeg1)
+ */
+
+ const ISFIIP: [[i32; 2]; 2] = [
+    [0x40000000, 0x00000000], /* mid-side off */
+    [0x40000000, 0x40000000], /* mid-side on */
+ ];
+
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn IntensityProcMPEG1(
+    x: *mut [i32; 576], // x[2][576]
+    n_samps: i32,
+    sfis: *const ScaleFactorInfoSub,
+    cbi: *const CriticalBandInfo,
+    mid_side_flag: i32,
+    _mix_flag: i32,
+    m_out: *mut i32, // mOut[2]
+    sfbt: *const SFBandTable,
+) {
+    let cbi = core::slice::from_raw_parts(cbi, 2);
+    let sfbt = &*sfbt;
+    let sfis = &*sfis;
+    let mut i: usize = 0;
+    let (cb_start_l, cb_end_l, cb_start_s, cb_end_s);
+
+    if cbi[1].cbType == 0 {
+        cb_start_l = (cbi[1].cbEndL + 1) as usize;
+        cb_end_l = (cbi[0].cbEndL + 1) as usize;
+        cb_start_s = 0;
+        cb_end_s = 0;
+        i = sfbt.l[cb_start_l] as usize;
+    } else {
+        cb_start_s = (cbi[1].cbEndSMax + 1) as usize;
+        cb_end_s = (cbi[0].cbEndSMax + 1) as usize;
+        cb_start_l = 0;
+        cb_end_l = 0;
+        i = (3 * sfbt.s[cb_start_s]) as usize;
+    }
+
+    let mut samps_left = n_samps - i as i32;
+    let isf_tab = ISFMpeg1[mid_side_flag as usize];
+    let mut m_out_l = 0;
+    let mut m_out_r = 0;
+
+    let x_left = &mut *x.add(0);
+    let x_right = &mut *x.add(1);
+
+    // Bloki długie
+    for cb in cb_start_l..cb_end_l {
+        if samps_left <= 0 { break; }
+        let isf = sfis.l[cb] as usize;
+        let (fl, fr) = if isf == 7 {
+            (ISFIIP[mid_side_flag as usize][0], ISFIIP[mid_side_flag as usize][1])
+        } else {
+            (isf_tab[isf], isf_tab[6] - isf_tab[isf])
+        };
+
+        let n = (sfbt.l[cb + 1] - sfbt.l[cb]) as usize;
+        for _ in 0..n {
+            if samps_left <= 0 { break; }
+            let common = x_left[i];
+            
+            let xr = MULSHIFT32(fr, common) << 2;
+            x_right[i] = xr;
+            m_out_r |= xr.abs();
+
+            let xl = MULSHIFT32(fl, common) << 2;
+            x_left[i] = xl;
+            m_out_l |= xl.abs();
+
+            i += 1;
+            samps_left -= 1;
+        }
+    }
+
+    // Bloki krótkie (uproszczona logika i += 3)
+    for cb in cb_start_s..cb_end_s {
+        if samps_left < 3 { break; }
+        let mut fls = [0; 3];
+        let mut frs = [0; 3];
+        for w in 0..3 {
+            let isf = sfis.s[cb][w] as usize;
+            if isf == 7 {
+                fls[w] = ISFIIP[mid_side_flag as usize][0];
+                frs[w] = ISFIIP[mid_side_flag as usize][1];
+            } else {
+                fls[w] = isf_tab[isf];
+                frs[w] = isf_tab[6] - isf_tab[isf];
+            }
+        }
+
+        let n = (sfbt.s[cb + 1] - sfbt.s[cb]) as usize;
+        for _ in 0..n {
+            if samps_left < 3 { break; }
+            for w in 0..3 {
+                let common = x_left[i + w];
+                let xr = MULSHIFT32(frs[w], common) << 2;
+                x_right[i + w] = xr;
+                m_out_r |= xr.abs();
+                let xl = MULSHIFT32(fls[w], common) << 2;
+                x_left[i + w] = xl;
+                m_out_l |= xl.abs();
+            }
+            i += 3;
+            samps_left -= 3;
+        }
+    }
+
+    *m_out.add(0) = m_out_l;
+    *m_out.add(1) = m_out_r;
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn IntensityProcMPEG2(
+    x: *mut [i32; 576],      // x[2][576]
+    n_samps: i32,
+    sfis: *const ScaleFactorInfoSub,
+    cbi: *const CriticalBandInfo,
+    sfjs: *const ScaleFactorJS,
+    mid_side_flag: i32,
+    _mix_flag: i32,
+    m_out: *mut i32,         // mOut[2]
+    sfbt: *const SFBandTable,
+) {
+    let sfis = &*sfis;
+    let cbi = core::slice::from_raw_parts(cbi, 2);
+    let sfjs = &*sfjs;
+    let sfbt = &*sfbt;
+
+    let mut m_out_l = 0i32;
+    let mut m_out_r = 0i32;
+    let mut il = [0i32; 23];
+
+    // Pobranie odpowiedniej tabeli współczynników dla MPEG2
+    // ISFMpeg2[intensityScale][midSideFlag]
+    let isf_tab = ISFMpeg2[sfjs.intensity_scale as usize][mid_side_flag as usize];
+    // let isf_tab = core::slice::from_raw_parts(isf_tab_ptr, 16);
+
+    // 1. Wypełnienie bufora il (illegal intensity positions)
+    let mut k = 0;
+    for r in 0..4 {
+        let tmp = (1 << sfjs.slen[r as usize]) - 1;
+        for _ in 0..sfjs.nr[r as usize] {
+            if k < 23 {
+                il[k] = tmp;
+                k += 1;
+            }
+        }
+    }
+
+    let x_left = &mut *x.add(0);
+    let x_right = &mut *x.add(1);
+
+    if cbi[1].cbType == 0 {
+        /* BLOKI DŁUGIE */
+        il[21] = 1;
+        il[22] = 1;
+        let cb_start_l = (cbi[1].cbEndL + 1) as usize;
+        let cb_end_l = (cbi[0].cbEndL + 1) as usize;
+        let mut i = sfbt.l[cb_start_l] as usize;
+        let mut samps_left = n_samps - i as i32;
+
+        for cb in cb_start_l..cb_end_l {
+            if samps_left <= 0 { break; }
+
+            let sf_idx = sfis.l[cb] as i32;
+            let (fl, fr);
+
+            if sf_idx == il[cb] {
+                fl = ISFIIP[mid_side_flag as usize][0];
+                fr = ISFIIP[mid_side_flag as usize][1];
+            } else {
+                let isf = ((sf_idx + 1) >> 1) as usize;
+                if sf_idx & 0x01 != 0 {
+                    fl = isf_tab[isf];
+                    fr = isf_tab[0];
+                } else {
+                    fl = isf_tab[0];
+                    fr = isf_tab[isf];
+                }
+            }
+
+            let band_len = (sfbt.l[cb + 1] - sfbt.l[cb]) as i32;
+            let n = if band_len < samps_left { band_len } else { samps_left };
+
+            for _ in 0..n {
+                let common = x_left[i];
+                let xr = MULSHIFT32(fr, common) << 2;
+                let xl = MULSHIFT32(fl, common) << 2;
+
+                x_right[i] = xr;
+                x_left[i] = xl;
+                
+                m_out_r |= xr.abs();
+                m_out_l |= xl.abs();
+                i += 1;
+            }
+            samps_left -= n;
+        }
+    } else {
+        /* BLOKI KRÓTKIE LUB MIESZANE */
+        il[12] = 1;
+
+        for w in 0..3 {
+            let cb_start_s = (cbi[1].cbEndS[w] + 1) as usize;
+            let cb_end_s = (cbi[0].cbEndS[w] + 1) as usize;
+            let mut i = (3 * sfbt.s[cb_start_s] + w as i32) as usize;
+
+            for cb in cb_start_s..cb_end_s {
+                let sf_idx = sfis.s[cb][w] as i32;
+                let (fl, fr);
+
+                if sf_idx == il[cb] {
+                    fl = ISFIIP[mid_side_flag as usize][0];
+                    fr = ISFIIP[mid_side_flag as usize][1];
+                } else {
+                    let isf = ((sf_idx + 1) >> 1) as usize;
+                    if sf_idx & 0x01 != 0 {
+                        fl = isf_tab[isf];
+                        fr = isf_tab[0];
+                    } else {
+                        fl = isf_tab[0];
+                        fr = isf_tab[isf];
+                    }
+                }
+
+                let n = (sfbt.s[cb + 1] - sfbt.s[cb]) as usize;
+                for _ in 0..n {
+                    if i < 576 {
+                        let common = x_left[i];
+                        let xr = MULSHIFT32(fr, common) << 2;
+                        let xl = MULSHIFT32(fl, common) << 2;
+
+                        x_right[i] = xr;
+                        x_left[i] = xl;
+
+                        m_out_r |= xr.abs();
+                        m_out_l |= xl.abs();
+                        i += 3;
+                    }
+                }
+            }
+        }
+    }
+
+    *m_out.add(0) = m_out_l;
+    *m_out.add(1) = m_out_r;
+}

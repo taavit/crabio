@@ -171,15 +171,6 @@ const int quadTabMaxBits[2] PROGMEM = {6, 4};
 /* layers 1, 2, 3 */
 const short bitsPerSlotTab[3] = { 32, 8, 8 };
 
-/* indexing = [intensity scale on/off][left/right]
- * format = Q30, range = [0.0, 1.414]
- *
- * illegal intensity position scalefactors (see comments on ISFMpeg1)
- */
-const int ISFIIP[2][2] PROGMEM = {
-    {0x40000000, 0x00000000}, /* mid-side off */
-    {0x40000000, 0x40000000}, /* mid-side on */
-};
 
 const unsigned char uniqueIDTab[8] = {0x5f, 0x4b, 0x43, 0x5f, 0x5f, 0x4a, 0x52, 0x5f};
 
