@@ -114,31 +114,6 @@ const char NRTab[6][3][4] = {
 /* optional pre-emphasis for high-frequency scale factor bands */
 const char preTab[22] = { 0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,2,2,3,3,3,2,0 };
 
-/* pow(2,-i/4) for i=0..3, Q31 format */
-const int pow14[4] PROGMEM = {
-    0x7fffffff, 0x6ba27e65, 0x5a82799a, 0x4c1bf829
-};
-
-
-/*
- * Minimax polynomial approximation to pow(x, 4/3), over the range
- *  poly43lo: x = [0.5, 0.7071]
- *  poly43hi: x = [0.7071, 1.0]
- *
- * Relative error < 1E-7
- * Coefs are scaled by 4, 2, 1, 0.5, 0.25
- */
-const unsigned int poly43lo[5] PROGMEM = { 0x29a0bda9, 0xb02e4828, 0x5957aa1b, 0x236c498d, 0xff581859 };
-const unsigned int poly43hi[5] PROGMEM = { 0x10852163, 0xd333f6a4, 0x46e9408b, 0x27c2cef0, 0xfef577b4 };
-
-/* pow(2, i*4/3) as exp and frac */
-const int pow2exp[8] PROGMEM = { 14, 13, 11, 10, 9, 7, 6, 5 };
-
-const int pow2frac[8] PROGMEM = {
-    0x6597fa94, 0x50a28be6, 0x7fffffff, 0x6597fa94,
-    0x50a28be6, 0x7fffffff, 0x6597fa94, 0x50a28be6
-};
-
 const uint16_t m_HUFF_OFFSET_01=  0;
 const uint16_t m_HUFF_OFFSET_02=  9 + m_HUFF_OFFSET_01;
 const uint16_t m_HUFF_OFFSET_03= 65 + m_HUFF_OFFSET_02;

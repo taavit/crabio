@@ -322,6 +322,8 @@ int IMDCT( int gr, int ch,
         IMDCTInfo_t *m_IMDCTInfo
     );
 
+int DequantBlock(int *inbuf, int *outbuf, int num, int scale);
+
 #ifdef __cplusplus
 }
 #endif

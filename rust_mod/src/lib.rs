@@ -3,7 +3,7 @@
 use core::panic::PanicInfo;
 
 use crabio::mp3_decoder::{
-    BitStreamInfo, FrameHeader, HUFF_PAIRTABS, HuffTabLookup, HuffTabType, HuffmanInfo, IMDCTInfo, MAX_NCHAN, MAX_NGRAN, MAX_NSAMP, MAX_SCFBD, MP3DecInfo, MPEGVersion, NBANDS, POLY_COEF, SFBandTable, SIBYTES_MPEG1_MONO, SIBYTES_MPEG1_STEREO, SIBYTES_MPEG2_MONO, SIBYTES_MPEG2_STEREO, ScaleFactorInfoSub, ScaleFactorJS, SideInfoSub, StereoMode, VBUF_LENGTH, clip_2n, clip_to_short, fdct_32, freq_invert_rescale, get_bits, idct_9, imdct_12, madd_64, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, polyphase_mono, polyphase_stereo, refill_bitstream_cache, sar_64, unpack_frame_header, win_previous
+    BitStreamInfo, FrameHeader, HUFF_PAIRTABS, HuffTabLookup, HuffTabType, HuffmanInfo, IMDCTInfo, MAX_NCHAN, MAX_NGRAN, MAX_NSAMP, MAX_SCFBD, MP3DecInfo, MPEGVersion, NBANDS, POLY_COEF, SFBandTable, SIBYTES_MPEG1_MONO, SIBYTES_MPEG1_STEREO, SIBYTES_MPEG2_MONO, SIBYTES_MPEG2_STEREO, SQRTHALF, ScaleFactorInfoSub, ScaleFactorJS, SideInfoSub, StereoMode, VBUF_LENGTH, clip_2n, clip_to_short, fdct_32, freq_invert_rescale, get_bits, idct_9, imdct_12, madd_64, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, polyphase_mono, polyphase_stereo, refill_bitstream_cache, sar_64, unpack_frame_header, win_previous
 };
 
 #[repr(C)]
@@ -2295,4 +2295,163 @@ pub unsafe extern "C" fn IMDCT(
     // im.gb[ch as usize] = bc.gbOut;
 
     0
+}
+
+/* pow(2,-i/4) * pow(j,4/3) for i=0..3 j=0..15, Q25 format */
+const pow43_14: [[i32; 16]; 4] = [ /* Q28 */
+[   0x00000000, 0x10000000, 0x285145f3, 0x453a5cdb, 0x0cb2ff53, 0x111989d6,
+    0x15ce31c8, 0x1ac7f203, 0x20000000, 0x257106b9, 0x2b16b4a3, 0x30ed74b4,
+    0x36f23fa5, 0x3d227bd3, 0x437be656, 0x49fc823c, ],
+
+[   0x00000000, 0x0d744fcd, 0x21e71f26, 0x3a36abd9, 0x0aadc084, 0x0e610e6e,
+    0x12560c1d, 0x168523cf, 0x1ae89f99, 0x1f7c03a4, 0x243bae49, 0x29249c67,
+    0x2e34420f, 0x33686f85, 0x38bf3dff, 0x3e370182, ],
+
+[   0x00000000, 0x0b504f33, 0x1c823e07, 0x30f39a55, 0x08facd62, 0x0c176319,
+    0x0f6b3522, 0x12efe2ad, 0x16a09e66, 0x1a79a317, 0x1e77e301, 0x2298d5b4,
+    0x26da56fc, 0x2b3a902a, 0x2fb7e7e7, 0x3450f650, ],
+
+[   0x00000000, 0x09837f05, 0x17f910d7, 0x2929c7a9, 0x078d0dfa, 0x0a2ae661,
+    0x0cf73154, 0x0fec91cb, 0x1306fe0a, 0x16434a6c, 0x199ee595, 0x1d17ae3d,
+    0x20abd76a, 0x2459d551, 0x28204fbb, 0x2bfe1808, ],
+];
+
+/* pow(2,-i/4) for i=0..3, Q31 format */
+const pow14: [i32; 4] = [
+    0x7fffffff, 0x6ba27e65, 0x5a82799a, 0x4c1bf829
+];
+
+/* pow(j,4/3) for j=16..63, Q23 format */
+const pow43: [i32; 48] = [
+    0x1428a2fa, 0x15db1bd6, 0x1796302c, 0x19598d85, 0x1b24e8bb, 0x1cf7fcfa,
+    0x1ed28af2, 0x20b4582a, 0x229d2e6e, 0x248cdb55, 0x26832fda, 0x28800000,
+    0x2a832287, 0x2c8c70a8, 0x2e9bc5d8, 0x30b0ff99, 0x32cbfd4a, 0x34eca001,
+    0x3712ca62, 0x393e6088, 0x3b6f47e0, 0x3da56717, 0x3fe0a5fc, 0x4220ed72,
+    0x44662758, 0x46b03e7c, 0x48ff1e87, 0x4b52b3f3, 0x4daaebfd, 0x5007b497,
+    0x5268fc62, 0x54ceb29c, 0x5738c721, 0x59a72a59, 0x5c19cd35, 0x5e90a129,
+    0x610b9821, 0x638aa47f, 0x660db90f, 0x6894c90b, 0x6b1fc80c, 0x6daeaa0d,
+    0x70416360, 0x72d7e8b0, 0x75722ef9, 0x78102b85, 0x7ab1d3ec, 0x7d571e09,
+];
+
+/*
+ * Minimax polynomial approximation to pow(x, 4/3), over the range
+ *  poly43lo: x = [0.5, 0.7071]
+ *  poly43hi: x = [0.7071, 1.0]
+ *
+ * Relative error < 1E-7
+ * Coefs are scaled by 4, 2, 1, 0.5, 0.25
+ */
+const poly43lo: [u32; 5] = [ 0x29a0bda9, 0xb02e4828, 0x5957aa1b, 0x236c498d, 0xff581859 ];
+const poly43hi: [u32; 5] = [ 0x10852163, 0xd333f6a4, 0x46e9408b, 0x27c2cef0, 0xfef577b4 ];
+
+/* pow(2, i*4/3) as exp and frac */
+const pow2exp: [i32; 8] = [ 14, 13, 11, 10, 9, 7, 6, 5 ];
+
+const pow2frac: [i32; 8] = [
+    0x6597fa94, 0x50a28be6, 0x7fffffff, 0x6597fa94,
+    0x50a28be6, 0x7fffffff, 0x6597fa94, 0x50a28be6
+];
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn DequantBlock(
+    mut in_buf: *const i32,
+    mut out_buf: *mut i32,
+    num: i32,
+    scale: i32,
+) -> i32 {
+    if num <= 0 || in_buf.is_null() || out_buf.is_null() {
+        return 0;
+    }
+
+    let mut tab4 = [0i32; 4];
+    let mut mask = 0i32;
+
+    // Pobranie tablicy dla skali ułamkowej
+    let tab16 = &pow43_14[(scale & 0x3) as usize];
+    let scalef = pow14[(scale & 0x3) as usize];
+    
+    // scalei = min(scale >> 2, 31)
+    let mut scalei = scale >> 2;
+    if scalei > 31 { scalei = 31; }
+
+    /* Cache first 4 values */
+    let mut shift_init = scalei + 3;
+    if shift_init > 31 { shift_init = 31; }
+    if shift_init < 0 { shift_init = 0; }
+
+    tab4[0] = 0;
+    tab4[1] = tab16[1] >> shift_init;
+    tab4[2] = tab16[2] >> shift_init;
+    tab4[3] = tab16[3] >> shift_init;
+
+    // Przetwarzamy num próbek
+    for _ in 0..num {
+        let sx = *in_buf;
+        in_buf = in_buf.add(1);
+        
+        let x = (sx & 0x7fffffff) as u32; // x = magnitude
+        let mut y: i32;
+        let mut shift: i32;
+
+        if x < 4 {
+            y = tab4[x as usize];
+        } else if x < 16 {
+            y = tab16[x as usize];
+            if scalei < 0 {
+                y <<= -scalei;
+            } else {
+                y >>= scalei;
+            }
+        } else {
+            if x < 64 {
+                y = pow43[(x - 16) as usize];
+                y = MULSHIFT32(y, scalef);
+                shift = scalei - 3;
+            } else {
+                /* Normalizacja do [0x40000000, 0x7fffffff] */
+                let mut x_norm = x << 17;
+                shift = 0;
+                if x_norm < 0x08000000 { x_norm <<= 4; shift += 4; }
+                if x_norm < 0x20000000 { x_norm <<= 2; shift += 2; }
+                if x_norm < 0x40000000 { x_norm <<= 1; shift += 1; }
+
+                let coef = if x_norm < SQRTHALF { &poly43lo } else { &poly43hi };
+
+                /* Aproksymacja wielomianowa */
+                let x_i = x_norm as i32;
+                y = coef[0] as i32;
+                y = MULSHIFT32(y, x_norm as i32) + (coef[1] as i32);
+                y = MULSHIFT32(y, x_norm as i32) + (coef[2] as i32);
+                y = MULSHIFT32(y, x_norm as i32) + (coef[3] as i32);
+                y = MULSHIFT32(y, x_norm as i32) + (coef[4] as i32);
+                
+                // y = (y * pow2frac[shift]) << 3
+                y = MULSHIFT32(y, pow2frac[shift as usize]) << 3;
+
+                /* Skala ułamkowa */
+                y = MULSHIFT32(y, scalef);
+                shift = scalei - pow2exp[shift as usize];
+            }
+
+            /* Skala całkowita z clippingiem */
+            if shift < 0 {
+                shift = -shift;
+                if y > (0x7fffffff >> shift) {
+                    y = 0x7fffffff;
+                } else {
+                    y <<= shift;
+                }
+            } else {
+                y >>= shift;
+            }
+        }
+
+        /* Przywrócenie znaku i zapis */
+        mask |= y;
+        let final_y = if sx < 0 { -y } else { y };
+        *out_buf = final_y;
+        out_buf = out_buf.add(1);
+    }
+
+    mask
 }
