@@ -1932,3 +1932,77 @@ pub unsafe fn IMDCT36(mut xCurr: *mut i32, mut xPrev: *mut i32, y: *mut i32, btC
 
     mOut
 }
+
+/***********************************************************************************************************************
+ * Function:    AntiAlias
+ *
+ * Description: smooth transition across DCT block boundaries (every 18 coefficients)
+ *
+ * Inputs:      vector of dequantized coefficients, length = (nBfly+1) * 18
+ *              number of "butterflies" to perform (one butterfly means one
+ *                inter-block smoothing operation)
+ *
+ * Outputs:     updated coefficient vector x
+ *
+ * Return:      none
+ *
+ * Notes:       weighted average of opposite bands (pairwise) from the 8 samples
+ *                before and after each block boundary
+ *              nBlocks = (nonZeroBound + 7) / 18, since nZB is the first ZERO sample
+ *                above which all other samples are also zero
+ *              max gain per sample = 1.372
+ *                MAX(i) (abs(csa[i][0]) + abs(csa[i][1]))
+ *              bits gained = 0
+ *              assume at least 1 guard bit in x[] to avoid overflow
+ *                (should be guaranteed from dequant, and max gain from stproc * max
+ *                 gain from AntiAlias < 2.0)
+ **********************************************************************************************************************/
+// a little bit faster in RAM (< 1 ms per block)
+/* __attribute__ ((section (".data"))) */
+const CSA: [[u32; 2];8 ] = [
+    [0x6dc253f0, 0xbe2500aa],
+    [0x70dcebe4, 0xc39e4949],
+    [0x798d6e73, 0xd7e33f4a],
+    [0x7ddd40a7, 0xe8b71176],
+    [0x7f6d20b7, 0xf3e4fe2f],
+    [0x7fe47e40, 0xfac1a3c7],
+    [0x7ffcb263, 0xfe2ebdc6],
+    [0x7fffc694, 0xff86c25d],
+];
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn AntiAlias(x: *mut i32, n_bfly: i32) {
+    if n_bfly <= 0 || x.is_null() {
+        return;
+    }
+
+    // Tworzymy slice (bezpieczny widok na pamięć C++)
+    let total_len = (n_bfly as usize * 18) + 8;
+    let samples = core::slice::from_raw_parts_mut(x, total_len);
+
+    for k in 1..=(n_bfly as usize) {
+        let center = k * 18;
+
+        // Iterujemy bezpośrednio po parach współczynników w CSA
+        // enumerate() daje nam indeks 'i', którego używamy do sięgania w głąb bloku audio
+        for (i, &[c0, c1]) in CSA.iter().enumerate() {
+            
+            // Wyliczamy indeksy próbek wokół granicy (center)
+            let idx_a = center - (i + 1);
+            let idx_b = center + i;
+
+            // Pobieramy próbki - używamy get_unchecked dla maksymalnej wydajności 
+            // (wiemy, że indeksy są poprawne dzięki total_len) lub zwykłego indeksowania
+            let a0 = samples[idx_a];
+            let b0 = samples[idx_b];
+
+            // Obliczenia (Q31 butterfly)
+            let tmp1 = MULSHIFT32(a0, c0 as i32) - MULSHIFT32(b0, c1 as i32);
+            let tmp2 = MULSHIFT32(b0, c0 as i32) + MULSHIFT32(a0, c1 as i32);
+
+            // Zapis z powrotem
+            samples[idx_a] = tmp1 << 1;
+            samples[idx_b] = tmp2 << 1;
+        }
+    }
+}
