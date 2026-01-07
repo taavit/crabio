@@ -7,6 +7,19 @@ use crabio::mp3_decoder::{
 };
 
 #[repr(C)]
+pub struct BlockCount {
+    nBlocksLong: i32,
+    nBlocksTotal: i32,
+    nBlocksPrev: i32,
+    prevType: i32,
+    prevWinSwitch: i32,
+    currWinSwitch: i32,
+    gbIn: i32,
+    gbOut: i32,
+}
+
+
+#[repr(C)]
 pub struct BitStreamInfoC {
     pub byte_ptr: *const u8, // unsigned char *bytePtr;
     pub i_cache: u32,        // unsigned int iCache;
@@ -1784,7 +1797,7 @@ const fastWin36: [u32; 18] = [
         0x4c913b51, 0xd8243ea0, 0x4d413ccc, 0xe0000000, 0x4c913b51, 0xe7dbc161,
         0x4a868feb, 0xef7a6275, 0x47311c28, 0xf6a09e67, 0x42aace8b, 0xfd16d8dd
 ];
-const imdctWin: [[u32; 36];4 ] = [
+pub const imdctWin: [[u32; 36];4 ] = [
     [
     0x02aace8b, 0x07311c28, 0x0a868fec, 0x0c913b52, 0x0d413ccd, 0x0c913b52, 0x0a868fec, 0x07311c28,
     0x02aace8b, 0xfd16d8dd, 0xf6a09e66, 0xef7a6275, 0xe7dbc161, 0xe0000000, 0xd8243e9f, 0xd0859d8b,
@@ -2005,4 +2018,201 @@ pub unsafe extern "C" fn AntiAlias(x: *mut i32, n_bfly: i32) {
             samples[idx_b] = tmp2 << 1;
         }
     }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn HybridTransform(
+    mut x_curr: *mut i32,
+    mut x_prev: *mut i32,
+    y: *mut i32, // Tablica y[18][32] przekazana jako wskaźnik
+    sis: *const SideInfoSub,
+    bc: *mut BlockCount,
+) -> i32 {
+    let mut x_prev_win = [0i32; 18];
+    let mut m_out = 0i32;
+    let mut n_blocks_out = 0i32;
+
+    let sis = &*sis;
+    let bc = &mut *bc;
+
+    let mut i = 0;
+
+    // 1. Bloky długie (Long Blocks)
+    while i < bc.nBlocksLong {
+        let mut curr_win_idx = sis.blockType;
+        if sis.mixedBlock != 0 && i < bc.currWinSwitch {
+            curr_win_idx = 0;
+        }
+
+        let mut prev_win_idx = bc.prevType;
+        if i < bc.prevWinSwitch {
+            prev_win_idx = 0;
+        }
+
+        // Adresowanie y[0][i] w tablicy y[18][32] to po prostu y + i
+        // ponieważ y[row][col] = y[row * 32 + col]
+        m_out |= IMDCT36(x_curr, x_prev, y.add(i as usize), curr_win_idx, prev_win_idx, i, bc.gbIn);
+        
+        x_curr = x_curr.add(18);
+        x_prev = x_prev.add(9);
+        i += 1;
+    }
+
+    // 2. Bloki krótkie (Short Blocks)
+    while i < bc.nBlocksTotal {
+        let mut prev_win_idx = bc.prevType;
+        if i < bc.prevWinSwitch {
+            prev_win_idx = 0;
+        }
+
+        m_out |= IMDCT12x3(x_curr, x_prev, y.add(i as usize), prev_win_idx, i, bc.gbIn);
+        
+        x_curr = x_curr.add(18);
+        x_prev = x_prev.add(9);
+        i += 1;
+    }
+    n_blocks_out = i;
+
+    // 3. Okienkowanie i Overlap dla pozostałych bloków poprzednich
+    while i < bc.nBlocksPrev {
+        let mut prev_win_idx = bc.prevType;
+        if i < bc.prevWinSwitch {
+            prev_win_idx = 0;
+        }
+        
+        WinPrevious(x_prev, x_prev_win.as_mut_ptr(), prev_win_idx);
+
+        let mut non_zero = 0i32;
+        let fi_bit = (i as i32) << 31;
+        
+        for j in 0..9 {
+            // Próbki parzyste (2*j)
+            let mut xp = x_prev_win[2 * j] << 2;
+            non_zero |= xp;
+            *y.add((2 * j) * 32 + i as usize) = xp;
+            m_out |= xp.abs();
+
+            // Próbki nieparzyste (2*j + 1) + Inwersja Częstotliwości
+            // Logika: (xp ^ -1) + 1 to zmiana znaku (2's complement)
+            xp = x_prev_win[2 * j + 1] << 2;
+            let mask = fi_bit >> 31; // Arytmetyczne przesunięcie: i odd -> 0xFFFFFFFF, i even -> 0
+            xp = (xp ^ mask).wrapping_add(i & 0x01);
+            
+            non_zero |= xp;
+            *y.add((2 * j + 1) * 32 + i as usize) = xp;
+            m_out |= xp.abs();
+
+            *x_prev.add(j) = 0;
+        }
+        
+        x_prev = x_prev.add(9);
+        if non_zero != 0 {
+            n_blocks_out = i;
+        }
+        i += 1;
+    }
+
+    // 4. Czyszczenie pozostałych bloków (do 32 pasm)
+    while i < 32 {
+        for j in 0..18 {
+            *y.add(j * 32 + i as usize) = 0;
+        }
+        i += 1;
+    }
+
+    // Obliczanie Guard Bits dla wyjścia (CLZ - Count Leading Zeros)
+    // m_out.leading_zeros() zwraca u32, musimy rzutować
+    bc.gbOut = (m_out.leading_zeros() as i32) - 1;
+
+    n_blocks_out
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn IMDCT12x3(
+    x_curr: *mut i32,
+    x_prev: *mut i32,
+    y: *mut i32,
+    bt_prev: i32,
+    block_idx: i32,
+    gb: i32,
+) -> i32 {
+    let mut x_buf = [0i32; 18];
+    let mut x_prev_win = [0i32; 18];
+    let mut es = 0;
+    let n_bands = 32; // m_NBANDS
+
+    // 1. Skalowanie (Guard Bits)
+    // Jeśli mamy za mało bitów strażniczych, przesuwamy dane w prawo
+    if gb < 7 {
+        es = 7 - gb;
+        for i in 0..9 {
+            // x_curr jest interleafed (3 bloki po 6 próbek)
+            *x_curr.offset(i * 2) >>= es;
+            *x_curr.offset(i * 2 + 1) >>= es;
+            *x_prev.offset(i) >>= es;
+        }
+    }
+
+    // 2. Trzy transformaty IMDCT 12-punktowe
+    // Dane wejściowe są przeplatane: b0[0], b1[0], b2[0], b0[1]...
+    imdct12(x_curr, x_buf.as_mut_ptr());             // Block 0
+    imdct12(x_curr.offset(1), x_buf.as_mut_ptr().add(6));  // Block 1
+    imdct12(x_curr.offset(2), x_buf.as_mut_ptr().add(12)); // Block 2
+
+    // 3. Okienkowanie poprzedniego bloku (Overlap z poprzedniej ramki)
+    WinPrevious(x_prev, x_prev_win.as_mut_ptr(), bt_prev);
+
+    // Pobranie wskaźnika do okna krótkiego (index 2)
+    let wp = imdctWin[2];
+    let mut m_out = 0i32;
+
+    // 4. Nakładanie i dodawanie (Overlap-Add) dla krótkich bloków
+    for i in 0..3 {
+        let mut y_lo: i32;
+
+        // Pierwsze 6 próbek pochodzi tylko z poprzedniego okna (xPrevWin)
+        y_lo = x_prev_win[i] << 2;
+        m_out |= y_lo.abs();
+        *y.add(i * n_bands) = y_lo;
+
+        y_lo = x_prev_win[3 + i] << 2;
+        m_out |= y_lo.abs();
+        *y.add((3 + i) * n_bands) = y_lo;
+
+        // Kolejne próbki to suma poprzedniego okna i nowych danych (xBuf) z oknem wp
+        y_lo = (x_prev_win[6 + i] << 2) + MULSHIFT32(wp[i] as i32, x_buf[3 + i]);
+        m_out |= y_lo.abs();
+        *y.add((6 + i) * n_bands) = y_lo;
+
+        y_lo = (x_prev_win[9 + i] << 2) + MULSHIFT32(wp[3 + i] as i32, x_buf[5 - i]);
+        m_out |= y_lo.abs();
+        *y.add((9 + i) * n_bands) = y_lo;
+
+        // Składanie na stykach bloków wewnętrznych (short block concatenation)
+        y_lo = (x_prev_win[12 + i] << 2) 
+               + MULSHIFT32(wp[6 + i] as i32, x_buf[2 - i]) 
+               + MULSHIFT32(wp[i] as i32, x_buf[9 + i]);
+        m_out |= y_lo.abs();
+        *y.add((12 + i) * n_bands) = y_lo;
+
+        y_lo = (x_prev_win[15 + i] << 2) 
+               + MULSHIFT32(wp[9 + i] as i32, x_buf[i]) 
+               + MULSHIFT32(wp[3 + i] as i32, x_buf[11 - i]);
+        m_out |= y_lo.abs();
+        *y.add((15 + i) * n_bands) = y_lo;
+    }
+
+    // 5. Zapisanie części do overlapu na następną ramkę (tylko 9 próbek)
+    // Wykorzystujemy symetrię IMDCT
+    for i in 0..3 {
+        *x_prev.offset(i as isize) = x_buf[6 + i] >> 2;
+    }
+    for i in 0..6 {
+        *x_prev.offset((3 + i) as isize) = x_buf[12 + i] >> 2;
+    }
+
+    // 6. Korekta końcowa: inwersja i skalowanie
+    m_out |= FreqInvertRescale(y, x_prev, block_idx, es);
+
+    m_out
 }

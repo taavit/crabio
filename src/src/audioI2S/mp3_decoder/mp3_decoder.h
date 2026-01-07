@@ -59,17 +59,6 @@ typedef struct IMDCTInfo {
     int gb[m_MAX_NCHAN];
 } IMDCTInfo_t;
 
-typedef struct BlockCount {
-    int nBlocksLong;
-    int nBlocksTotal;
-    int nBlocksPrev;
-    int prevType;
-    int prevWinSwitch;
-    int currWinSwitch;
-    int gbIn;
-    int gbOut;
-} BlockCount_t;
-
 /* NOTE - could get by with smaller vbuf if memory is more important than speed
  *  (in Subband, instead of replicating each block in FDCT32 you would do a memmove on the
  *   last 15 blocks to shift them down one, a hardware style FIFO)

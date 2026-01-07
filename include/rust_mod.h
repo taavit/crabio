@@ -15,6 +15,17 @@ static const uint8_t  m_MAX_NGRAN              =2;     // max granules
 static const uint8_t  m_MAX_NCHAN              =2;     // max channels
 static const uint16_t m_MAX_NSAMP              =576;   // max samples per channel, per granule
 
+typedef struct BlockCount {
+    int nBlocksLong;
+    int nBlocksTotal;
+    int nBlocksPrev;
+    int prevType;
+    int prevWinSwitch;
+    int currWinSwitch;
+    int gbIn;
+    int gbOut;
+} BlockCount_t;
+
 typedef struct HuffmanInfo {
     int huffDecBuf[m_MAX_NCHAN][m_MAX_NSAMP];       /* used both for decoded Huffman values and dequantized coefficients */
     int nonZeroBound[m_MAX_NCHAN];                /* number of coeffs in huffDecBuf[ch] which can be > 0 */
@@ -292,6 +303,7 @@ int DecodeHuffman(
     SideInfoSub_t (*m_SideInfoSub)[2][2],
     MPEGVersion_t *m_MPEGVersion
 );
+int HybridTransform(int *xCurr, int *xPrev, int y[m_BLOCK_SIZE][m_NBANDS], SideInfoSub_t *sis, BlockCount_t *bc);
 
 #ifdef __cplusplus
 }
