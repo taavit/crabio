@@ -3,7 +3,7 @@
 use core::panic::PanicInfo;
 
 use crabio::mp3_decoder::{
-    BitStreamInfo, FrameHeader, HUFF_PAIRTABS, HuffTabLookup, HuffTabType, HuffmanInfo, MAX_NCHAN, MAX_NGRAN, MAX_NSAMP, MAX_SCFBD, MP3DecInfo, MPEGVersion, NBANDS, POLY_COEF, SFBandTable, SIBYTES_MPEG1_MONO, SIBYTES_MPEG1_STEREO, SIBYTES_MPEG2_MONO, SIBYTES_MPEG2_STEREO, ScaleFactorInfoSub, ScaleFactorJS, SideInfoSub, StereoMode, VBUF_LENGTH, clip_2n, clip_to_short, fdct_32, freq_invert_rescale, get_bits, idct_9, imdct_12, madd_64, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, polyphase_mono, polyphase_stereo, refill_bitstream_cache, sar_64, unpack_frame_header, win_previous
+    BitStreamInfo, FrameHeader, HUFF_PAIRTABS, HuffTabLookup, HuffTabType, HuffmanInfo, IMDCTInfo, MAX_NCHAN, MAX_NGRAN, MAX_NSAMP, MAX_SCFBD, MP3DecInfo, MPEGVersion, NBANDS, POLY_COEF, SFBandTable, SIBYTES_MPEG1_MONO, SIBYTES_MPEG1_STEREO, SIBYTES_MPEG2_MONO, SIBYTES_MPEG2_STEREO, ScaleFactorInfoSub, ScaleFactorJS, SideInfoSub, StereoMode, VBUF_LENGTH, clip_2n, clip_to_short, fdct_32, freq_invert_rescale, get_bits, idct_9, imdct_12, madd_64, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, polyphase_mono, polyphase_stereo, refill_bitstream_cache, sar_64, unpack_frame_header, win_previous
 };
 
 #[repr(C)]
@@ -2215,4 +2215,84 @@ pub unsafe extern "C" fn IMDCT12x3(
     m_out |= FreqInvertRescale(y, x_prev, block_idx, es);
 
     m_out
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn IMDCT(
+    gr: i32,
+    ch: i32,
+    m_SFBandTable: *const SFBandTable,
+    m_MPEGVersion: i32,
+    m_SideInfoSub: *const [[SideInfoSub; 2]; 2],
+    m_HuffmanInfo: *mut HuffmanInfo,
+    m_IMDCTInfo: *mut IMDCTInfo,
+) -> i32 {
+    if m_HuffmanInfo.is_null() || m_IMDCTInfo.is_null() || m_SFBandTable.is_null() {
+        return -1;
+    }
+
+    let mut bc = BlockCount {
+        nBlocksLong: 0, nBlocksTotal: 0, nBlocksPrev: 0,
+        prevType: 0, prevWinSwitch: 0, currWinSwitch: 0,
+        gbIn: 0, gbOut: 0,
+    };
+    
+    let n_bfly: i32;
+    let sis = &(*m_SideInfoSub)[gr as usize][ch as usize];
+    let hi = &mut *m_HuffmanInfo;
+    let im = &mut *m_IMDCTInfo;
+    let sfb = &*m_SFBandTable;
+
+    // blockCutoff logic
+    // MPEG1 = 0, inne = MPEG2/2.5
+    let cutoff_idx = if m_MPEGVersion == 0 { 8 } else { 6 };
+    let block_cutoff = (sfb.l[cutoff_idx] as i32) / 18;
+
+    if sis.blockType != 2 {
+        /* all long transforms */
+        let x = (hi.nonZeroBound[ch as usize] + 7) / 18 + 1;
+        bc.nBlocksLong = if x < 32 { x } else { 32 };
+        n_bfly = bc.nBlocksLong - 1;
+    } else if sis.blockType == 2 && sis.mixedBlock != 0 {
+        /* mixed block */
+        bc.nBlocksLong = block_cutoff;
+        n_bfly = bc.nBlocksLong - 1;
+    } else {
+        /* all short transforms */
+        bc.nBlocksLong = 0;
+        n_bfly = 0;
+    }
+
+    // Wywołanie AntiAlias na buforze konkretnego kanału
+    // huffDecBuf[ch] to tablica 576 intów
+    AntiAlias(hi.huffDecBuf[ch as usize].as_mut_ptr(), n_bfly);
+
+    // Aktualizacja nonZeroBound
+    let x_nz = hi.nonZeroBound[ch as usize];
+    let y_nz = n_bfly * 18 + 8;
+    hi.nonZeroBound[ch as usize] = if x_nz > y_nz { x_nz } else { y_nz };
+
+    // bc setup
+    bc.nBlocksTotal = (hi.nonZeroBound[ch as usize] + 17) / 18;
+    bc.nBlocksPrev = im.numPrevIMDCT[ch as usize];
+    bc.prevType = im.prevType[ch as usize];
+    bc.prevWinSwitch = im.prevWinSwitch[ch as usize];
+    bc.currWinSwitch = if sis.mixedBlock != 0 { block_cutoff } else { 0 };
+    // Założenie: HuffmanInfo ma pole gb (guard bits)
+    // bc.gbIn = hi.gb[ch as usize]; 
+
+    // Wywołanie HybridTransform
+    im.numPrevIMDCT[ch as usize] = HybridTransform(
+        hi.huffDecBuf[ch as usize].as_mut_ptr(),
+        im.overBuf[ch as usize].as_mut_ptr(),
+        im.outBuf[ch as usize].as_mut_ptr() as *mut i32,
+        sis,
+        &mut bc as *mut BlockCount,
+    );
+
+    im.prevType[ch as usize] = sis.blockType;
+    im.prevWinSwitch[ch as usize] = bc.currWinSwitch;
+    // im.gb[ch as usize] = bc.gbOut;
+
+    0
 }

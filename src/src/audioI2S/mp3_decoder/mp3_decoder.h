@@ -50,15 +50,6 @@ typedef struct HuffTabLookup {
     int  tabType; /*HuffTabType*/
 } HuffTabLookup_t;
 
-typedef struct IMDCTInfo {
-    int outBuf[m_MAX_NCHAN][m_BLOCK_SIZE][m_NBANDS];  /* output of IMDCT */
-    int overBuf[m_MAX_NCHAN][m_MAX_NSAMP / 2];      /* overlap-add buffer (by symmetry, only need 1/2 size) */
-    int numPrevIMDCT[m_MAX_NCHAN];                /* how many IMDCT's calculated in this channel on prev. granule */
-    int prevType[m_MAX_NCHAN];
-    int prevWinSwitch[m_MAX_NCHAN];
-    int gb[m_MAX_NCHAN];
-} IMDCTInfo_t;
-
 /* NOTE - could get by with smaller vbuf if memory is more important than speed
  *  (in Subband, instead of replicating each block in FDCT32 you would do a memmove on the
  *   last 15 blocks to shift them down one, a hardware style FIFO)
@@ -310,7 +301,6 @@ int DecodeHuffman(
     MPEGVersion_t *m_MPEGVersion
 );
 int MP3Dequantize( int gr);
-int IMDCT( int gr, int ch);
 int UnpackScaleFactors( unsigned char *buf, int *bitOffset, int bitsAvail, int gr, int ch);
 int Subband(short *pcmBuf);
 short ClipToShort(int x, int fracBits);

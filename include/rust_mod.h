@@ -15,6 +15,16 @@ static const uint8_t  m_MAX_NGRAN              =2;     // max granules
 static const uint8_t  m_MAX_NCHAN              =2;     // max channels
 static const uint16_t m_MAX_NSAMP              =576;   // max samples per channel, per granule
 
+typedef struct IMDCTInfo {
+    int outBuf[m_MAX_NCHAN][m_BLOCK_SIZE][m_NBANDS];  /* output of IMDCT */
+    int overBuf[m_MAX_NCHAN][m_MAX_NSAMP / 2];      /* overlap-add buffer (by symmetry, only need 1/2 size) */
+    int numPrevIMDCT[m_MAX_NCHAN];                /* how many IMDCT's calculated in this channel on prev. granule */
+    int prevType[m_MAX_NCHAN];
+    int prevWinSwitch[m_MAX_NCHAN];
+    int gb[m_MAX_NCHAN];
+} IMDCTInfo_t;
+
+
 typedef struct BlockCount {
     int nBlocksLong;
     int nBlocksTotal;
@@ -304,6 +314,13 @@ int DecodeHuffman(
     MPEGVersion_t *m_MPEGVersion
 );
 int HybridTransform(int *xCurr, int *xPrev, int y[m_BLOCK_SIZE][m_NBANDS], SideInfoSub_t *sis, BlockCount_t *bc);
+int IMDCT( int gr, int ch,
+        SFBandTable_t *m_SFBandTable,
+        int m_MPEGVersion,
+        SideInfoSub_t (*m_SideInfoSub)[2][2],
+        HuffmanInfo_t *m_HuffmanInfo,
+        IMDCTInfo_t *m_IMDCTInfo
+    );
 
 #ifdef __cplusplus
 }

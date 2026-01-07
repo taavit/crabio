@@ -341,13 +341,14 @@ pub struct HuffTabLookup {
     pub tab_type: i32, /*HuffTabType*/
 }
 
-struct IMDCTInfo {
-    out_buf: [[[i32; MAX_NCHAN]; BLOCK_SIZE]; NBANDS],  /* output of IMDCT */
-    over_buf: [[i32; MAX_NCHAN]; MAX_NSAMP / 2],      /* overlap-add buffer (by symmetry, only need 1/2 size) */
-    num_prev_imdct: [i32; MAX_NCHAN],                /* how many IMDCT's calculated in this channel on prev. granule */
-    prev_type: [i32; MAX_NCHAN],
-    prev_win_switch: [i32; MAX_NCHAN],
-    gb: [i32; MAX_NCHAN],
+#[repr(C)]
+pub struct IMDCTInfo {
+    pub outBuf: [[[i32; NBANDS]; BLOCK_SIZE]; MAX_NCHAN],  /* output of IMDCT */
+    pub overBuf: [[i32; MAX_NSAMP / 2]; MAX_NCHAN],      /* overlap-add buffer (by symmetry, only need 1/2 size) */
+    pub numPrevIMDCT: [i32; MAX_NCHAN],                /* how many IMDCT's calculated in this channel on prev. granule */
+    pub prevType: [i32; MAX_NCHAN],
+    pub prevWinSwitch: [i32; MAX_NCHAN],
+    pub gb: [i32; MAX_NCHAN],
 }
 
 #[repr(C)]
