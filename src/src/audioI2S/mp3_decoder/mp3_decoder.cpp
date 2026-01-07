@@ -61,41 +61,7 @@ const int coef32[31] PROGMEM = {
  * M P 3 D E C
  **********************************************************************************************************************/
 
-/***********************************************************************************************************************
- * Function:    MP3GetLastFrameInfo
- *
- * Description: get info about last MP3 frame decoded (number of sampled decoded,
- *                sample rate, bitrate, etc.)
- *
- * Inputs:
- *
- * Outputs:     filled-in MP3FrameInfo struct
- *
- * Return:      none
- *
- * Notes:       call this right after calling MP3Decode
- **********************************************************************************************************************/
-void MP3GetLastFrameInfo() {
-    if (m_MP3DecInfo->layer != 3){
-        m_MP3FrameInfo->bitrate=0;
-        m_MP3FrameInfo->nChans=0;
-        m_MP3FrameInfo->samprate=0;
-        m_MP3FrameInfo->bitsPerSample=0;
-        m_MP3FrameInfo->outputSamps=0;
-        m_MP3FrameInfo->layer=0;
-        m_MP3FrameInfo->version=0;
-    }
-    else{
-        m_MP3FrameInfo->bitrate=m_MP3DecInfo->bitrate;
-        m_MP3FrameInfo->nChans=m_MP3DecInfo->nChans;
-        m_MP3FrameInfo->samprate=m_MP3DecInfo->samprate;
-        m_MP3FrameInfo->bitsPerSample=16;
-        m_MP3FrameInfo->outputSamps=m_MP3DecInfo->nChans
-                * (int) samplesPerFrameTab[m_MPEGVersion][m_MP3DecInfo->layer-1];
-        m_MP3FrameInfo->layer=m_MP3DecInfo->layer;
-        m_MP3FrameInfo->version=m_MPEGVersion;
-    }
-}
+
 int MP3GetSampRate(){return m_MP3FrameInfo->samprate;}
 int MP3GetChannels(){return m_MP3FrameInfo->nChans;}
 int MP3GetBitsPerSample(){return m_MP3FrameInfo->bitsPerSample;}
@@ -294,7 +260,11 @@ int MP3Decode( unsigned char *inbuf, size_t inbuf_len, int *bytesLeft, short *ou
             return ERR_MP3_INVALID_SUBBAND;
         }
     }
-    MP3GetLastFrameInfo();
+    MP3GetLastFrameInfo(
+        m_MP3DecInfo,
+        m_MP3FrameInfo,
+        m_MPEGVersion
+    );
     return ERR_MP3_NONE;
 }
 

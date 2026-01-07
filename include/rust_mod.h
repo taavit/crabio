@@ -390,6 +390,12 @@ int MP3Dequantize(
     ScaleFactorJS_t *m_ScaleFactorJS,
     int m_MPEGVersion
 );
+
+void MP3GetLastFrameInfo(
+    MP3DecInfo *m_MP3DecInfo,
+    MP3FrameInfo *m_MP3FrameInfo,
+    int m_MPEGVersion
+);
 #ifdef __cplusplus
 }
 #endif

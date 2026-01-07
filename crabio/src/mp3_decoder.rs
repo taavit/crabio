@@ -1229,7 +1229,7 @@ const sfBandTable: [[SFBandTable; 3]; 3] = [
 /* indexing = [version][layer]
  * number of samples in one frame (per channel)
  */
-const samplesPerFrameTab: [[i32; 3]; 3] = [
+pub const samplesPerFrameTab: [[i32; 3]; 3] = [
     [ 384, 1152, 1152 ], /* MPEG1 */
     [ 384, 1152, 576 ], /* MPEG2 */
     [ 384, 1152, 576 ], /* MPEG2.5 */
@@ -1246,13 +1246,13 @@ pub enum MPEGVersion {          /* map to 0,1,2 to make table indexing easier */
 
 #[repr(C)]
 pub struct MP3FrameInfo {
-    bitrate: i32,
-    nChans: i32,
-    samprate: i32,
-    bitsPerSample: i32,
-    outputSamps: i32,
-    layer: i32,
-    version: i32,
+    pub bitrate: i32,
+    pub nChans: i32,
+    pub samprate: i32,
+    pub bitsPerSample: i32,
+    pub outputSamps: i32,
+    pub layer: i32,
+    pub version: i32,
 }
 
 #[repr(C)]
