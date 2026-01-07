@@ -43,14 +43,6 @@ typedef struct HuffTabLookup {
     int  tabType; /*HuffTabType*/
 } HuffTabLookup_t;
 
-/* NOTE - could get by with smaller vbuf if memory is more important than speed
- *  (in Subband, instead of replicating each block in FDCT32 you would do a memmove on the
- *   last 15 blocks to shift them down one, a hardware style FIFO)
- */
-typedef struct SubbandInfo {
-    int vbuf[m_MAX_NCHAN * m_VBUF_LENGTH];      /* vbuf for fast DCT-based synthesis PQMF - double size for speed (no modulo indexing) */
-    int vindex;                             /* internal index for tracking position in vbuf */
-} SubbandInfo_t;
 
 
 /* format = Q31
@@ -266,7 +258,11 @@ int UnpackScaleFactors(
     ScaleFactorJS_t *m_ScaleFactorJS,
     int m_MPEGVersion
 );
-int Subband(short *pcmBuf);
+int Subband(short *pcmBuf, 
+    MP3DecInfo_t *m_MP3DecInfo,
+    IMDCTInfo_t *m_IMDCTInfo,
+    SubbandInfo_t *m_SubbandInfo
+);
 short ClipToShort(int x, int fracBits);
 void RefillBitstreamCache(BitStreamInfo_t *bsi);
 void UnpackSFMPEG1(BitStreamInfo_t *bsi, SideInfoSub_t *sis, ScaleFactorInfoSub_t *sfis, int *scfsi, int gr, ScaleFactorInfoSub_t *sfisGr0);

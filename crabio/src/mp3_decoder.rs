@@ -380,9 +380,10 @@ pub struct ScaleFactorJS { /* used in MPEG 2, 2.5 intensity (joint) stereo only 
  *  (in Subband, instead of replicating each block in FDCT32 you would do a memmove on the
  *   last 15 blocks to shift them down one, a hardware style FIFO)
  */
-struct SubbandInfo {
-    vbuf: [i32; MAX_NCHAN * VBUF_LENGTH],      /* vbuf for fast DCT-based synthesis PQMF - double size for speed (no modulo indexing) */
-    vindex: i32,                             /* internal index for tracking position in vbuf */
+#[repr(C)]
+pub struct SubbandInfo {
+    pub vbuf: [i32; MAX_NCHAN * VBUF_LENGTH],      /* vbuf for fast DCT-based synthesis PQMF - double size for speed (no modulo indexing) */
+    pub vindex: i32,                             /* internal index for tracking position in vbuf */
 }
 
 pub fn get_bits(bsi: &mut BitStreamInfo<'_>, mut n_bits: u32) -> u32 {

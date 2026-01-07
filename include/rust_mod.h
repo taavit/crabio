@@ -15,6 +15,16 @@ static const uint8_t  m_MAX_NGRAN              =2;     // max granules
 static const uint8_t  m_MAX_NCHAN              =2;     // max channels
 static const uint16_t m_MAX_NSAMP              =576;   // max samples per channel, per granule
 
+/* NOTE - could get by with smaller vbuf if memory is more important than speed
+ *  (in Subband, instead of replicating each block in FDCT32 you would do a memmove on the
+ *   last 15 blocks to shift them down one, a hardware style FIFO)
+ */
+typedef struct SubbandInfo {
+    int vbuf[m_MAX_NCHAN * m_VBUF_LENGTH];      /* vbuf for fast DCT-based synthesis PQMF - double size for speed (no modulo indexing) */
+    int vindex;                             /* internal index for tracking position in vbuf */
+} SubbandInfo_t;
+
+
 typedef struct {
     int cbType;             /* pure long = 0, pure short = 1, mixed = 2 */
     int cbEndS[3];          /* number nonzero short cb's, per subbblock */
@@ -354,6 +364,12 @@ int UnpackScaleFactors(
     FrameHeader_t *m_FrameHeader,
     ScaleFactorJS_t *m_ScaleFactorJS,
     int m_MPEGVersion
+);
+
+int Subband(short *pcmBuf, 
+    MP3DecInfo_t *m_MP3DecInfo,
+    IMDCTInfo_t *m_IMDCTInfo,
+    SubbandInfo_t *m_SubbandInfo
 );
 #ifdef __cplusplus
 }

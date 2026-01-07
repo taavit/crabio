@@ -3,7 +3,7 @@
 use core::{panic::PanicInfo, ptr::null};
 
 use crabio::mp3_decoder::{
-    BitStreamInfo, FrameHeader, HUFF_PAIRTABS, HuffTabLookup, HuffTabType, HuffmanInfo, IMDCT_SCALE, IMDCTInfo, MAX_NCHAN, MAX_NGRAN, MAX_NSAMP, MAX_SCFBD, MP3DecInfo, MPEGVersion, NBANDS, POLY_COEF, SFBandTable, SIBYTES_MPEG1_MONO, SIBYTES_MPEG1_STEREO, SIBYTES_MPEG2_MONO, SIBYTES_MPEG2_STEREO, SQRTHALF, ScaleFactorInfoSub, ScaleFactorJS, SideInfoSub, StereoMode, VBUF_LENGTH, clip_2n, clip_to_short, fdct_32, freq_invert_rescale, get_bits, idct_9, imdct_12, madd_64, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, polyphase_mono, polyphase_stereo, refill_bitstream_cache, sar_64, unpack_frame_header, win_previous
+    BLOCK_SIZE, BitStreamInfo, FrameHeader, HUFF_PAIRTABS, HuffTabLookup, HuffTabType, HuffmanInfo, IMDCT_SCALE, IMDCTInfo, MAX_NCHAN, MAX_NGRAN, MAX_NSAMP, MAX_SCFBD, MP3DecInfo, MPEGVersion, NBANDS, POLY_COEF, SFBandTable, SIBYTES_MPEG1_MONO, SIBYTES_MPEG1_STEREO, SIBYTES_MPEG2_MONO, SIBYTES_MPEG2_STEREO, SQRTHALF, ScaleFactorInfoSub, ScaleFactorJS, SideInfoSub, StereoMode, SubbandInfo, VBUF_LENGTH, clip_2n, clip_to_short, fdct_32, freq_invert_rescale, get_bits, idct_9, imdct_12, madd_64, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, polyphase_mono, polyphase_stereo, refill_bitstream_cache, sar_64, unpack_frame_header, win_previous
 };
 
 #[repr(C)]
@@ -2973,4 +2973,57 @@ pub unsafe extern "C" fn MidSideProc(
     *bitOffset = (bitsUsed + *bitOffset) & 0x07;
 
     buf.offset_from(startBuf) as i32
+}
+
+
+/***********************************************************************************************************************
+ * Function:    Subband
+ *
+ * Description: do subband transform on all the blocks in one granule, all channels
+ *
+ * Inputs:      filled MP3DecInfo structure, after calling IMDCT for all channels
+ *              vbuf[ch] and vindex[ch] must be preserved between calls
+ *
+ * Outputs:     decoded PCM data, interleaved LRLRLR... if stereo
+ *
+ * Return:      0 on success,  -1 if null input pointers
+ **********************************************************************************************************************/
+ 
+#[unsafe(no_mangle)]
+pub unsafe fn Subband(
+    mut pcmBuf: *mut i16,
+    m_MP3DecInfo: *mut MP3DecInfo,
+    m_IMDCTInfo: *mut IMDCTInfo,
+    m_SubbandInfo: *mut SubbandInfo,
+) -> i32 {
+    let m_MP3DecInfo = &mut *m_MP3DecInfo;
+    let m_IMDCTInfo = &mut *m_IMDCTInfo;
+    let m_SubbandInfo = &mut *m_SubbandInfo;
+    if (m_MP3DecInfo.nChans == 2) {
+        /* stereo */
+        for b in 0..BLOCK_SIZE {
+            FDCT32(m_IMDCTInfo.outBuf[0][b].as_mut_ptr(), m_SubbandInfo.vbuf.as_mut_ptr(), m_SubbandInfo.vindex,
+                    (b as i32 & 0x01), m_IMDCTInfo.gb[0]);
+            FDCT32(m_IMDCTInfo.outBuf[1][b].as_mut_ptr(), m_SubbandInfo.vbuf.as_mut_ptr().add( 1 * 32), m_SubbandInfo.vindex,
+                    (b as i32 & 0x01), m_IMDCTInfo.gb[1]);
+            PolyphaseStereo(pcmBuf,
+                    m_SubbandInfo.vbuf.as_mut_ptr().add( m_SubbandInfo.vindex as usize + VBUF_LENGTH * (b as i32 & 0x01) as usize),
+                    POLY_COEF.as_ptr());
+            m_SubbandInfo.vindex = (m_SubbandInfo.vindex - (b as i32 & 0x01)) & 7;
+            pcmBuf = pcmBuf.add(2 * NBANDS);
+        }
+    } else {
+        /* mono */
+        for b in 0..BLOCK_SIZE {
+            FDCT32(m_IMDCTInfo.outBuf[0][b].as_mut_ptr(), m_SubbandInfo.vbuf.as_mut_ptr(), m_SubbandInfo.vindex,
+                    (b as i32 & 0x01), m_IMDCTInfo.gb[0]);
+            PolyphaseMono(pcmBuf,
+                    m_SubbandInfo.vbuf.as_mut_ptr().add( m_SubbandInfo.vindex as usize + VBUF_LENGTH * (b & 0x01)),
+                    POLY_COEF.as_ptr());
+            m_SubbandInfo.vindex = (m_SubbandInfo.vindex - (b as i32 & 0x01)) & 7;
+            pcmBuf = pcmBuf.add(NBANDS as usize);
+        }
+    }
+
+    return 0;
 }
