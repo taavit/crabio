@@ -15,6 +15,13 @@ static const uint8_t  m_MAX_NGRAN              =2;     // max granules
 static const uint8_t  m_MAX_NCHAN              =2;     // max channels
 static const uint16_t m_MAX_NSAMP              =576;   // max samples per channel, per granule
 
+typedef struct {
+    int cbType;             /* pure long = 0, pure short = 1, mixed = 2 */
+    int cbEndS[3];          /* number nonzero short cb's, per subbblock */
+    int cbEndSMax;          /* max of cbEndS[] */
+    int cbEndL;             /* number nonzero long cb's  */
+} CriticalBandInfo_t;
+
 typedef struct IMDCTInfo {
     int outBuf[m_MAX_NCHAN][m_BLOCK_SIZE][m_NBANDS];  /* output of IMDCT */
     int overBuf[m_MAX_NCHAN][m_MAX_NSAMP / 2];      /* overlap-add buffer (by symmetry, only need 1/2 size) */
@@ -323,6 +330,17 @@ int IMDCT( int gr, int ch,
     );
 
 int DequantBlock(int *inbuf, int *outbuf, int num, int scale);
+int DequantChannel(
+    int *sampleBuf,
+    int *workBuf,
+    int *nonZeroBound,
+    SideInfoSub_t *sis,
+    ScaleFactorInfoSub_t *sfis,
+    CriticalBandInfo_t *cbi,
+    FrameHeader_t *m_frame_header,
+    SFBandTable *m_sf_band_table,
+    int mpegVersion
+);
 
 #ifdef __cplusplus
 }

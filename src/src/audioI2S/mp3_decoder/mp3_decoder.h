@@ -24,13 +24,6 @@ enum {
     ERR_UNKNOWN =                  -9999
 };
 
-typedef struct {
-    int cbType;             /* pure long = 0, pure short = 1, mixed = 2 */
-    int cbEndS[3];          /* number nonzero short cb's, per subbblock */
-    int cbEndSMax;          /* max of cbEndS[] */
-    int cbEndL;             /* number nonzero long cb's  */
-} CriticalBandInfo_t;
-
 typedef struct DequantInfo {
     int workBuf[m_MAX_REORDER_SAMPS];             /* workbuf for reordering short blocks */
 } DequantInfo_t;
@@ -109,10 +102,6 @@ const char NRTab[6][3][4] = {
     {{ 8,  8, 5, 0}, {5, 4, 3, 0}, {6, 6, 3, 0}}
 };
 
-
-
-/* optional pre-emphasis for high-frequency scale factor bands */
-const char preTab[22] = { 0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,2,2,3,3,3,2,0 };
 
 const uint16_t m_HUFF_OFFSET_01=  0;
 const uint16_t m_HUFF_OFFSET_02=  9 + m_HUFF_OFFSET_01;
@@ -252,7 +241,7 @@ void PolyphaseStereo(short *pcm, int *vbuf, const uint32_t *coefBase);
 void SetBitstreamPointer(BitStreamInfo_t *bsi, int nBytes, unsigned char *buf);
 unsigned int GetBits(BitStreamInfo_t *bsi, int nBits);
 int CalcBitsUsed(BitStreamInfo_t *bsi, unsigned char *startBuf, int startOffset);
-int DequantChannel(int *sampleBuf, int *workBuf, int *nonZeroBound, SideInfoSub_t *sis, ScaleFactorInfoSub_t *sfis, CriticalBandInfo_t *cbi);
+// int DequantChannel(int *sampleBuf, int *workBuf, int *nonZeroBound, SideInfoSub_t *sis, ScaleFactorInfoSub_t *sfis, CriticalBandInfo_t *cbi);
 void MidSideProc(int x[m_MAX_NCHAN][m_MAX_NSAMP], int nSamps, int mOut[2]);
 void IntensityProcMPEG1(int x[m_MAX_NCHAN][m_MAX_NSAMP], int nSamps, ScaleFactorInfoSub_t *sfis,	CriticalBandInfo_t *cbi, int midSideFlag, int mixFlag, int mOut[2]);
 void IntensityProcMPEG2(int x[m_MAX_NCHAN][m_MAX_NSAMP], int nSamps, ScaleFactorInfoSub_t *sfis, CriticalBandInfo_t *cbi, ScaleFactorJS_t *sfjs, int midSideFlag, int mixFlag, int mOut[2]);

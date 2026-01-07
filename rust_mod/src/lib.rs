@@ -3,7 +3,7 @@
 use core::panic::PanicInfo;
 
 use crabio::mp3_decoder::{
-    BitStreamInfo, FrameHeader, HUFF_PAIRTABS, HuffTabLookup, HuffTabType, HuffmanInfo, IMDCTInfo, MAX_NCHAN, MAX_NGRAN, MAX_NSAMP, MAX_SCFBD, MP3DecInfo, MPEGVersion, NBANDS, POLY_COEF, SFBandTable, SIBYTES_MPEG1_MONO, SIBYTES_MPEG1_STEREO, SIBYTES_MPEG2_MONO, SIBYTES_MPEG2_STEREO, SQRTHALF, ScaleFactorInfoSub, ScaleFactorJS, SideInfoSub, StereoMode, VBUF_LENGTH, clip_2n, clip_to_short, fdct_32, freq_invert_rescale, get_bits, idct_9, imdct_12, madd_64, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, polyphase_mono, polyphase_stereo, refill_bitstream_cache, sar_64, unpack_frame_header, win_previous
+    BitStreamInfo, FrameHeader, HUFF_PAIRTABS, HuffTabLookup, HuffTabType, HuffmanInfo, IMDCT_SCALE, IMDCTInfo, MAX_NCHAN, MAX_NGRAN, MAX_NSAMP, MAX_SCFBD, MP3DecInfo, MPEGVersion, NBANDS, POLY_COEF, SFBandTable, SIBYTES_MPEG1_MONO, SIBYTES_MPEG1_STEREO, SIBYTES_MPEG2_MONO, SIBYTES_MPEG2_STEREO, SQRTHALF, ScaleFactorInfoSub, ScaleFactorJS, SideInfoSub, StereoMode, VBUF_LENGTH, clip_2n, clip_to_short, fdct_32, freq_invert_rescale, get_bits, idct_9, imdct_12, madd_64, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, polyphase_mono, polyphase_stereo, refill_bitstream_cache, sar_64, unpack_frame_header, win_previous
 };
 
 #[repr(C)]
@@ -2454,4 +2454,149 @@ pub unsafe extern "C" fn DequantBlock(
     }
 
     mask
+}
+
+/* optional pre-emphasis for high-frequency scale factor bands */
+const PRE_TAB: [u8; 22] = [ 0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,2,2,3,3,3,2,0 ];
+
+#[repr(C)]
+pub struct CriticalBandInfo {
+    cbType: i32,             /* pure long = 0, pure short = 1, mixed = 2 */
+    cbEndS: [i32; 3],          /* number nonzero short cb's, per subbblock */
+    cbEndSMax: i32,          /* max of cbEndS[] */
+    cbEndL: i32,             /* number nonzero long cb's  */
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn DequantChannel(
+    sample_buf: *mut i32,
+    work_buf: *mut i32,
+    non_zero_bound: *mut i32,
+    sis: *const SideInfoSub,
+    sfis: *const ScaleFactorInfoSub,
+    cbi: *mut CriticalBandInfo,
+    m_frame_header: *const FrameHeader,
+    m_sf_band_table: *const SFBandTable,
+    m_MPEGVersion: i32,
+) -> i32 {
+    let sis = &*sis;
+    let sfis = &*sfis;
+    let cbi = &mut *cbi;
+    let fh = &*m_frame_header;
+    let sfbt = &*m_sf_band_table;
+
+    let mut cb_end_l: i32;
+    let mut cb_start_s: i32;
+    let mut cb_end_s: i32;
+
+    // 1. Ustalenie granic dla bloków długich i krótkich
+    if sis.blockType == 2 {
+        if sis.mixedBlock != 0 {
+            cb_end_l = if m_MPEGVersion == 0 { 8 } else { 6 }; // MPEG1 vs MPEG2
+            cb_start_s = 3;
+        } else {
+            cb_end_l = 0;
+            cb_start_s = 0;
+        }
+        cb_end_s = 13;
+    } else {
+        cb_end_l = 22;
+        cb_start_s = 13;
+        cb_end_s = 13;
+    }
+
+    let mut cb_max = [0i32; 3];
+    let mut gb_mask = 0i32;
+    let mut i: usize = 0;
+
+    // sfactMultiplier = 2 lub 4
+    let s_multiplier = 2 * (sis.sfactScale + 1);
+
+    // Obliczenie globalGain z uwzględnieniem MidSide i skali IMDCT
+    let mut global_gain = sis.global_gain;
+    if (fh.modeExt >> 1) != 0 {
+        global_gain -= IMDCT_SCALE as i32;
+    }
+    global_gain += IMDCT_SCALE as i32;
+
+    // 2. Dekwantyzacja bloków długich
+    for cb in 0..cb_end_l {
+        let n_samps = (sfbt.l[(cb + 1) as usize] - sfbt.l[cb as usize]) as i32;
+        
+        let pre_val = if sis.preFlag != 0 { PRE_TAB[cb as usize] as i32 } else { 0 };
+        let gain_i = 210 - global_gain + s_multiplier * (sfis.l[cb as usize] as i32 + pre_val);
+
+        let non_zero = DequantBlock(
+            sample_buf.add(i), 
+            sample_buf.add(i), 
+            n_samps, 
+            gain_i
+        );
+
+        if non_zero != 0 {
+            cb_max[0] = cb;
+        }
+        gb_mask |= non_zero;
+        i += n_samps as usize;
+
+        if i >= (*non_zero_bound) as usize {
+            break;
+        }
+    }
+
+    // Wstępne ustawienie CBI
+    cbi.cbType = 0;
+    cbi.cbEndL = cb_max[0];
+    cbi.cbEndS = [0, 0, 0];
+    cbi.cbEndSMax = 0;
+
+    if cb_start_s >= 12 {
+        return (gb_mask.leading_zeros() as i32) - 1;
+    }
+
+    // 3. Dekwantyzacja bloków krótkich
+    cb_max = [cb_start_s, cb_start_s, cb_start_s];
+    for cb in cb_start_s..cb_end_s {
+        let n_samps = (sfbt.s[(cb + 1) as usize] - sfbt.s[cb as usize]) as i32;
+        
+        for w in 0..3 {
+            let gain_i = 210 - global_gain + 8 * sis.subBlockGain[w] + s_multiplier * (sfis.s[cb as usize][w] as i32);
+            
+            // Dekwantyzujemy do workBuf, aby móc potem bezpiecznie przełożyć dane do sampleBuf
+            let non_zero = DequantBlock(
+                sample_buf.add(i + (n_samps * w as i32) as usize),
+                work_buf.add((n_samps * w as i32) as usize),
+                n_samps,
+                gain_i
+            );
+
+            if non_zero != 0 {
+                cb_max[w] = cb;
+            }
+            gb_mask |= non_zero;
+        }
+
+        // 4. Reordering: Przeplatanie próbek z 3 bloków krótkich
+        // C: buf[j][0] = workBuf[0*nSamps + j]
+        let current_ptr = sample_buf.add(i) as *mut [i32; 3];
+        for j in 0..n_samps as usize {
+            let row = &mut *current_ptr.add(j);
+            row[0] = *work_buf.add(j);
+            row[1] = *work_buf.add(n_samps as usize + j);
+            row[2] = *work_buf.add(2 * n_samps as usize + j);
+        }
+
+        i += (3 * n_samps) as usize;
+        if i >= (*non_zero_bound) as usize {
+            break;
+        }
+    }
+
+    // Aktualizacja non_zero_bound i CBI
+    *non_zero_bound = i as i32;
+    cbi.cbType = if sis.mixedBlock != 0 { 2 } else { 1 };
+    cbi.cbEndS = cb_max;
+    cbi.cbEndSMax = cb_max[0].max(cb_max[1]).max(cb_max[2]);
+
+    (gb_mask.leading_zeros() as i32) - 1
 }

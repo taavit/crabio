@@ -567,7 +567,11 @@ int MP3Dequantize(int gr){
     /* dequantize all the samples in each channel */
     for (ch = 0; ch < m_MP3DecInfo->nChans; ch++) {
         m_HuffmanInfo->gb[ch] = DequantChannel(m_HuffmanInfo->huffDecBuf[ch], m_DequantInfo->workBuf,
-                &m_HuffmanInfo->nonZeroBound[ch], &m_SideInfoSub[gr][ch], &m_ScaleFactorInfoSub[gr][ch], &cbi[ch]);
+                &m_HuffmanInfo->nonZeroBound[ch], &m_SideInfoSub[gr][ch], &m_ScaleFactorInfoSub[gr][ch], &cbi[ch],
+                m_FrameHeader,
+                &m_SFBandTable,
+                m_MPEGVersion
+            );
     }
 
     /* joint stereo processing assumes one guard bit in input samples
@@ -631,160 +635,6 @@ int MP3Dequantize(int gr){
 /***********************************************************************************************************************
  * D Q C H A N
  **********************************************************************************************************************/
-
-
-/***********************************************************************************************************************
- * Function:    DequantChannel
- *
- * Description: dequantize one granule, one channel worth of decoded Huffman codewords
- *
- * Inputs:      sample buffer (decoded Huffman codewords), length = m_MAX_NSAMP samples
- *              work buffer for reordering short-block, length = m_MAX_REORDER_SAMPS
- *                samples (3 * width of largest short-block critical band)
- *              non-zero bound for this channel/granule
- *              valid FrameHeader, SideInfoSub, ScaleFactorInfoSub, and CriticalBandInfo
- *                structures for this channel/granule
- *
- * Outputs:     MAX_NSAMP dequantized samples in sampleBuf
- *              updated non-zero bound (indicating which samples are != 0 after DQ)
- *              filled-in cbi structure indicating start and end critical bands
- *
- * Return:      minimum number of guard bits in dequantized sampleBuf
- *
- * Notes:       dequantized samples in Q(DQ_FRACBITS_OUT) format
- **********************************************************************************************************************/
-int DequantChannel(int *sampleBuf, int *workBuf, int *nonZeroBound,  SideInfoSub_t *sis, ScaleFactorInfoSub_t *sfis,
-                                                                                              CriticalBandInfo_t *cbi)
-{
-    int i, j, w, cb;
-    int /* cbStartL, */ cbEndL, cbStartS, cbEndS;
-    int nSamps, nonZero, sfactMultiplier, gbMask;
-    int globalGain, gainI;
-    int cbMax[3];
-    typedef int ARRAY3[3];  /* for short-block reordering */
-    ARRAY3 *buf;    /* short block reorder */
-
-    /* set default start/end points for short/long blocks - will update with non-zero cb info */
-    if (sis->blockType == 2) {
-        // cbStartL = 0;
-        if (sis->mixedBlock) {
-            cbEndL = (m_MPEGVersion == MPEG1 ? 8 : 6);
-            cbStartS = 3;
-        } else {
-            cbEndL = 0;
-            cbStartS = 0;
-        }
-        cbEndS = 13;
-    } else {
-        /* long block */
-        //cbStartL = 0;
-        cbEndL =   22;
-        cbStartS = 13;
-        cbEndS =   13;
-    }
-    cbMax[2] = cbMax[1] = cbMax[0] = 0;
-    gbMask = 0;
-    i = 0;
-
-    /* sfactScale = 0 --> quantizer step size = 2
-     * sfactScale = 1 --> quantizer step size = sqrt(2)
-     *   so sfactMultiplier = 2 or 4 (jump through globalGain by powers of 2 or sqrt(2))
-     */
-    sfactMultiplier = 2 * (sis->sfactScale + 1);
-
-    /* offset globalGain by -2 if midSide enabled, for 1/sqrt(2) used in MidSideProc()
-     *  (DequantBlock() does 0.25 * gainI so knocking it down by two is the same as
-     *   dividing every sample by sqrt(2) = multiplying by 2^-.5)
-     */
-    globalGain = sis->globalGain;
-    if (m_FrameHeader->modeExt >> 1)
-         globalGain -= 2;
-    globalGain += m_IMDCT_SCALE;      /* scale everything by sqrt(2), for fast IMDCT36 */
-
-    /* long blocks */
-    for (cb = 0; cb < cbEndL; cb++) {
-
-        nonZero = 0;
-        nSamps = m_SFBandTable.l[cb + 1] - m_SFBandTable.l[cb];
-        gainI = 210 - globalGain + sfactMultiplier * (sfis->l[cb] + (sis->preFlag ? (int)preTab[cb] : 0));
-
-        nonZero |= DequantBlock(sampleBuf + i, sampleBuf + i, nSamps, gainI);
-        i += nSamps;
-
-        /* update highest non-zero critical band */
-        if (nonZero)
-            cbMax[0] = cb;
-        gbMask |= nonZero;
-
-        if (i >= *nonZeroBound)
-            break;
-    }
-
-    /* set cbi (Type, EndS[], EndSMax will be overwritten if we proceed to do short blocks) */
-    cbi->cbType = 0;            /* long only */
-    cbi->cbEndL  = cbMax[0];
-    cbi->cbEndS[0] = cbi->cbEndS[1] = cbi->cbEndS[2] = 0;
-    cbi->cbEndSMax = 0;
-
-    /* early exit if no short blocks */
-    if (cbStartS >= 12)
-        return CLZ(gbMask) - 1;
-
-    /* short blocks */
-    cbMax[2] = cbMax[1] = cbMax[0] = cbStartS;
-    for (cb = cbStartS; cb < cbEndS; cb++) {
-
-        nSamps = m_SFBandTable.s[cb + 1] - m_SFBandTable.s[cb];
-        for (w = 0; w < 3; w++) {
-            nonZero =  0;
-            gainI = 210 - globalGain + 8*sis->subBlockGain[w] + sfactMultiplier*(sfis->s[cb][w]);
-
-            nonZero |= DequantBlock(sampleBuf + i + nSamps*w, workBuf + nSamps*w, nSamps, gainI);
-
-            /* update highest non-zero critical band */
-            if (nonZero)
-                cbMax[w] = cb;
-            gbMask |= nonZero;
-        }
-
-        /* reorder blocks */
-        buf = (ARRAY3 *)(sampleBuf + i);
-        i += 3*nSamps;
-        for (j = 0; j < nSamps; j++) {
-            buf[j][0] = workBuf[0*nSamps + j];
-            buf[j][1] = workBuf[1*nSamps + j];
-            buf[j][2] = workBuf[2*nSamps + j];
-        }
-
-        assert(3*nSamps <= m_MAX_REORDER_SAMPS);
-
-        if (i >= *nonZeroBound)
-            break;
-    }
-
-    /* i = last non-zero INPUT sample processed, which corresponds to highest possible non-zero
-     *     OUTPUT sample (after reorder)
-     * however, the original nzb is no longer necessarily true
-     *   for each cb, buf[][] is updated with 3*nSamps samples (i increases 3*nSamps each time)
-     *   (buf[j + 1][0] = 3 (input) samples ahead of buf[j][0])
-     * so update nonZeroBound to i
-     */
-    *nonZeroBound = i;
-
-    assert(*nonZeroBound <= m_MAX_NSAMP);
-
-    cbi->cbType = (sis->mixedBlock ? 2 : 1);    /* 2 = mixed short/long, 1 = short only */
-
-    cbi->cbEndS[0] = cbMax[0];
-    cbi->cbEndS[1] = cbMax[1];
-    cbi->cbEndS[2] = cbMax[2];
-
-    cbi->cbEndSMax = cbMax[0];
-    cbi->cbEndSMax = (cbi->cbEndSMax > cbMax[1] ? cbi->cbEndSMax : cbMax[1]);
-    cbi->cbEndSMax = (cbi->cbEndSMax > cbMax[2] ? cbi->cbEndSMax : cbMax[2]);
-
-    return CLZ(gbMask) - 1;
-}
 
 /***********************************************************************************************************************
  * S T P R O C
