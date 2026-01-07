@@ -132,49 +132,7 @@ const uint32_t imdctWin[4][36] PROGMEM = {
     0xe7dbc161, 0xef7a6275, 0xf6a09e66, 0xfd16d8dd  },
 };
 
-/***********************************************************************************************************************
- * Function:    UnpackScaleFactors
- *
- * Description: parse the fields of the MP3 scale factor data section
- *
- * Inputs:      MP3DecInfo structure filled by UnpackFrameHeader() and UnpackSideInfo()
- *              buffer pointing to the MP3 scale factor data
- *              pointer to bit offset (0-7) indicating starting bit in buf[0]
- *              number of bits available in data buffer
- *              index of current granule and channel
- *
- * Outputs:     updated platform-specific ScaleFactorInfo struct
- *              updated bitOffset
- *
- * Return:      length (in bytes) of scale factor data, -1 if null input pointers
- **********************************************************************************************************************/
-int UnpackScaleFactors( unsigned char *buf, int *bitOffset, int bitsAvail, int gr, int ch){
-    int bitsUsed;
-    unsigned char *startBuf;
-    BitStreamInfo_t bitStreamInfo, *bsi;
 
-    /* init GetBits reader */
-    startBuf = buf;
-    bsi = &bitStreamInfo;
-    SetBitstreamPointer(bsi, (bitsAvail + *bitOffset + 7) / 8, buf);
-    if (*bitOffset)
-        GetBits(bsi, *bitOffset);
-
-    if (m_MPEGVersion == MPEG1)
-        UnpackSFMPEG1(bsi, &m_SideInfoSub[gr][ch], &m_ScaleFactorInfoSub[gr][ch],
-                      m_SideInfo->scfsi[ch], gr, &m_ScaleFactorInfoSub[0][ch]);
-    else
-        UnpackSFMPEG2(bsi, &m_SideInfoSub[gr][ch], &m_ScaleFactorInfoSub[gr][ch],
-                      gr, ch, m_FrameHeader->modeExt, m_ScaleFactorJS);
-
-    m_MP3DecInfo->part23Length[gr][ch] = m_SideInfoSub[gr][ch].part23Length;
-
-    bitsUsed = CalcBitsUsed(bsi, buf, *bitOffset);
-    buf += (bitsUsed + *bitOffset) >> 3;
-    *bitOffset = (bitsUsed + *bitOffset) & 0x07;
-
-    return (buf - startBuf);
-}
 /***********************************************************************************************************************
  * M P 3 D E C
  **********************************************************************************************************************/
@@ -339,7 +297,15 @@ int MP3Decode( unsigned char *inbuf, size_t inbuf_len, int *bytesLeft, short *ou
             /* unpack scale factors and compute size of scale factor block */
             prevBitOffset = bitOffset;
             offset = UnpackScaleFactors( mainPtr, &bitOffset,
-                    mainBits, gr, ch);
+                    mainBits, gr, ch,
+                    &m_SideInfoSub,
+                    &m_ScaleFactorInfoSub,
+                    m_MP3DecInfo,
+                    m_SideInfo,
+                    m_FrameHeader,
+                    m_ScaleFactorJS,
+                    m_MPEGVersion
+                );
             sfBlockBits = 8 * offset - prevBitOffset + bitOffset;
             huffBlockBits = m_MP3DecInfo->part23Length[gr][ch] - sfBlockBits;
             mainPtr += offset;

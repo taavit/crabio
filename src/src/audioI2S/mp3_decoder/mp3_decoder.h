@@ -256,7 +256,16 @@ int DecodeHuffman(
     MPEGVersion_t *m_MPEGVersion
 );
 int MP3Dequantize( int gr);
-int UnpackScaleFactors( unsigned char *buf, int *bitOffset, int bitsAvail, int gr, int ch);
+int UnpackScaleFactors(
+    unsigned char *buf, int *bitOffset, int bitsAvail, int gr, int ch,
+    SideInfoSub_t (*m_SideInfoSub)[2][2],
+    ScaleFactorInfoSub_t (*m_ScaleFactorInfoSub)[2][2],
+    MP3DecInfo_t *m_MP3DecInfo,
+    SideInfo_t *m_SideInfo,
+    FrameHeader_t *m_FrameHeader,
+    ScaleFactorJS_t *m_ScaleFactorJS,
+    int m_MPEGVersion
+);
 int Subband(short *pcmBuf);
 short ClipToShort(int x, int fracBits);
 void RefillBitstreamCache(BitStreamInfo_t *bsi);

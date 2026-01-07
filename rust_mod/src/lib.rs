@@ -1,6 +1,6 @@
 #![no_std]
 #![feature(asm_experimental_arch)]
-use core::panic::PanicInfo;
+use core::{panic::PanicInfo, ptr::null};
 
 use crabio::mp3_decoder::{
     BitStreamInfo, FrameHeader, HUFF_PAIRTABS, HuffTabLookup, HuffTabType, HuffmanInfo, IMDCT_SCALE, IMDCTInfo, MAX_NCHAN, MAX_NGRAN, MAX_NSAMP, MAX_SCFBD, MP3DecInfo, MPEGVersion, NBANDS, POLY_COEF, SFBandTable, SIBYTES_MPEG1_MONO, SIBYTES_MPEG1_STEREO, SIBYTES_MPEG2_MONO, SIBYTES_MPEG2_STEREO, SQRTHALF, ScaleFactorInfoSub, ScaleFactorJS, SideInfoSub, StereoMode, VBUF_LENGTH, clip_2n, clip_to_short, fdct_32, freq_invert_rescale, get_bits, idct_9, imdct_12, madd_64, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, polyphase_mono, polyphase_stereo, refill_bitstream_cache, sar_64, unpack_frame_header, win_previous
@@ -490,18 +490,16 @@ const m_SFLenTab: [[u8; 2]; 16] = [
  *                (make sure dequantizer follows same convention)
  *              Illegal Intensity Position = 7 (always) for MPEG1 scale factors
  **********************************************************************************************************************/
-#[unsafe(no_mangle)]
 pub unsafe fn UnpackSFMPEG1(bsi: *mut BitStreamInfoC, sis: *mut SideInfoSub,
-                   sfis: *mut ScaleFactorInfoSub, scfsi: *const i32, gr: i32, sfisGr0: *mut ScaleFactorInfoSub) {
+                   m_ScaleFactorInfoSub: &mut [[ScaleFactorInfoSub; 2]; 2], scfsi: *const i32, gr: usize, ch: usize,
+                ) {
     let mut sfb: i32;
     let mut slen0: i32;
     let mut slen1: i32;
 
     let sis = unsafe { &*sis };
     let bsi = unsafe { &mut *bsi };
-    let sfis = unsafe { &mut *sfis };
     let scfsi = unsafe { core::slice::from_raw_parts(scfsi, 4) };
-    let sfisGr0 = unsafe { &* sfisGr0 };
     /* these can be 0, so make sure GetBits(bsi, 0) returns 0 (no >> 32 or anything) */
     slen0 = m_SFLenTab[sis.sfCompress as usize][0] as i32;
     slen1 = m_SFLenTab[sis.sfCompress as usize][1] as i32;
@@ -510,7 +508,7 @@ pub unsafe fn UnpackSFMPEG1(bsi: *mut BitStreamInfoC, sis: *mut SideInfoSub,
         if (sis.mixedBlock != 0){
             /* do long block portion */
             for sfb in 0..8 {
-                sfis.l[sfb]= GetBits(bsi, slen0 as u32) as u8;
+                m_ScaleFactorInfoSub[gr][ch].l[sfb]= GetBits(bsi, slen0 as u32) as u8;
             }
             sfb=3;
         }
@@ -519,29 +517,29 @@ pub unsafe fn UnpackSFMPEG1(bsi: *mut BitStreamInfoC, sis: *mut SideInfoSub,
             sfb=0;
         }
         for sfb in sfb..6 {
-            sfis.s[sfb as usize][0] = GetBits(bsi, slen0 as u32) as u8;
-            sfis.s[sfb as usize][1] = GetBits(bsi, slen0 as u32) as u8;
-            sfis.s[sfb as usize][2] = GetBits(bsi, slen0 as u32) as u8;
+            m_ScaleFactorInfoSub[gr][ch].s[sfb as usize][0] = GetBits(bsi, slen0 as u32) as u8;
+            m_ScaleFactorInfoSub[gr][ch].s[sfb as usize][1] = GetBits(bsi, slen0 as u32) as u8;
+            m_ScaleFactorInfoSub[gr][ch].s[sfb as usize][2] = GetBits(bsi, slen0 as u32) as u8;
         }
         for sfb in 6..12 {
-            sfis.s[sfb][0] = GetBits(bsi, slen1 as u32) as u8;
-            sfis.s[sfb][1] = GetBits(bsi, slen1 as u32) as u8;
-            sfis.s[sfb][2] = GetBits(bsi, slen1 as u32) as u8;
+            m_ScaleFactorInfoSub[gr][ch].s[sfb][0] = GetBits(bsi, slen1 as u32) as u8;
+            m_ScaleFactorInfoSub[gr][ch].s[sfb][1] = GetBits(bsi, slen1 as u32) as u8;
+            m_ScaleFactorInfoSub[gr][ch].s[sfb][2] = GetBits(bsi, slen1 as u32) as u8;
         }
         /* last sf band not transmitted */
-        sfis.s[12][0] = 0;
-        sfis.s[12][1] = 0;
-        sfis.s[12][2] = 0;
+        m_ScaleFactorInfoSub[gr][ch].s[12][0] = 0;
+        m_ScaleFactorInfoSub[gr][ch].s[12][1] = 0;
+        m_ScaleFactorInfoSub[gr][ch].s[12][2] = 0;
     }
     else{
         /* long blocks, type 0, 1, or 3 */
         if(gr == 0) {
             /* first granule */
             for sfb in 0..11 {
-                sfis.l[sfb] = GetBits(bsi, slen0 as u32) as u8;
+                m_ScaleFactorInfoSub[gr][ch].l[sfb] = GetBits(bsi, slen0 as u32) as u8;
             }
             for sfb in 11..21 {
-                sfis.l[sfb] = GetBits(bsi, slen1 as u32) as u8;
+                m_ScaleFactorInfoSub[gr][ch].l[sfb] = GetBits(bsi, slen1 as u32) as u8;
             }
             return;
         }
@@ -554,46 +552,46 @@ pub unsafe fn UnpackSFMPEG1(bsi: *mut BitStreamInfoC, sis: *mut SideInfoSub,
             sfb = 0;
             if(scfsi[0] != 0) {
                 for sfb in 0..6 {
-                    sfis.l[sfb] = sfisGr0.l[sfb];
+                    m_ScaleFactorInfoSub[gr][ch].l[sfb] = m_ScaleFactorInfoSub[0][ch].l[sfb];
                 }
             } else {
                 for sfb in 0..6 {
-                    sfis.l[sfb] = GetBits(bsi, slen0 as u32) as u8;
+                    m_ScaleFactorInfoSub[gr][ch].l[sfb] = GetBits(bsi, slen0 as u32) as u8;
                 }
             }
 
             if(scfsi[1] != 0) {
                 for sfb in 6..11 {
-                    sfis.l[sfb] = sfisGr0.l[sfb];
+                    m_ScaleFactorInfoSub[gr][ch].l[sfb] = m_ScaleFactorInfoSub[0][ch].l[sfb];
                 }
             } else {
                 for sfb in 6..11 {
-                    sfis.l[sfb] = GetBits(bsi, slen0 as u32) as u8;
+                    m_ScaleFactorInfoSub[gr][ch].l[sfb] = GetBits(bsi, slen0 as u32) as u8;
                 }
             }
             if(scfsi[2] != 0) {
                 for sfb in 11..16 {
-                    sfis.l[sfb] = sfisGr0.l[sfb];
+                    m_ScaleFactorInfoSub[gr][ch].l[sfb] = m_ScaleFactorInfoSub[0][ch].l[sfb];
                 }
             } else {
                 for sfb in 11..16 {
-                    sfis.l[sfb] = GetBits(bsi, slen1 as u32) as u8;
+                    m_ScaleFactorInfoSub[gr][ch].l[sfb] = GetBits(bsi, slen1 as u32) as u8;
                 }
             }
 
             if(scfsi[3] != 0) {
                 for sfb in 16..21 {
-                    sfis.l[sfb] = sfisGr0.l[sfb];
+                    m_ScaleFactorInfoSub[gr][ch].l[sfb] = m_ScaleFactorInfoSub[0][ch].l[sfb];
                 }
             } else {
                 for sfb in 16..21 {
-                    sfis.l[sfb] = GetBits(bsi, slen1 as u32) as u8;
+                    m_ScaleFactorInfoSub[gr][ch].l[sfb] = GetBits(bsi, slen1 as u32) as u8;
                 }
             }
         }
         /* last sf band not transmitted */
-        sfis.l[21] = 0;
-        sfis.l[22] = 0;
+        m_ScaleFactorInfoSub[gr][ch].l[21] = 0;
+        m_ScaleFactorInfoSub[gr][ch].l[22] = 0;
     }
 }
 
@@ -617,11 +615,10 @@ const NRTab:[[[u8; 4]; 3]; 6] = [
 ];
 
 
-#[unsafe(no_mangle)]
 pub unsafe extern "C" fn UnpackSFMPEG2(
     bsi: *mut BitStreamInfoC,
     sis: *mut SideInfoSub,
-    sfis: *mut ScaleFactorInfoSub,
+    sfis: &mut ScaleFactorInfoSub,
     _gr: i32, // nieużywane, zachowane dla sygnatury
     ch: i32,
     modeExt: i32,
@@ -635,7 +632,6 @@ pub unsafe extern "C" fn UnpackSFMPEG2(
     let mut nr = [0i32; 4];
     
     let sis = &mut *sis;
-    let sfis = &mut *sfis;
     let sfjs = &mut *sfjs;
 
     let mut sfCompress = sis.sfCompress;
@@ -2909,4 +2905,72 @@ pub unsafe extern "C" fn MidSideProc(
     // Łączymy nową maskę z istniejącą (operator |= w C)
     *m_out.add(0) |= m_out_l;
     *m_out.add(1) |= m_out_r;
+}
+
+/***********************************************************************************************************************
+ * Function:    UnpackScaleFactors
+ *
+ * Description: parse the fields of the MP3 scale factor data section
+ *
+ * Inputs:      MP3DecInfo structure filled by UnpackFrameHeader() and UnpackSideInfo()
+ *              buffer pointing to the MP3 scale factor data
+ *              pointer to bit offset (0-7) indicating starting bit in buf[0]
+ *              number of bits available in data buffer
+ *              index of current granule and channel
+ *
+ * Outputs:     updated platform-specific ScaleFactorInfo struct
+ *              updated bitOffset
+ *
+ * Return:      length (in bytes) of scale factor data, -1 if null input pointers
+ **********************************************************************************************************************/
+#[unsafe(no_mangle)]
+ pub unsafe fn UnpackScaleFactors(
+    mut buf: *mut u8,
+    bitOffset: *mut i32, bitsAvail: i32, gr: i32, ch: i32,
+    m_SideInfoSub: *mut [[SideInfoSub; 2]; 2],
+    m_ScaleFactorInfoSub: *mut [[ScaleFactorInfoSub; 2]; 2],
+    m_MP3DecInfo: *mut MP3DecInfo,
+    m_SideInfo: *mut SideInfo,
+    m_FrameHeader: *mut FrameHeader,
+    m_ScaleFactorJS: *mut ScaleFactorJS,
+    m_MPEGVersion: i32
+) -> i32 {
+    // int bitsUsed;
+    // unsigned char *startBuf;
+    // BitStreamInfo_t bitStreamInfo, *bsi;
+
+    /* init GetBits reader */
+    let m_SideInfoSub = &mut *m_SideInfoSub;
+    let m_SideInfo = &*m_SideInfo;
+    let m_MP3DecInfo = &mut *m_MP3DecInfo;
+    let m_FrameHeader = &*m_FrameHeader;
+    let mut m_ScaleFactorInfoSub = &mut *m_ScaleFactorInfoSub;
+    let startBuf = buf;
+    let mut bitStreamInfo = BitStreamInfoC {
+        byte_ptr: null(),
+        cached_bits: 0,
+        i_cache: 0,
+        n_bytes: 0,
+    };
+    let bsi = &mut bitStreamInfo;
+    SetBitstreamPointer(bsi as *mut BitStreamInfoC, (bitsAvail + *bitOffset + 7) / 8, buf);
+    if (*bitOffset != 0) {
+        GetBits(bsi, *bitOffset as u32);
+    }
+
+    if (m_MPEGVersion == MPEGVersion::MPEG1 as i32) {
+        UnpackSFMPEG1(bsi, &mut m_SideInfoSub[gr as usize][ch as usize], &mut m_ScaleFactorInfoSub,
+                      m_SideInfo.scfsi[ch as usize].as_ptr(), gr as usize, ch as usize);
+} else { 
+        UnpackSFMPEG2(bsi, &mut m_SideInfoSub[gr as usize][ch as usize], &mut m_ScaleFactorInfoSub[gr as usize][ch as usize],
+                      gr, ch, m_FrameHeader.modeExt, m_ScaleFactorJS);
+        }
+
+    m_MP3DecInfo.part23Length[gr as usize][ch as usize] = m_SideInfoSub[gr as usize][ch as usize].part23_length;
+
+    let mut bitsUsed = CalcBitsUsed(bsi, buf, *bitOffset as usize);
+    buf = buf.add((bitsUsed + *bitOffset) as usize>> 3);
+    *bitOffset = (bitsUsed + *bitOffset) & 0x07;
+
+    buf.offset_from(startBuf) as i32
 }
