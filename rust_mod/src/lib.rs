@@ -1743,3 +1743,192 @@ pub unsafe extern "C" fn DecodeHuffman(
     buf.offset_from(startBuf) as i32
 
 }
+
+
+//
+
+
+/***********************************************************************************************************************
+ * Function:    IMDCT36
+ *
+ * Description: 36-point modified DCT, with windowing and overlap-add (50% overlap)
+ *
+ * Inputs:      vector of 18 coefficients (N/2 inputs produces N outputs, by symmetry)
+ *              overlap part of last IMDCT (9 samples - see output comments)
+ *              window type (0,1,2,3) of current and previous block
+ *              current block index (for deciding whether to do frequency inversion)
+ *              number of guard bits in input vector
+ *
+ * Outputs:     18 output samples, after windowing and overlap-add with last frame
+ *              second half of (unwindowed) 36-point IMDCT - save for next time
+ *                only save 9 xPrev samples, using symmetry (see WinPrevious())
+ *
+ * Notes:       this is Ken's hyper-fast algorithm, including symmetric sin window
+ *                optimization, if applicable
+ *              total number of multiplies, general case:
+ *                2*10 (idct9) + 9 (last stage imdct) + 36 (for windowing) = 65
+ *              total number of multiplies, btCurr == 0 && btPrev == 0:
+ *                2*10 (idct9) + 9 (last stage imdct) + 18 (for windowing) = 47
+ *
+ *              blockType == 0 is by far the most common case, so it should be
+ *                possible to use the fast path most of the time
+ *              this is the fastest known algorithm for performing
+ *                long IMDCT + windowing + overlap-add in MP3
+ *
+ * Return:      mOut (OR of abs(y) for all y calculated here)
+ **********************************************************************************************************************/
+// barely faster in RAM
+const c18: [u32; 9] = [0x7f834ed0, 0x7ba3751d, 0x7401e4c1, 0x68d9f964, 0x5a82799a, 0x496af3e2, 0x36185aee, 0x2120fb83, 0x0b27eb5c];
+const fastWin36: [u32; 18] = [
+        0x42aace8b, 0xc2e92724, 0x47311c28, 0xc95f619a, 0x4a868feb, 0xd0859d8c,
+        0x4c913b51, 0xd8243ea0, 0x4d413ccc, 0xe0000000, 0x4c913b51, 0xe7dbc161,
+        0x4a868feb, 0xef7a6275, 0x47311c28, 0xf6a09e67, 0x42aace8b, 0xfd16d8dd
+];
+const imdctWin: [[u32; 36];4 ] = [
+    [
+    0x02aace8b, 0x07311c28, 0x0a868fec, 0x0c913b52, 0x0d413ccd, 0x0c913b52, 0x0a868fec, 0x07311c28,
+    0x02aace8b, 0xfd16d8dd, 0xf6a09e66, 0xef7a6275, 0xe7dbc161, 0xe0000000, 0xd8243e9f, 0xd0859d8b,
+    0xc95f619a, 0xc2e92723, 0xbd553175, 0xb8cee3d8, 0xb5797014, 0xb36ec4ae, 0xb2bec333, 0xb36ec4ae,
+    0xb5797014, 0xb8cee3d8, 0xbd553175, 0xc2e92723, 0xc95f619a, 0xd0859d8b, 0xd8243e9f, 0xe0000000,
+    0xe7dbc161, 0xef7a6275, 0xf6a09e66, 0xfd16d8dd  ],
+    [
+    0x02aace8b, 0x07311c28, 0x0a868fec, 0x0c913b52, 0x0d413ccd, 0x0c913b52, 0x0a868fec, 0x07311c28,
+    0x02aace8b, 0xfd16d8dd, 0xf6a09e66, 0xef7a6275, 0xe7dbc161, 0xe0000000, 0xd8243e9f, 0xd0859d8b,
+    0xc95f619a, 0xc2e92723, 0xbd44ef14, 0xb831a052, 0xb3aa3837, 0xafb789a4, 0xac6145bb, 0xa9adecdc,
+    0xa864491f, 0xad1868f0, 0xb8431f49, 0xc8f42236, 0xdda8e6b1, 0xf47755dc, 0x00000000, 0x00000000,
+    0x00000000, 0x00000000, 0x00000000, 0x00000000  ],
+    [
+    0x07311c28, 0x0d413ccd, 0x07311c28, 0xf6a09e66, 0xe0000000, 0xc95f619a, 0xb8cee3d8, 0xb2bec333,
+    0xb8cee3d8, 0xc95f619a, 0xe0000000, 0xf6a09e66, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+    0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+    0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+    0x00000000, 0x00000000, 0x00000000, 0x00000000  ],
+    [
+    0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x028e9709, 0x04855ec0,
+    0x026743a1, 0xfcde2c10, 0xf515dc82, 0xec93e53b, 0xe4c880f8, 0xdd5d0b08, 0xd63510b7, 0xcf5e834a,
+    0xc8e6b562, 0xc2da4105, 0xbd553175, 0xb8cee3d8, 0xb5797014, 0xb36ec4ae, 0xb2bec333, 0xb36ec4ae,
+    0xb5797014, 0xb8cee3d8, 0xbd553175, 0xc2e92723, 0xc95f619a, 0xd0859d8b, 0xd8243e9f, 0xe0000000,
+    0xe7dbc161, 0xef7a6275, 0xf6a09e66, 0xfd16d8dd  ],
+    ];
+
+#[unsafe(no_mangle)]
+pub unsafe fn IMDCT36(mut xCurr: *mut i32, mut xPrev: *mut i32, y: *mut i32, btCurr: i32, btPrev: i32, blockIdx: i32, gb: i32) -> i32 {
+    let mut acc1 = 0;
+    let mut acc2 = 0;
+    let mut es;
+    let mut xBuf: [i32; 18] = [0; 18];
+    let mut xPrevWin: [i32; 18] = [0; 18];
+    let mut xp;
+    let mut cp;
+    let mut wp;
+    let mut c;
+    let mut xo;
+    let mut xe;
+    let mut s;
+    let mut d;
+    let mut t;
+    let mut yLo;
+    let mut yHi;
+    xCurr = xCurr.add(17);
+    /* 7 gb is always adequate for antialias + accumulator loop + idct9 */
+    if (gb < 7) {
+        /* rarely triggered - 5% to 10% of the time on normal clips (with Q25 input) */
+        es = 7 - gb;
+        for i in (0..=8).rev() {
+            acc1 = ((*xCurr) >> es) - acc1;
+            xCurr = xCurr.sub(1);
+            acc2 = acc1 - acc2;
+            acc1 = ((*xCurr) >> es) - acc1;
+            xCurr = xCurr.sub(1);
+            xBuf[i + 9] = acc2; /* odd */
+            xBuf[i + 0] = acc1; /* even */
+            *xPrev.add(i) >>= es;
+        }
+    } else {
+        es = 0;
+        /* max gain = 18, assume adequate guard bits */
+        for i in (0..=8).rev() {
+            acc1 = (*xCurr) - acc1;
+            xCurr = xCurr.sub(1);
+            acc2 = acc1 - acc2;
+            acc1 = (*xCurr) - acc1;
+            xCurr = xCurr.sub(1);
+            xBuf[i + 9] = acc2; /* odd */
+            xBuf[i + 0] = acc1; /* even */
+        }
+    }
+    /* xEven[0] and xOdd[0] scaled by 0.5 */
+    xBuf[9] >>= 1;
+    xBuf[0] >>= 1;
+
+    /* do 9-point IDCT on even and odd */
+    idct9(xBuf.as_mut_ptr()); /* even */
+    idct9(xBuf.as_mut_ptr().add(9)); /* odd */
+
+    xp = xBuf.as_mut_ptr().add( 8);
+    cp = c18.as_ptr().add(8);
+    let mut mOut = 0;
+    if (btPrev == 0 && btCurr == 0) {
+        /* fast path - use symmetry of sin window to reduce windowing multiplies to 18 (N/2) */
+        wp = fastWin36.as_ptr();
+        for i in 0..9 {
+            /* do ARM-style pointer arithmetic (i still needed for y[] indexing - compiler spills if 2 y pointers) */
+            c = *cp;
+            cp = cp.sub(1);
+            xo = *(xp.add( 9));
+            xe = *xp;
+            xp = xp.sub(1);
+            /* gain 2 int bits here */
+            xo = mulshift_32(c as i32, xo); /* 2*c18*xOdd (mul by 2 implicit in scaling)  */
+            xe >>= 2;
+
+            s = -(*xPrev); /* sum from last block (always at least 2 guard bits) */
+            d = -(xe - xo); /* gain 2 int bits, don't shift xo (effective << 1 to eat sign bit, << 1 for mul by 2) */
+            (*xPrev) = xe + xo; /* symmetry - xPrev[i] = xPrev[17-i] for long blocks */
+            xPrev = xPrev.add(1);
+            t = s - d;
+
+            yLo = (d + (MULSHIFT32(t, *wp as i32) << 2));
+            wp = wp.add(1);
+            yHi = (s + (MULSHIFT32(t, *wp as i32) << 2));
+            wp = wp.add(1);
+            *y.add((i) * NBANDS as usize) = yLo;
+            *y.add((17 - i) * NBANDS as usize) = yHi;
+            mOut |= yLo.abs();
+            mOut |= yHi.abs();
+        }
+    } else {
+        /* slower method - either prev or curr is using window type != 0 so do full 36-point window
+         * output xPrevWin has at least 3 guard bits (xPrev has 2, gain 1 in WinPrevious)
+         */
+        WinPrevious(xPrev, xPrevWin.as_mut_ptr(), btPrev);
+
+        let wp = imdctWin[btCurr as usize];
+        for i in 0..9 {
+            c = *cp;
+            cp = cp.sub(1);
+            xo = *(xp.add( 9));
+            xe = *xp;
+            xp = xp.sub(1);
+            /* gain 2 int bits here */
+            xo = MULSHIFT32(c as i32, xo); /* 2*c18*xOdd (mul by 2 implicit in scaling)  */
+            xe >>= 2;
+
+            d = xe - xo;
+            (*xPrev) = xe + xo; /* symmetry - xPrev[i] = xPrev[17-i] for long blocks */
+            xPrev = xPrev.add(1);
+
+            yLo = (xPrevWin[i] + MULSHIFT32(d, wp[i] as i32)) << 2;
+            yHi = (xPrevWin[17 - i] + MULSHIFT32(d, wp[17 - i] as i32)) << 2;
+            *(y.add((i) * NBANDS)) = yLo;
+            *(y.add((17 - i) * NBANDS)) = yHi;
+            mOut |= yLo.abs();
+            mOut |= yHi.abs();
+        }
+    }
+
+    xPrev = xPrev.sub(9);
+    mOut |= FreqInvertRescale(y, xPrev, blockIdx, es);
+
+    mOut
+}
