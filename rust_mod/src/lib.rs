@@ -2872,3 +2872,41 @@ pub unsafe extern "C" fn IntensityProcMPEG2(
     *m_out.add(0) = m_out_l;
     *m_out.add(1) = m_out_r;
 }
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn MidSideProc(
+    x: *mut [i32; 576], // x[2][576]
+    n_samps: i32,
+    m_out: *mut i32,    // mOut[2]
+) {
+    let mut m_out_l = 0i32;
+    let mut m_out_r = 0i32;
+
+    // Uzyskujemy dostęp do buforów kanałów
+    // x.add(0) to kanał Mid (stanie się Lewym)
+    // x.add(1) to kanał Side (stanie się Prawym)
+    let x_left = &mut *x.add(0);
+    let x_right = &mut *x.add(1);
+
+    for i in 0..(n_samps as usize) {
+        let mid = x_left[i];
+        let side = x_right[i];
+
+        // Wykonujemy operację sumy i różnicy
+        // Używamy wrapping_add/sub, aby zachować zachowanie C w razie przepełnienia,
+        // choć przy 1 bicie strażniczym (guard bit) nie powinno to nastąpić.
+        let l = mid.wrapping_add(side);
+        let r = mid.wrapping_sub(side);
+
+        x_left[i] = l;
+        x_right[i] = r;
+
+        // Aktualizacja maski dla bitów strażniczych
+        m_out_l |= l.abs();
+        m_out_r |= r.abs();
+    }
+
+    // Łączymy nową maskę z istniejącą (operator |= w C)
+    *m_out.add(0) |= m_out_l;
+    *m_out.add(1) |= m_out_r;
+}

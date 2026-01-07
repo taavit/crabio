@@ -618,42 +618,6 @@ int MP3Dequantize(int gr){
  * S T P R O C
  **********************************************************************************************************************/
 
-/***********************************************************************************************************************
- * Function:    MidSideProc
- *
- * Description: sum-difference stereo reconstruction
- *
- * Inputs:      vector x with dequantized samples from left and right channels
- *              number of non-zero samples (MAX of left and right)
- *              assume 1 guard bit in input
- *              guard bit mask (left and right channels)
- *
- * Outputs:     updated sample vector x
- *              updated guard bit mask
- *
- * Return:      none
- *
- * Notes:       assume at least 1 GB in input
- **********************************************************************************************************************/
-void MidSideProc(int x[m_MAX_NCHAN][m_MAX_NSAMP], int nSamps, int mOut[2]){
-    int i, xr, xl, mOutL, mOutR;
-
-    /* L = (M+S)/sqrt(2), R = (M-S)/sqrt(2)
-     * NOTE: 1/sqrt(2) done in DequantChannel() - see comments there
-     */
-    mOutL = mOutR = 0;
-    for (i = 0; i < nSamps; i++) {
-        xl = x[0][i];
-        xr = x[1][i];
-        x[0][i] = xl + xr;
-        x[1][i] = xl - xr;
-        mOutL |= FASTABS(x[0][i]);
-        mOutR |= FASTABS(x[1][i]);
-    }
-    mOut[0] |= mOutL;
-    mOut[1] |= mOutR;
-}
-
 
 /***********************************************************************************************************************
  * I M D C T
