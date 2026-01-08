@@ -1320,8 +1320,8 @@ pub fn unpack_frame_header(
     buf: &[u8],
     m_FrameHeader: &mut FrameHeader,
     m_MP3DecInfo: &mut MP3DecInfo,
-    m_MPEGVersion: &mut MPEGVersion,
-    m_sMode: &mut StereoMode,
+    m_MPEGVersion: &mut i32,
+    m_sMode: &mut i32,
     m_SFBandTable: &mut SFBandTable,
 ) -> i32 {
 /* validate pointers and sync word */
@@ -1331,11 +1331,11 @@ pub fn unpack_frame_header(
     /* read header fields - use bitmasks instead of GetBits() for speed, since format never varies */
     let verIdx = (buf[1] >> 3) & 0x03;
     *m_MPEGVersion = if verIdx == 0 {
-        MPEGVersion::MPEG25
+        MPEGVersion::MPEG25 as i32
     } else if verIdx & 0x01 == 0x01 {
-        MPEGVersion::MPEG1
+        MPEGVersion::MPEG1 as i32
     } else {
-        MPEGVersion::MPEG2
+        MPEGVersion::MPEG2 as i32
     };
     m_FrameHeader.layer = 4 - ((buf[1] as i32 >> 1) & 0x03); /* easy mapping of index to layer number, 4 = error */
     m_FrameHeader.crc = 1 - ((buf[1] as i32>> 0) & 0x01);
@@ -1344,10 +1344,10 @@ pub fn unpack_frame_header(
     m_FrameHeader.paddingBit = (buf[2] as i32 >> 1) & 0x01;
     m_FrameHeader.privateBit = (buf[2] as i32 >> 0) & 0x01;
     *m_sMode = match (buf[3] >> 6) & 0x03 {
-        0x00 => StereoMode::Stereo,
-        0x01 => StereoMode::Joint,
-        0x02 => StereoMode::Dual,
-        0x03 => StereoMode::Mono,
+        0x00 => StereoMode::Stereo as i32,
+        0x01 => StereoMode::Joint as i32,
+        0x02 => StereoMode::Dual as i32,
+        0x03 => StereoMode::Mono as i32,
         _ => { return -1 }
     }; /* maps to correct enum (see definition) */
     m_FrameHeader.modeExt = (buf[3] as i32>> 4) & 0x03;
@@ -1360,13 +1360,13 @@ pub fn unpack_frame_header(
     }
     /* for readability (we reference sfBandTable many times in decoder) */
     *m_SFBandTable = sfBandTable[*m_MPEGVersion as usize][m_FrameHeader.srIdx as usize];
-    if *m_sMode != StereoMode::Joint { /* just to be safe (dequant, stproc check fh->modeExt) */
+    if *m_sMode != StereoMode::Joint as i32 { /* just to be safe (dequant, stproc check fh->modeExt) */
         m_FrameHeader.modeExt = 0;
     }
     /* init user-accessible data */
-    m_MP3DecInfo.nChans = if *m_sMode == StereoMode::Mono { 1 } else { 2 };
+    m_MP3DecInfo.nChans = if *m_sMode == StereoMode::Mono as i32 { 1 } else { 2 };
     m_MP3DecInfo.samprate = SAMPLERATE_TAB[*m_MPEGVersion as usize][m_FrameHeader.srIdx as usize];
-    m_MP3DecInfo.nGrans = if *m_MPEGVersion == MPEGVersion::MPEG1 { NGRANS_MPEG1 as i32 } else { NGRANS_MPEG2 as i32 };
+    m_MP3DecInfo.nGrans = if *m_MPEGVersion == MPEGVersion::MPEG1 as i32 { NGRANS_MPEG1 as i32 } else { NGRANS_MPEG2 as i32 };
     m_MP3DecInfo.nGranSamps = (samplesPerFrameTab[*m_MPEGVersion as usize][(m_FrameHeader.layer - 1) as usize])/m_MP3DecInfo.nGrans;
     m_MP3DecInfo.layer = m_FrameHeader.layer;
 
@@ -1380,7 +1380,7 @@ pub fn unpack_frame_header(
             ((bitrateTab[*m_MPEGVersion as usize][m_FrameHeader.layer as usize - 1][m_FrameHeader.brIdx as usize])) as i32 * 1000;
         /* nSlots = total frame bytes (from table) - sideInfo bytes - header - CRC (if present) + pad (if present) */
         m_MP3DecInfo.nSlots= slotTab[*m_MPEGVersion as usize][m_FrameHeader.srIdx as usize][m_FrameHeader.brIdx as usize]  as i32
-                - sideBytesTab[*m_MPEGVersion as usize][if *m_sMode == StereoMode::Mono { 0 } else { 1 }] - 4
+                - sideBytesTab[*m_MPEGVersion as usize][if *m_sMode == StereoMode::Mono as i32 { 0 } else { 1 }] - 4
                 - (if m_FrameHeader.crc != 0 { 2 } else { 0 }) + (if m_FrameHeader.paddingBit != 0 { 1 } else { 0 });
     }
     /* load crc word, if enabled, and return length of frame header (in bytes) */
@@ -1415,8 +1415,8 @@ mod unpack_frame_header_test {
             part23Length: [[0; MAX_NCHAN]; MAX_NGRAN],
             samprate: 0,
         };
-        let mut  m_MPEGVersion = super::MPEGVersion::MPEG1;
-        let mut  m_sMode = super::StereoMode::Stereo;
+        let mut  m_MPEGVersion = super::MPEGVersion::MPEG1 as i32;
+        let mut  m_sMode = super::StereoMode::Stereo as i32;
         let mut  m_SFBandTable = super::SFBandTable {
                 l: [0; 23],
                 s: [0; 14],

@@ -396,6 +396,30 @@ void MP3GetLastFrameInfo(
     MP3FrameInfo *m_MP3FrameInfo,
     int m_MPEGVersion
 );
+
+int MP3DecodeHelper(
+    unsigned char *inbuf,
+    size_t inbuf_len,
+    int *bytesLeft,
+    short *outbuf,
+    int useSize,
+    // Przekazujemy wskaźniki do składowych "klasy" dekodera
+    FrameHeader_t *m_FrameHeader,
+    MP3DecInfo_t *m_MP3DecInfo,
+    MPEGVersion_t *m_MPEGVersion,
+    StereoMode_t *m_sMode,
+    SFBandTable_t *m_SFBandTable,
+    SideInfo_t *m_SideInfo,
+    SideInfoSub_t (*m_SideInfoSub)[2][2],
+    HuffmanInfo_t *m_HuffmanInfo,
+    DequantInfo_t *m_DequantInfo,
+    ScaleFactorInfoSub_t (*m_ScaleFactorInfoSub)[2][2],
+    CriticalBandInfo_t (*m_CriticalBandInfo)[2],
+    ScaleFactorJS_t *m_ScaleFactorJS,
+    IMDCTInfo_t *m_IMDCTInfo,
+    SubbandInfo_t *m_SubbandInfo,
+    MP3FrameInfo_t *m_MP3FrameInfo
+);
 #ifdef __cplusplus
 }
 #endif

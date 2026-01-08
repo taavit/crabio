@@ -88,184 +88,29 @@ int MP3GetOutputSamps(){return m_MP3FrameInfo->outputSamps;}
  *                is not supported (bit reservoir is not maintained if useSize on)
  **********************************************************************************************************************/
 int MP3Decode( unsigned char *inbuf, size_t inbuf_len, int *bytesLeft, short *outbuf, int useSize){
-    int offset, bitOffset, mainBits, gr, ch, fhBytes, siBytes, freeFrameBytes;
-    int prevBitOffset, sfBlockBits, huffBlockBits;
-    unsigned char *mainPtr;
+    return MP3DecodeHelper(
+        inbuf,
+        inbuf_len,
+        bytesLeft,
+        outbuf,
+        useSize,
 
-    /* unpack frame header */
-    fhBytes = UnpackFrameHeader(inbuf, inbuf_len, m_FrameHeader, m_MP3DecInfo, &m_MPEGVersion, &m_sMode, &m_SFBandTable);
-    if (fhBytes < 0)
-        return ERR_MP3_INVALID_FRAMEHEADER; /* don't clear outbuf since we don't know size (failed to parse header) */
-    inbuf += fhBytes;
-    /* unpack side info */
-    siBytes = UnpackSideInfo( inbuf,
+        m_FrameHeader,
+        m_MP3DecInfo,
+        &m_MPEGVersion,
+        &m_sMode,
+        &m_SFBandTable,
         m_SideInfo,
         &m_SideInfoSub,
-        m_MP3DecInfo,
-        m_MPEGVersion,     // 1 = MPEG1, 0 = MPEG2/2.5
-        m_sMode
-);
-    if (siBytes < 0) {
-        MP3ClearBadFrame(m_MP3DecInfo, outbuf);
-        return ERR_MP3_INVALID_SIDEINFO;
-    }
-    inbuf += siBytes;
-    *bytesLeft -= (fhBytes + siBytes);
-
-    /* if free mode, need to calculate bitrate and nSlots manually, based on frame size */
-    if (m_MP3DecInfo->bitrate == 0 || m_MP3DecInfo->freeBitrateFlag) {
-        if(!m_MP3DecInfo->freeBitrateFlag){
-            /* first time through, need to scan for next sync word and figure out frame size */
-            m_MP3DecInfo->freeBitrateFlag=1;
-            m_MP3DecInfo->freeBitrateSlots=MP3FindFreeSync(inbuf, inbuf - fhBytes - siBytes, *bytesLeft);
-            if(m_MP3DecInfo->freeBitrateSlots < 0){
-                MP3ClearBadFrame(m_MP3DecInfo, outbuf);
-                m_MP3DecInfo->freeBitrateFlag = 0;
-                return ERR_MP3_FREE_BITRATE_SYNC;
-            }
-            freeFrameBytes=m_MP3DecInfo->freeBitrateSlots + fhBytes + siBytes;
-            m_MP3DecInfo->bitrate=(freeFrameBytes * m_MP3DecInfo->samprate * 8)
-                    / (m_MP3DecInfo->nGrans * m_MP3DecInfo->nGranSamps);
-        }
-        m_MP3DecInfo->nSlots = m_MP3DecInfo->freeBitrateSlots + CheckPadBit(); /* add pad byte, if required */
-    }
-
-    /* useSize != 0 means we're getting reformatted (RTP) packets (see RFC 3119)
-     *  - calling function assembles "self-contained" MP3 frames by shifting any main_data
-     *      from the bit reservoir (in previous frames) to AFTER the sync word and side info
-     *  - calling function should set mainDataBegin to 0, and tell us exactly how large this
-     *      frame is (in bytesLeft)
-     */
-    if (useSize) {
-        m_MP3DecInfo->nSlots = *bytesLeft;
-        if (m_MP3DecInfo->mainDataBegin != 0 || m_MP3DecInfo->nSlots <= 0) {
-            /* error - non self-contained frame, or missing frame (size <= 0), could do loss concealment here */
-            MP3ClearBadFrame(m_MP3DecInfo, outbuf);
-            return ERR_MP3_INVALID_FRAMEHEADER;
-        }
-
-        /* can operate in-place on reformatted frames */
-        m_MP3DecInfo->mainDataBytes = m_MP3DecInfo->nSlots;
-        mainPtr = inbuf;
-        inbuf += m_MP3DecInfo->nSlots;
-        *bytesLeft -= (m_MP3DecInfo->nSlots);
-    } else {
-        /* out of data - assume last or truncated frame */
-        if (m_MP3DecInfo->nSlots > *bytesLeft) {
-            MP3ClearBadFrame(m_MP3DecInfo, outbuf);
-            return ERR_MP3_INDATA_UNDERFLOW;
-        }
-        /* fill main data buffer with enough new data for this frame */
-        if (m_MP3DecInfo->mainDataBytes >= m_MP3DecInfo->mainDataBegin) {
-            /* adequate "old" main data available (i.e. bit reservoir) */
-            memmove(m_MP3DecInfo->mainBuf,
-                    m_MP3DecInfo->mainBuf + m_MP3DecInfo->mainDataBytes - m_MP3DecInfo->mainDataBegin,
-                    m_MP3DecInfo->mainDataBegin);
-            memcpy (m_MP3DecInfo->mainBuf + m_MP3DecInfo->mainDataBegin, inbuf,
-                    m_MP3DecInfo->nSlots);
-
-            m_MP3DecInfo->mainDataBytes = m_MP3DecInfo->mainDataBegin + m_MP3DecInfo->nSlots;
-            inbuf += m_MP3DecInfo->nSlots;
-            *bytesLeft -= (m_MP3DecInfo->nSlots);
-            mainPtr = m_MP3DecInfo->mainBuf;
-        } else {
-            /* not enough data in bit reservoir from previous frames (perhaps starting in middle of file) */
-            memcpy(m_MP3DecInfo->mainBuf + m_MP3DecInfo->mainDataBytes, inbuf, m_MP3DecInfo->nSlots);
-            m_MP3DecInfo->mainDataBytes += m_MP3DecInfo->nSlots;
-            inbuf += m_MP3DecInfo->nSlots;
-            *bytesLeft -= (m_MP3DecInfo->nSlots);
-            MP3ClearBadFrame(m_MP3DecInfo, outbuf);
-            return ERR_MP3_MAINDATA_UNDERFLOW;
-        }
-    }
-    bitOffset = 0;
-    mainBits = m_MP3DecInfo->mainDataBytes * 8;
-
-    /* decode one complete frame */
-    for (gr = 0; gr < m_MP3DecInfo->nGrans; gr++) {
-        for (ch = 0; ch < m_MP3DecInfo->nChans; ch++) {
-            /* unpack scale factors and compute size of scale factor block */
-            prevBitOffset = bitOffset;
-            offset = UnpackScaleFactors( mainPtr, &bitOffset,
-                    mainBits, gr, ch,
-                    &m_SideInfoSub,
-                    &m_ScaleFactorInfoSub,
-                    m_MP3DecInfo,
-                    m_SideInfo,
-                    m_FrameHeader,
-                    m_ScaleFactorJS,
-                    m_MPEGVersion
-                );
-            sfBlockBits = 8 * offset - prevBitOffset + bitOffset;
-            huffBlockBits = m_MP3DecInfo->part23Length[gr][ch] - sfBlockBits;
-            mainPtr += offset;
-            mainBits -= sfBlockBits;
-
-            if (offset < 0 || mainBits < huffBlockBits) {
-                MP3ClearBadFrame(m_MP3DecInfo, outbuf);
-                return ERR_MP3_INVALID_SCALEFACT;
-            }
-            /* decode Huffman code words */
-            prevBitOffset = bitOffset;
-            offset = DecodeHuffman(
-                mainPtr, &bitOffset, huffBlockBits, gr, ch,
-                m_HuffmanInfo,
-                &m_SFBandTable,
-                &m_SideInfoSub,
-                &m_MPEGVersion
-            );
-            if (offset < 0) {
-                MP3ClearBadFrame(m_MP3DecInfo, outbuf);
-                return ERR_MP3_INVALID_HUFFCODES;
-            }
-            mainPtr += offset;
-            mainBits -= (8 * offset - prevBitOffset + bitOffset);
-        }
-        /* dequantize coefficients, decode stereo, reorder short blocks */
-        if (MP3Dequantize(
-            gr,
-            m_MP3DecInfo,
-            m_HuffmanInfo,
-            m_DequantInfo,
-            &m_SideInfoSub,
-            &m_ScaleFactorInfoSub,
-            &m_CriticalBandInfo,
-            m_FrameHeader,
-            &m_SFBandTable,
-            m_ScaleFactorJS,
-            m_MPEGVersion
-        ) < 0) {
-            MP3ClearBadFrame(m_MP3DecInfo, outbuf);
-            return ERR_MP3_INVALID_DEQUANTIZE;
-        }
-
-        /* alias reduction, inverse MDCT, overlap-add, frequency inversion */
-        for (ch = 0; ch < m_MP3DecInfo->nChans; ch++) {
-            if (IMDCT( gr, ch,
-                &m_SFBandTable,
-        m_MPEGVersion,
-        &m_SideInfoSub,
         m_HuffmanInfo,
-        m_IMDCTInfo
-            ) < 0) {
-                MP3ClearBadFrame(m_MP3DecInfo, outbuf);
-                return ERR_MP3_INVALID_IMDCT;
-            }
-        }
-        /* subband transform - if stereo, interleaves pcm LRLRLR */
-        if (Subband(
-                outbuf + gr * m_MP3DecInfo->nGranSamps * m_MP3DecInfo->nChans, m_MP3DecInfo, m_IMDCTInfo, m_SubbandInfo)
-                < 0) {
-            MP3ClearBadFrame(m_MP3DecInfo, outbuf);
-            return ERR_MP3_INVALID_SUBBAND;
-        }
-    }
-    MP3GetLastFrameInfo(
-        m_MP3DecInfo,
-        m_MP3FrameInfo,
-        m_MPEGVersion
+        m_DequantInfo,
+        &m_ScaleFactorInfoSub,
+        &m_CriticalBandInfo,
+        m_ScaleFactorJS,
+        m_IMDCTInfo,
+        m_SubbandInfo,
+        m_MP3FrameInfo
     );
-    return ERR_MP3_NONE;
 }
 
 /***********************************************************************************************************************
