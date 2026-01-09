@@ -1461,6 +1461,91 @@ impl MP3Decoder {
             self.m_MP3FrameInfo.version= self.m_MPEGVersion;
         }
     }
+
+    pub fn unpack_side_info(
+        &mut self,
+        buf: &[u8],
+    ) -> usize {
+        let n_bytes: usize;
+
+        let m_side_info_sub = &mut self.m_SideInfoSub;
+        let m_mp3_dec_info = &mut self.m_MP3DecInfo;
+        let m_mpegversion = self.m_MPEGVersion;
+        let m_s_mode = self.m_sMode;
+        let m_side_info = &mut self.m_SideInfo;
+
+        let mut bsi: BitStreamInfo;
+
+        /* validate pointers and sync word */
+        if m_mpegversion == MPEGVersion::MPEG1 {
+            /* MPEG 1 */
+            n_bytes= if m_s_mode == StereoMode::Mono { SIBYTES_MPEG1_MONO } else { SIBYTES_MPEG1_STEREO };
+            bsi = BitStreamInfo::from_slice(buf);
+            m_side_info.mainDataBegin = bsi.get_bits(9) as i32;
+            m_side_info.privateBits= bsi.get_bits
+                (if m_s_mode == StereoMode::Mono { 5 } else { 3 }) as i32;
+            for ch in 0..m_mp3_dec_info.nChans {
+                for bd in 0..MAX_SCFBD {
+                    m_side_info.scfsi[ch as usize][bd] = bsi.get_bits(1) as i32;
+                }
+            }
+        } else {
+            /* MPEG 2, MPEG 2.5 */
+            n_bytes = if m_s_mode == StereoMode::Mono { SIBYTES_MPEG2_MONO } else { SIBYTES_MPEG2_STEREO };
+            bsi = BitStreamInfo::from_slice(buf);
+            m_side_info.mainDataBegin = bsi.get_bits(8) as i32;
+            m_side_info.privateBits = bsi.get_bits(if m_s_mode == StereoMode::Mono { 1 } else { 2 }) as i32;
+        }
+        for gr in 0..m_mp3_dec_info.nGrans {
+            for ch in  0..m_mp3_dec_info.nChans {
+                let sis =  &mut m_side_info_sub[gr as usize][ch as usize]; /* side info subblock for this granule, channel */
+                sis.part23_length = bsi.get_bits(12) as i32;
+                sis.n_bigvals = bsi.get_bits(9) as i32;
+                sis.global_gain = bsi.get_bits(8) as i32;
+                sis.sfCompress = bsi.get_bits(if m_mpegversion == MPEGVersion::MPEG1 { 4 } else { 9 }) as i32;
+                sis.win_switch_flag = bsi.get_bits(1) as i32;
+                if sis.win_switch_flag != 0 {
+                    /* this is a start, stop, short, or mixed block */
+                    sis.blockType = bsi.get_bits(2) as i32; /* 0 = normal, 1 = start, 2 = short, 3 = stop */
+                    sis.mixedBlock = bsi.get_bits(1) as i32; /* 0 = not mixed, 1 = mixed */
+                    sis.tableSelect[0] = bsi.get_bits(5) as i32;
+                    sis.tableSelect[1] = bsi.get_bits(5) as i32;
+                    sis.tableSelect[2] = 0; /* unused */
+                    sis.subBlockGain[0] = bsi.get_bits(3) as i32;
+                    sis.subBlockGain[1] = bsi.get_bits(3) as i32;
+                    sis.subBlockGain[2] = bsi.get_bits(3) as i32;
+                    if sis.blockType == 0 {
+                        /* this should not be allowed, according to spec */
+                        sis.n_bigvals = 0;
+                        sis.part23_length = 0;
+                        sis.sfCompress = 0;
+                    } else if sis.blockType == 2 && sis.mixedBlock == 0 {
+                        /* short block, not mixed */
+                        sis.region0Count = 8;
+                    } else {
+                        /* start, stop, or short-mixed */
+                        sis.region0Count = 7;
+                    }
+                    sis.region1Count = 20 - sis.region0Count;
+                } else {
+                    /* this is a normal block */
+                    sis.blockType = 0;
+                    sis.mixedBlock = 0;
+                    sis.tableSelect[0] = bsi.get_bits(5) as i32;
+                    sis.tableSelect[1] = bsi.get_bits(5) as i32;
+                    sis.tableSelect[2] = bsi.get_bits(5) as i32;
+                    sis.region0Count = bsi.get_bits(4) as i32;
+                    sis.region1Count = bsi.get_bits(3) as i32;
+                }
+                sis.preFlag = if m_mpegversion == MPEGVersion::MPEG1 { bsi.get_bits(1) as i32 } else { 0 };
+                sis.sfactScale = bsi.get_bits(1) as i32;
+                sis.count1TableSelect = bsi.get_bits(1) as i32;
+            }
+        }
+        m_mp3_dec_info.mainDataBegin = m_side_info.mainDataBegin; /* needed by main decode loop */
+        // assert(nBytes == CalcBitsUsed(bsi, buf, 0) >> 3);
+        n_bytes
+    }
 }
 
 
