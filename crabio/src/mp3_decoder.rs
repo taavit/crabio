@@ -2,10 +2,10 @@ pub const SYNCWORDH: u8              =0xff;
 pub const SYNCWORDL: u8              =0xf0;
 pub const DQ_FRACBITS_OUT: u8        =25;  // number of fraction bits in output of dequant
 pub const CSHIFT: u8                 =12;  // coefficients have 12 leading sign bits for early-terminating mulitplies
-pub const SIBYTES_MPEG1_MONO: u8     =17;
-pub const SIBYTES_MPEG1_STEREO: u8   =32;
-pub const SIBYTES_MPEG2_MONO: u8     =9;
-pub const SIBYTES_MPEG2_STEREO: u8   =17;
+pub const SIBYTES_MPEG1_MONO: usize  =17;
+pub const SIBYTES_MPEG1_STEREO: usize=32;
+pub const SIBYTES_MPEG2_MONO: usize  =9;
+pub const SIBYTES_MPEG2_STEREO: usize=17;
 pub const IMDCT_SCALE: u8            =2;   // additional scaling (by sqrt(2)) for fast IMDCT36
 pub const NGRANS_MPEG1: u8           =2;
 pub const NGRANS_MPEG2: u8           =1;
@@ -264,6 +264,75 @@ pub struct BitStreamInfo<'a> {
     pub cached_bits: i32,
 }
 
+impl<'a> BitStreamInfo<'a> {
+    pub fn from_slice(bytes: &'a [u8]) -> Self {
+        Self {
+            bytes,
+            cache: 0,
+            cached_bits: 0,
+        }
+    }
+    pub fn get_bits(&mut self, mut n_bits: u32) -> u32 {
+        n_bits = n_bits.min(32);
+
+        // Special case: requesting 0 bits
+        if n_bits == 0 {
+            return 0;
+        }
+
+        // Extract top n_bits from current cache
+        let mut data = self.cache.wrapping_shr(32 - n_bits);
+
+        // Consume the bits we just read
+        self.cache = self.cache.wrapping_shl(n_bits);
+        self.cached_bits -= n_bits as i32;
+
+        // If we went negative → we crossed a 32-bit boundary → need to refill
+        if self.cached_bits < 0 {
+            let needed = (-self.cached_bits) as u32;  // positive amount needed from new cache
+
+            self.refill_bitstream_cache();
+
+            // OR in up to 'needed' bits from the freshly loaded cache
+            let available = self.cached_bits.max(0) as u32;
+            let take = needed.min(available);
+
+            if take > 0 {
+                data |= self.cache.wrapping_shr(32 - take);
+
+                self.cache = self.cache.wrapping_shl(take);
+                self.cached_bits -= take as i32;
+            }
+            // If no more data (EOF), low bits stay 0 — correct behavior
+        }
+
+        data
+    }
+
+    pub fn refill_bitstream_cache(&mut self) {
+        let len = self.bytes.len();
+        if len == 0 {
+            self.cache = 0;
+            self.cached_bits = 0;
+        } else if len >= 4 {
+            self.cache = u32::from_be_bytes([self.bytes[0], self.bytes[1], self.bytes[2], self.bytes[3]]);
+            self.cached_bits = 32;
+            self.bytes = &self.bytes[4..];
+        } else {
+            self.cache = 0u32;
+            for &byte in self.bytes {
+                self.cache = (self.cache << 8) | (byte as u32);
+            }
+            let shift = 8 * (4-len);
+            self.cache = self.cache << shift;
+            self.cached_bits = (8 * len) as i32;
+            self.bytes = &[];
+        }
+    }
+
+
+}
+
 #[repr(C)]
 #[allow(non_snake_case)]
 #[derive(Default)]
@@ -409,66 +478,6 @@ pub struct MP3Decoder {
     pub m_sMode: i32,  /* mono/stereo mode */
     pub m_MPEGVersion: i32,  /* version ID */
 }
-
-
-pub fn get_bits(bsi: &mut BitStreamInfo<'_>, mut n_bits: u32) -> u32 {
-    n_bits = n_bits.min(32);
-
-    // Special case: requesting 0 bits
-    if n_bits == 0 {
-        return 0;
-    }
-
-    // Extract top n_bits from current cache
-    let mut data = bsi.cache.wrapping_shr(32 - n_bits);
-
-    // Consume the bits we just read
-    bsi.cache = bsi.cache.wrapping_shl(n_bits);
-    bsi.cached_bits -= n_bits as i32;
-
-    // If we went negative → we crossed a 32-bit boundary → need to refill
-    if bsi.cached_bits < 0 {
-        let needed = (-bsi.cached_bits) as u32;  // positive amount needed from new cache
-
-        refill_bitstream_cache(bsi);
-
-        // OR in up to 'needed' bits from the freshly loaded cache
-        let available = bsi.cached_bits.max(0) as u32;
-        let take = needed.min(available);
-
-        if take > 0 {
-            data |= bsi.cache.wrapping_shr(32 - take);
-
-            bsi.cache = bsi.cache.wrapping_shl(take);
-            bsi.cached_bits -= take as i32;
-        }
-        // If no more data (EOF), low bits stay 0 — correct behavior
-    }
-
-    data
-}
-
-pub fn refill_bitstream_cache(bsi: &mut BitStreamInfo<'_>) {
-    let len = bsi.bytes.len();
-    if len == 0 {
-        bsi.cache = 0;
-        bsi.cached_bits = 0;
-    } else if len >= 4 {
-        bsi.cache = u32::from_be_bytes([bsi.bytes[0], bsi.bytes[1], bsi.bytes[2], bsi.bytes[3]]);
-        bsi.cached_bits = 32;
-        bsi.bytes = &bsi.bytes[4..];
-    } else {
-        bsi.cache = 0u32;
-        for &byte in bsi.bytes {
-            bsi.cache = (bsi.cache << 8) | (byte as u32);
-        }
-        let shift = 8 * (4-len);
-        bsi.cache = bsi.cache << shift;
-        bsi.cached_bits = (8 * len) as i32;
-        bsi.bytes = &[];
-    }
-}
-
 
 /***********************************************************************************************************************
  * Function:    MP3FindSyncWord

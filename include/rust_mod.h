@@ -292,8 +292,6 @@ typedef struct MP3Decoder {
 
 } MP3Decoder_t;
 
-void RefillBitstreamCache(BitStreamInfo_t *bsi);
-unsigned int GetBits(BitStreamInfo_t *bsi, int nBits);
 void SetBitstreamPointer(BitStreamInfo_t *bsi, int nBytes, unsigned char *buf);
 int CheckPadBit();
 int CalcBitsUsed(BitStreamInfo_t *bsi, unsigned char *startBuf, int startOffset);

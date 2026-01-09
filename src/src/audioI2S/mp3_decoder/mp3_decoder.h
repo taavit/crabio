@@ -217,7 +217,6 @@ void MP3Decoder_ClearBuffer(void);
 void PolyphaseMono(short *pcm, int *vbuf, const uint32_t *coefBase);
 void PolyphaseStereo(short *pcm, int *vbuf, const uint32_t *coefBase);
 void SetBitstreamPointer(BitStreamInfo_t *bsi, int nBytes, unsigned char *buf);
-unsigned int GetBits(BitStreamInfo_t *bsi, int nBits);
 int CalcBitsUsed(BitStreamInfo_t *bsi, unsigned char *startBuf, int startOffset);
 // int DequantChannel(int *sampleBuf, int *workBuf, int *nonZeroBound, SideInfoSub_t *sis, ScaleFactorInfoSub_t *sfis, CriticalBandInfo_t *cbi);
 void MidSideProc(int x[m_MAX_NCHAN][m_MAX_NSAMP], int nSamps, int mOut[2]);
@@ -261,7 +260,6 @@ int Subband(short *pcmBuf,
     SubbandInfo_t *m_SubbandInfo
 );
 short ClipToShort(int x, int fracBits);
-void RefillBitstreamCache(BitStreamInfo_t *bsi);
 void UnpackSFMPEG1(BitStreamInfo_t *bsi, SideInfoSub_t *sis, ScaleFactorInfoSub_t *sfis, int *scfsi, int gr, ScaleFactorInfoSub_t *sfisGr0);
 void UnpackSFMPEG2(BitStreamInfo_t *bsi, SideInfoSub_t *sis, ScaleFactorInfoSub_t *sfis, int gr, int ch, int modeExt, ScaleFactorJS_t *sfjs);
 int MP3FindFreeSync(unsigned char *buf, unsigned char firstFH[4], int nBytes);

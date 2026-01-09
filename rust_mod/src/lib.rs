@@ -3,7 +3,10 @@
 use core::{panic::PanicInfo, ptr::null};
 
 use crabio::mp3_decoder::{
-    BLOCK_SIZE, BitStreamInfo, CriticalBandInfo, DequantInfo, FrameHeader, HUFF_PAIRTABS, HuffTabLookup, HuffTabType, HuffmanInfo, IMDCT_SCALE, IMDCTInfo, MAX_NCHAN, MAX_NGRAN, MAX_NSAMP, MAX_SCFBD, MP3DecInfo, MP3Decoder, MP3FrameInfo, MPEGVersion, NBANDS, POLY_COEF, SFBandTable, SIBYTES_MPEG1_MONO, SIBYTES_MPEG1_STEREO, SIBYTES_MPEG2_MONO, SIBYTES_MPEG2_STEREO, SQRTHALF, ScaleFactorInfoSub, ScaleFactorJS, SideInfo, SideInfoSub, StereoMode, SubbandInfo, VBUF_LENGTH, clip_2n, clip_to_short, fdct_32, freq_invert_rescale, get_bits, idct_9, imdct_12, madd_64, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, polyphase_mono, polyphase_stereo, refill_bitstream_cache, samplesPerFrameTab, sar_64, win_previous
+    BLOCK_SIZE,
+    BitStreamInfo,
+    CriticalBandInfo,
+    DequantInfo, FrameHeader, HUFF_PAIRTABS, HuffTabLookup, HuffTabType, HuffmanInfo, IMDCT_SCALE, IMDCTInfo, MAX_NCHAN, MAX_NGRAN, MAX_NSAMP, MAX_SCFBD, MP3DecInfo, MP3Decoder, MP3FrameInfo, MPEGVersion, NBANDS, POLY_COEF, SFBandTable, SIBYTES_MPEG1_MONO, SIBYTES_MPEG1_STEREO, SIBYTES_MPEG2_MONO, SIBYTES_MPEG2_STEREO, SQRTHALF, ScaleFactorInfoSub, ScaleFactorJS, SideInfo, SideInfoSub, StereoMode, SubbandInfo, VBUF_LENGTH, clip_2n, clip_to_short, fdct_32, freq_invert_rescale, idct_9, imdct_12, madd_64, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, polyphase_mono, polyphase_stereo, sar_64, win_previous
 };
 
 #[repr(C)]
@@ -97,8 +100,7 @@ fn panic_handler(_: &PanicInfo) -> ! {
     loop {}
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn RefillBitstreamCache(bsi_c: *mut BitStreamInfoC) {
+pub fn GetBits(bsi_c: *mut BitStreamInfoC, n_bits: u32) -> u32 {
     let bsi_c: &mut BitStreamInfoC = unsafe { &mut *bsi_c };
     let data_slice = unsafe { core::slice::from_raw_parts(bsi_c.byte_ptr, bsi_c.n_bytes as usize) };
     let mut bsi_rs = BitStreamInfo {
@@ -107,25 +109,7 @@ pub extern "C" fn RefillBitstreamCache(bsi_c: *mut BitStreamInfoC) {
         cached_bits: bsi_c.cached_bits,
     };
 
-    refill_bitstream_cache(&mut bsi_rs);
-    bsi_c.i_cache = bsi_rs.cache;
-    let consumed = data_slice.len() - bsi_rs.bytes.len();
-    bsi_c.byte_ptr = unsafe { bsi_c.byte_ptr.add(consumed) };
-    bsi_c.n_bytes -= consumed as i32;
-    bsi_c.cached_bits = bsi_rs.cached_bits;
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn GetBits(bsi_c: *mut BitStreamInfoC, n_bits: u32) -> u32 {
-    let bsi_c: &mut BitStreamInfoC = unsafe { &mut *bsi_c };
-    let data_slice = unsafe { core::slice::from_raw_parts(bsi_c.byte_ptr, bsi_c.n_bytes as usize) };
-    let mut bsi_rs = BitStreamInfo {
-        bytes: data_slice,
-        cache: bsi_c.i_cache,
-        cached_bits: bsi_c.cached_bits,
-    };
-
-    let res = get_bits(&mut bsi_rs, n_bits);
+    let res = bsi_rs.get_bits(n_bits);
     bsi_c.i_cache = bsi_rs.cache;
     let consumed = data_slice.len() - bsi_rs.bytes.len();
     bsi_c.byte_ptr = unsafe { bsi_c.byte_ptr.add(consumed) };
@@ -303,58 +287,56 @@ pub unsafe fn UnpackSideInfo(
     m_MP3DecInfo: *mut MP3DecInfo,
     m_MPEGVersion: i32,     // 1 = MPEG1, 0 = MPEG2/2.5
     m_sMode: i32,
-) -> i32 {
-    let mut gr: i32;
-    let mut ch: i32;
-    let mut bd: i32;
-    let mut nBytes: i32;
+) -> usize {
+    let n_bytes: usize;
 
     let m_SideInfoSub = unsafe { &mut *m_SideInfoSub };
     let m_MP3DecInfo = unsafe { &mut *m_MP3DecInfo };
 
-    let mut bitStreamInfo: BitStreamInfoC = core::mem::zeroed();
-    let mut bsi: *mut BitStreamInfoC = &mut bitStreamInfo;
+    let mut bsi: BitStreamInfo;
 
     /* validate pointers and sync word */
     if (m_MPEGVersion == MPEGVersion::MPEG1 as i32) {
         /* MPEG 1 */
-        nBytes= if m_sMode == StereoMode::Mono as i32 { SIBYTES_MPEG1_MONO as i32 } else { SIBYTES_MPEG1_STEREO as i32 };
-        SetBitstreamPointer(bsi, nBytes, buf);
-        m_SideInfo.mainDataBegin = GetBits(bsi, 9) as i32;
-        m_SideInfo.privateBits= GetBits(
-            bsi,
-            (if m_sMode == StereoMode::Mono as i32 { 5 } else { 3 })
-        ) as i32;
+        n_bytes= if m_sMode == StereoMode::Mono as i32 { SIBYTES_MPEG1_MONO } else { SIBYTES_MPEG1_STEREO };
+        bsi = BitStreamInfo::from_slice(unsafe {
+            core::slice::from_raw_parts(buf, n_bytes)
+        });
+        m_SideInfo.mainDataBegin = bsi.get_bits(9) as i32;
+        m_SideInfo.privateBits= bsi.get_bits
+            (if m_sMode == StereoMode::Mono as i32 { 5 } else { 3 }) as i32;
         for ch in 0..m_MP3DecInfo.nChans {
             for bd in 0..MAX_SCFBD {
-                m_SideInfo.scfsi[ch as usize][bd] = GetBits(bsi, 1) as i32;
+                m_SideInfo.scfsi[ch as usize][bd] = bsi.get_bits(1) as i32;
             }
         }
     } else {
         /* MPEG 2, MPEG 2.5 */
-        nBytes = if m_sMode == StereoMode::Mono as i32 { SIBYTES_MPEG2_MONO as i32 } else { SIBYTES_MPEG2_STEREO as i32};
-        SetBitstreamPointer(bsi, nBytes, buf);
-        m_SideInfo.mainDataBegin = GetBits(bsi, 8) as i32;
-        m_SideInfo.privateBits = GetBits(bsi, if m_sMode == StereoMode::Mono as i32 { 1 } else { 2 }) as i32;
+        n_bytes = if m_sMode == StereoMode::Mono as i32 { SIBYTES_MPEG2_MONO } else { SIBYTES_MPEG2_STEREO };
+        bsi = BitStreamInfo::from_slice(unsafe {
+            core::slice::from_raw_parts(buf, n_bytes)
+        });
+        m_SideInfo.mainDataBegin = bsi.get_bits(8) as i32;
+        m_SideInfo.privateBits = bsi.get_bits(if m_sMode == StereoMode::Mono as i32 { 1 } else { 2 }) as i32;
     }
     for gr in 0..m_MP3DecInfo.nGrans {
         for ch in  0..m_MP3DecInfo.nChans {
             let sis =  &mut m_SideInfoSub[gr as usize][ch as usize]; /* side info subblock for this granule, channel */
-            sis.part23_length = GetBits(bsi, 12) as i32;
-            sis.n_bigvals = GetBits(bsi, 9) as i32;
-            sis.global_gain = GetBits(bsi, 8) as i32;
-            sis.sfCompress = GetBits(bsi, if m_MPEGVersion == MPEGVersion::MPEG1 as i32 { 4 } else { 9 }) as i32;
-            sis.win_switch_flag = GetBits(bsi, 1) as i32;
+            sis.part23_length = bsi.get_bits(12) as i32;
+            sis.n_bigvals = bsi.get_bits(9) as i32;
+            sis.global_gain = bsi.get_bits(8) as i32;
+            sis.sfCompress = bsi.get_bits(if m_MPEGVersion == MPEGVersion::MPEG1 as i32 { 4 } else { 9 }) as i32;
+            sis.win_switch_flag = bsi.get_bits(1) as i32;
             if sis.win_switch_flag != 0 {
                 /* this is a start, stop, short, or mixed block */
-                sis.blockType = GetBits(bsi, 2) as i32; /* 0 = normal, 1 = start, 2 = short, 3 = stop */
-                sis.mixedBlock = GetBits(bsi, 1) as i32; /* 0 = not mixed, 1 = mixed */
-                sis.tableSelect[0] = GetBits(bsi, 5) as i32;
-                sis.tableSelect[1] = GetBits(bsi, 5) as i32;
+                sis.blockType = bsi.get_bits(2) as i32; /* 0 = normal, 1 = start, 2 = short, 3 = stop */
+                sis.mixedBlock = bsi.get_bits(1) as i32; /* 0 = not mixed, 1 = mixed */
+                sis.tableSelect[0] = bsi.get_bits(5) as i32;
+                sis.tableSelect[1] = bsi.get_bits(5) as i32;
                 sis.tableSelect[2] = 0; /* unused */
-                sis.subBlockGain[0] = GetBits(bsi, 3) as i32;
-                sis.subBlockGain[1] = GetBits(bsi, 3) as i32;
-                sis.subBlockGain[2] = GetBits(bsi, 3) as i32;
+                sis.subBlockGain[0] = bsi.get_bits(3) as i32;
+                sis.subBlockGain[1] = bsi.get_bits(3) as i32;
+                sis.subBlockGain[2] = bsi.get_bits(3) as i32;
                 if (sis.blockType == 0) {
                     /* this should not be allowed, according to spec */
                     sis.n_bigvals = 0;
@@ -372,20 +354,20 @@ pub unsafe fn UnpackSideInfo(
                 /* this is a normal block */
                 sis.blockType = 0;
                 sis.mixedBlock = 0;
-                sis.tableSelect[0] = GetBits(bsi, 5) as i32;
-                sis.tableSelect[1] = GetBits(bsi, 5) as i32;
-                sis.tableSelect[2] = GetBits(bsi, 5) as i32;
-                sis.region0Count = GetBits(bsi, 4) as i32;
-                sis.region1Count = GetBits(bsi, 3) as i32;
+                sis.tableSelect[0] = bsi.get_bits(5) as i32;
+                sis.tableSelect[1] = bsi.get_bits(5) as i32;
+                sis.tableSelect[2] = bsi.get_bits(5) as i32;
+                sis.region0Count = bsi.get_bits(4) as i32;
+                sis.region1Count = bsi.get_bits(3) as i32;
             }
-            sis.preFlag = if m_MPEGVersion == MPEGVersion::MPEG1 as i32 { GetBits(bsi, 1) as i32 } else { 0 };
-            sis.sfactScale = GetBits(bsi, 1) as i32;
-            sis.count1TableSelect = GetBits(bsi, 1) as i32;
+            sis.preFlag = if m_MPEGVersion == MPEGVersion::MPEG1 as i32 { bsi.get_bits(1) as i32 } else { 0 };
+            sis.sfactScale = bsi.get_bits(1) as i32;
+            sis.count1TableSelect = bsi.get_bits(1) as i32;
         }
     }
     m_MP3DecInfo.mainDataBegin = m_SideInfo.mainDataBegin; /* needed by main decode loop */
     // assert(nBytes == CalcBitsUsed(bsi, buf, 0) >> 3);
-    return nBytes;
+    n_bytes
 }
 
 /***********************************************************************************************************************
@@ -2889,10 +2871,6 @@ pub unsafe extern "C" fn MidSideProc(
     m_ScaleFactorJS: *mut ScaleFactorJS,
     m_MPEGVersion: i32
 ) -> i32 {
-    // int bitsUsed;
-    // unsigned char *startBuf;
-    // BitStreamInfo_t bitStreamInfo, *bsi;
-
     /* init GetBits reader */
     let m_SideInfoSub = &mut *m_SideInfoSub;
     let m_SideInfo = &*m_SideInfo;
@@ -3107,9 +3085,9 @@ pub unsafe fn MP3DecodeHelper(
     let mut mainBits: i32;
     let mut gr: i32;
     let mut ch: i32;
-    let mut fhBytes: i32;
-    let mut siBytes: i32;
-    let mut freeFrameBytes: i32;
+    let fhBytes: i32;
+    let siBytes: i32;
+    let freeFrameBytes: i32;
     let mut prevBitOffset: i32;
     let mut sfBlockBits: i32;
     let mut huffBlockBits: i32;
@@ -3134,7 +3112,7 @@ pub unsafe fn MP3DecodeHelper(
         &mut m_MP3Decoder.m_MP3DecInfo,
         m_MP3Decoder.m_MPEGVersion,
         m_MP3Decoder.m_sMode,
-    );
+    ) as i32;
     if siBytes < 0 {
         MP3ClearBadFrame(&mut m_MP3Decoder.m_MP3DecInfo, outbuf);
         return -2; // ERR_MP3_INVALID_SIDEINFO
@@ -3275,7 +3253,7 @@ pub unsafe fn MP3DecodeHelper(
 
         let pcm_offset = (gr * (*m_MP3DecInfo).nGranSamps * (*m_MP3DecInfo).nChans) as usize;
         if Subband(outbuf.add(pcm_offset), m_MP3DecInfo, &mut m_MP3Decoder.m_IMDCTInfo, &mut m_MP3Decoder.m_SubbandInfo) < 0 {
-            MP3ClearBadFrame(m_MP3DecInfo, outbuf);
+            unsafe { MP3ClearBadFrame(m_MP3DecInfo, outbuf); }
             return -10; // ERR_MP3_INVALID_SUBBAND
         }
     }
