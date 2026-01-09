@@ -1405,7 +1405,7 @@ impl MP3Decoder {
 
 #[cfg(test)]
 mod unpack_frame_header_test {
-    use crate::mp3_decoder::{MAINBUF_SIZE, MAX_NCHAN, MAX_NGRAN, MP3Decoder, unpack_frame_header};
+    use crate::mp3_decoder::{MAINBUF_SIZE, MAX_NCHAN, MAX_NGRAN, MP3Decoder, MP3FrameInfo, unpack_frame_header};
     #[test]
     fn test_unpack_frame() {
         let buf: [u8; 4] = [0xFF,0xFB,0x92, 0x64];
@@ -1425,9 +1425,19 @@ mod unpack_frame_header_test {
             part23Length: [[0; MAX_NCHAN]; MAX_NGRAN],
             samprate: 0,
         };
+        let m_MP3FrameInfo = MP3FrameInfo {
+            bitrate: 0,
+            bitsPerSample: 0,
+            layer: 0,
+            nChans: 0,
+            outputSamps: 0,
+            samprate: 0,
+            version: 0
+        };
         let m_MP3Decoder = MP3Decoder {
             m_FrameHeader,
             m_MP3DecInfo,
+            m_MP3FrameInfo
         };
         let mut  m_MPEGVersion = super::MPEGVersion::MPEG1 as i32;
         let mut  m_sMode = super::StereoMode::Stereo as i32;
