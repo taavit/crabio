@@ -3,7 +3,7 @@
 use core::{panic::PanicInfo, ptr::null};
 
 use crabio::mp3_decoder::{
-    BLOCK_SIZE, BitStreamInfo, DequantInfo, FrameHeader, HUFF_PAIRTABS, HuffTabLookup, HuffTabType, HuffmanInfo, IMDCT_SCALE, IMDCTInfo, MAX_NCHAN, MAX_NGRAN, MAX_NSAMP, MAX_SCFBD, MP3DecInfo, MP3Decoder, MP3FrameInfo, MPEGVersion, NBANDS, POLY_COEF, SFBandTable, SIBYTES_MPEG1_MONO, SIBYTES_MPEG1_STEREO, SIBYTES_MPEG2_MONO, SIBYTES_MPEG2_STEREO, SQRTHALF, ScaleFactorInfoSub, ScaleFactorJS, SideInfo, SideInfoSub, StereoMode, SubbandInfo, VBUF_LENGTH, clip_2n, clip_to_short, fdct_32, freq_invert_rescale, get_bits, idct_9, imdct_12, madd_64, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, polyphase_mono, polyphase_stereo, refill_bitstream_cache, samplesPerFrameTab, sar_64, win_previous
+    BLOCK_SIZE, BitStreamInfo, CriticalBandInfo, DequantInfo, FrameHeader, HUFF_PAIRTABS, HuffTabLookup, HuffTabType, HuffmanInfo, IMDCT_SCALE, IMDCTInfo, MAX_NCHAN, MAX_NGRAN, MAX_NSAMP, MAX_SCFBD, MP3DecInfo, MP3Decoder, MP3FrameInfo, MPEGVersion, NBANDS, POLY_COEF, SFBandTable, SIBYTES_MPEG1_MONO, SIBYTES_MPEG1_STEREO, SIBYTES_MPEG2_MONO, SIBYTES_MPEG2_STEREO, SQRTHALF, ScaleFactorInfoSub, ScaleFactorJS, SideInfo, SideInfoSub, StereoMode, SubbandInfo, VBUF_LENGTH, clip_2n, clip_to_short, fdct_32, freq_invert_rescale, get_bits, idct_9, imdct_12, madd_64, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, polyphase_mono, polyphase_stereo, refill_bitstream_cache, samplesPerFrameTab, sar_64, win_previous
 };
 
 #[repr(C)]
@@ -2426,14 +2426,6 @@ pub unsafe extern "C" fn DequantBlock(
 /* optional pre-emphasis for high-frequency scale factor bands */
 const PRE_TAB: [u8; 22] = [ 0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,2,2,3,3,3,2,0 ];
 
-#[repr(C)]
-pub struct CriticalBandInfo {
-    cbType: i32,             /* pure long = 0, pure short = 1, mixed = 2 */
-    cbEndS: [i32; 3],          /* number nonzero short cb's, per subbblock */
-    cbEndSMax: i32,          /* max of cbEndS[] */
-    cbEndL: i32,             /* number nonzero long cb's  */
-}
-
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn DequantChannel(
     sample_buf: *mut i32,
@@ -3161,7 +3153,6 @@ pub unsafe fn MP3DecodeHelper(
     m_sMode: *mut i32,
     m_HuffmanInfo: *mut HuffmanInfo,
     m_DequantInfo: *mut DequantInfo,
-    m_CriticalBandInfo: *mut [CriticalBandInfo; 2],
     m_IMDCTInfo: *mut IMDCTInfo,
 ) -> i32 {
     let mut offset: i32;
@@ -3321,7 +3312,7 @@ pub unsafe fn MP3DecodeHelper(
             gr,
             m_MP3DecInfo,
             m_HuffmanInfo, m_DequantInfo, &mut m_MP3Decoder.m_SideInfoSub, 
-            &mut m_MP3Decoder.m_ScaleFactorInfoSub, m_CriticalBandInfo, m_FrameHeader, 
+            &mut m_MP3Decoder.m_ScaleFactorInfoSub, &mut m_MP3Decoder.m_CriticalBandInfo, m_FrameHeader, 
             m_SFBandTable,&mut m_MP3Decoder.m_ScaleFactorJS, *m_MPEGVersion
         ) < 0 {
             MP3ClearBadFrame(m_MP3DecInfo, outbuf);

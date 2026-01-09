@@ -307,12 +307,14 @@ pub struct SideInfo {
     pub scfsi: [[i32; MAX_SCFBD]; MAX_NCHAN],                /* 4 scalefactor bands per channel */
 }
 
-struct CriticalBandInfo {
-    cbType: i32,             /* pure long = 0, pure short = 1, mixed = 2 */
-    cbEndS: [i32; 3],          /* number nonzero short cb's, per subbblock */
-    cbEndSMax: i32,          /* max of cbEndS[] */
-    cbEndL: i32,             /* number nonzero long cb's  */
+#[repr(C)]
+pub struct CriticalBandInfo {
+    pub cbType: i32,             /* pure long = 0, pure short = 1, mixed = 2 */
+    pub cbEndS: [i32; 3],          /* number nonzero short cb's, per subbblock */
+    pub cbEndSMax: i32,          /* max of cbEndS[] */
+    pub cbEndL: i32,             /* number nonzero long cb's  */
 }
+
 
 #[repr(C)]
 pub struct DequantInfo {
@@ -400,6 +402,7 @@ pub struct MP3Decoder {
     pub m_ScaleFactorJS: ScaleFactorJS,
     pub m_SubbandInfo: SubbandInfo,
     pub m_ScaleFactorInfoSub: [[ScaleFactorInfoSub; MAX_NCHAN]; MAX_NGRAN],
+    pub m_CriticalBandInfo: [CriticalBandInfo; MAX_NCHAN],  /* filled in dequantizer, used in joint stereo reconstruction */
 }
 
 
