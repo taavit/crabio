@@ -29,7 +29,6 @@ CriticalBandInfo_t m_CriticalBandInfo[m_MAX_NCHAN];  /* filled in dequantizer, u
 DequantInfo_t *m_DequantInfo;
 HuffmanInfo_t *m_HuffmanInfo;
 IMDCTInfo_t *m_IMDCTInfo;
-ScaleFactorInfoSub_t m_ScaleFactorInfoSub[m_MAX_NGRAN][m_MAX_NCHAN];
 
 /* format = Q30, range = [0.0981, 1.9976]
  *
@@ -93,7 +92,6 @@ int MP3Decode( unsigned char *inbuf, size_t inbuf_len, int *bytesLeft, short *ou
         &m_sMode,
         m_HuffmanInfo,
         m_DequantInfo,
-        &m_ScaleFactorInfoSub,
         &m_CriticalBandInfo,
         m_IMDCTInfo
     );
@@ -115,7 +113,6 @@ void MP3Decoder_ClearBuffer(void) {
 
     /* important to do this - DSP primitives assume a bunch of state variables are 0 on first use */
     memset( m_MP3Decoder,         0, sizeof(MP3Decoder_t));                                    //Clear MP3DecInfo
-    memset(&m_ScaleFactorInfoSub, 0, sizeof(ScaleFactorInfoSub_t)*(m_MAX_NGRAN *m_MAX_NCHAN)); //Clear ScaleFactorInfo
     memset( m_HuffmanInfo,        0, sizeof(HuffmanInfo_t));                                   //Clear HuffmanInfo
     memset( m_DequantInfo,        0, sizeof(DequantInfo_t));                                   //Clear DequantInfo
     memset( m_IMDCTInfo,          0, sizeof(IMDCTInfo_t));                                     //Clear IMDCTInfo

@@ -3161,7 +3161,6 @@ pub unsafe fn MP3DecodeHelper(
     m_sMode: *mut i32,
     m_HuffmanInfo: *mut HuffmanInfo,
     m_DequantInfo: *mut DequantInfo,
-    m_ScaleFactorInfoSub: *mut [[ScaleFactorInfoSub; 2]; 2],
     m_CriticalBandInfo: *mut [CriticalBandInfo; 2],
     m_IMDCTInfo: *mut IMDCTInfo,
 ) -> i32 {
@@ -3287,7 +3286,7 @@ pub unsafe fn MP3DecodeHelper(
                 gr,
                 ch,
                 &mut m_MP3Decoder.m_SideInfoSub,          // 1. Oczekiwany: *mut [[SideInfoSub; 2]; 2]
-                m_ScaleFactorInfoSub,   // 2. Oczekiwany: *mut [[ScaleFactorInfoSub; 2]; 2]
+                &mut m_MP3Decoder.m_ScaleFactorInfoSub,   // 2. Oczekiwany: *mut [[ScaleFactorInfoSub; 2]; 2]
                 m_MP3DecInfo,           // 3. Oczekiwany: *mut MP3DecInfo
                 &mut m_MP3Decoder.m_SideInfo,
                 m_FrameHeader,          // 5. Oczekiwany: *mut FrameHeader
@@ -3322,7 +3321,7 @@ pub unsafe fn MP3DecodeHelper(
             gr,
             m_MP3DecInfo,
             m_HuffmanInfo, m_DequantInfo, &mut m_MP3Decoder.m_SideInfoSub, 
-            m_ScaleFactorInfoSub, m_CriticalBandInfo, m_FrameHeader, 
+            &mut m_MP3Decoder.m_ScaleFactorInfoSub, m_CriticalBandInfo, m_FrameHeader, 
             m_SFBandTable,&mut m_MP3Decoder.m_ScaleFactorJS, *m_MPEGVersion
         ) < 0 {
             MP3ClearBadFrame(m_MP3DecInfo, outbuf);
