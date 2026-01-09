@@ -1414,7 +1414,46 @@ impl MP3Decoder {
             return 4;
         }
     }
+
+    /***********************************************************************************************************************
+ * Function:    MP3GetLastFrameInfo
+ *
+ * Description: get info about last MP3 frame decoded (number of sampled decoded,
+ *                sample rate, bitrate, etc.)
+ *
+ * Inputs:
+ *
+ * Outputs:     filled-in MP3FrameInfo struct
+ *
+ * Return:      none
+ *
+ * Notes:       call this right after calling MP3Decode
+ **********************************************************************************************************************/
+
+    pub fn mp3_get_last_frame_info(
+        mut self,
+    ) {
+        if self.m_MP3DecInfo.layer != 3 {
+            self.m_MP3FrameInfo.bitrate=0;
+            self.m_MP3FrameInfo.nChans=0;
+            self.m_MP3FrameInfo.samprate=0;
+            self.m_MP3FrameInfo.bitsPerSample=0;
+            self.m_MP3FrameInfo.outputSamps=0;
+            self.m_MP3FrameInfo.layer=0;
+            self.m_MP3FrameInfo.version=0;
+        } else{
+            self.m_MP3FrameInfo.bitrate=self.m_MP3DecInfo.bitrate;
+            self.m_MP3FrameInfo.nChans = self.m_MP3DecInfo.nChans;
+            self.m_MP3FrameInfo.samprate=self.m_MP3DecInfo.samprate;
+            self.m_MP3FrameInfo.bitsPerSample=16;
+            self.m_MP3FrameInfo.outputSamps=self.m_MP3DecInfo.nChans
+                    * samplesPerFrameTab[self.m_MPEGVersion as usize][self.m_MP3DecInfo.layer as usize-1] as i32;
+            self.m_MP3FrameInfo.layer=self.m_MP3DecInfo.layer;
+            self.m_MP3FrameInfo.version=self.m_MPEGVersion;
+        }
+    }
 }
+
 
 #[cfg(test)]
 mod unpack_frame_header_test {
