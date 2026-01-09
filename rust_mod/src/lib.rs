@@ -3151,7 +3151,6 @@ pub unsafe fn MP3DecodeHelper(
     m_MP3Decoder: *mut MP3Decoder,
     m_MPEGVersion: *mut i32,
     m_sMode: *mut i32,
-    m_DequantInfo: *mut DequantInfo,
     m_IMDCTInfo: *mut IMDCTInfo,
 ) -> i32 {
     let mut offset: i32;
@@ -3310,7 +3309,7 @@ pub unsafe fn MP3DecodeHelper(
         if MP3Dequantize(
             gr,
             m_MP3DecInfo,
-            &mut m_MP3Decoder.m_HuffmanInfo, m_DequantInfo, &mut m_MP3Decoder.m_SideInfoSub, 
+            &mut m_MP3Decoder.m_HuffmanInfo, &mut m_MP3Decoder.m_DequantInfo, &mut m_MP3Decoder.m_SideInfoSub, 
             &mut m_MP3Decoder.m_ScaleFactorInfoSub, &mut m_MP3Decoder.m_CriticalBandInfo, m_FrameHeader, 
             m_SFBandTable,&mut m_MP3Decoder.m_ScaleFactorJS, *m_MPEGVersion
         ) < 0 {

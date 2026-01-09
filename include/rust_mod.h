@@ -285,6 +285,7 @@ typedef struct MP3Decoder {
     ScaleFactorInfoSub_t m_ScaleFactorInfoSub[m_MAX_NGRAN][m_MAX_NCHAN];
     CriticalBandInfo_t m_CriticalBandInfo[m_MAX_NCHAN];  /* filled in dequantizer, used in joint stereo reconstruction */
     HuffmanInfo_t m_HuffmanInfo;
+    DequantInfo_t m_DequantInfo;
 } MP3Decoder_t;
 
 void RefillBitstreamCache(BitStreamInfo_t *bsi);
@@ -397,7 +398,6 @@ int MP3DecodeHelper(
     MP3Decoder_t *m_MP3Decoder,
     MPEGVersion_t *m_MPEGVersion,
     StereoMode_t *m_sMode,
-    DequantInfo_t *m_DequantInfo,
     IMDCTInfo_t *m_IMDCTInfo
 );
 
