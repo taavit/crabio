@@ -2482,7 +2482,7 @@ const PRE_TAB: [u8; 22] = [
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn DequantChannel(
-    sample_buf: *mut i32,
+    sample_buf: &mut [i32; MAX_NSAMP],
     work_buf: *mut i32,
     non_zero_bound: *mut i32,
     sis: *const SideInfoSub,
@@ -2547,7 +2547,7 @@ pub unsafe extern "C" fn DequantChannel(
         };
         let gain_i = 210 - global_gain + s_multiplier * (sfis.l[cb as usize] as i32 + pre_val);
 
-        let non_zero = DequantBlock(sample_buf.add(i), sample_buf.add(i), n_samps, gain_i);
+        let non_zero = DequantBlock(sample_buf.as_mut_ptr().add(i), sample_buf.as_mut_ptr().add(i), n_samps, gain_i);
 
         if non_zero != 0 {
             cb_max[0] = cb;
@@ -2582,7 +2582,7 @@ pub unsafe extern "C" fn DequantChannel(
 
             // Dekwantyzujemy do workBuf, aby móc potem bezpiecznie przełożyć dane do sampleBuf
             let non_zero = DequantBlock(
-                sample_buf.add(i + (n_samps * w as i32) as usize),
+                sample_buf.as_mut_ptr().add(i + (n_samps * w as i32) as usize),
                 work_buf.add((n_samps * w as i32) as usize),
                 n_samps,
                 gain_i,
@@ -2596,7 +2596,7 @@ pub unsafe extern "C" fn DequantChannel(
 
         // 4. Reordering: Przeplatanie próbek z 3 bloków krótkich
         // C: buf[j][0] = workBuf[0*nSamps + j]
-        let current_ptr = sample_buf.add(i) as *mut [i32; 3];
+        let current_ptr = sample_buf.as_mut_ptr().add(i) as *mut [i32; 3];
         for j in 0..n_samps as usize {
             let row = &mut *current_ptr.add(j);
             row[0] = *work_buf.add(j);
@@ -3147,7 +3147,7 @@ pub unsafe extern "C" fn MP3Dequantize(
     // 1. Dekwantyzacja każdego kanału
     for ch in 0..di.nChans as usize {
         hi.gb[ch] = DequantChannel(
-            hi.huff_dec_buf[ch].as_mut_ptr(),
+            &mut hi.huff_dec_buf[ch],
             dqi.work_buf.as_mut_ptr(),
             &mut hi.non_zero_bound[ch],
             &mut side_info_sub[gr_idx][ch],
