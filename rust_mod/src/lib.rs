@@ -2569,7 +2569,7 @@ pub unsafe extern "C" fn IntensityProcMPEG1(
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn IntensityProcMPEG2(
-    x: &mut [i32; 576],      // x[2][576]
+    x: *mut [i32; 576],      // x[2][576]
     n_samps: i32,
     sfis: *const ScaleFactorInfoSub,
     cbi: *const CriticalBandInfo,
