@@ -278,6 +278,7 @@ typedef struct MP3Decoder {
     FrameHeader_t m_FrameHeader;
     MP3FrameInfo_t m_MP3FrameInfo;
     SideInfo_t m_SideInfo;
+    SideInfoSub_t m_SideInfoSub[m_MAX_NGRAN][m_MAX_NCHAN];
 } MP3Decoder_t;
 
 void RefillBitstreamCache(BitStreamInfo_t *bsi);
@@ -309,15 +310,6 @@ void WinPrevious(int *xPrev, int *xPrevWin, int btPrev);
 void MP3ClearBadFrame(MP3DecInfo_t *m_MP3DecInfo, short *outbuf);
 void UnpackSFMPEG1(BitStreamInfo_t *bsi, SideInfoSub_t *sis, ScaleFactorInfoSub_t *sfis, int *scfsi, int gr, ScaleFactorInfoSub_t *sfisGr0);
 void UnpackSFMPEG2(BitStreamInfo_t *bsi, SideInfoSub_t *sis, ScaleFactorInfoSub_t *sfis, int gr, int ch, int modeExt, ScaleFactorJS_t *sfjs);
-
-int UnpackSideInfo(
-    unsigned char *buf,
-    SideInfo_t *m_SideInfo,
-    SideInfoSub_t (*m_SideInfoSub)[m_MAX_NCHAN][m_MAX_NGRAN],
-    MP3DecInfo_t *m_MP3DecInfo,
-    int m_MPEGVersion,     // 1 = MPEG1, 0 = MPEG2/2.5
-    int m_sMode
-);
 
 int DecodeHuffmanPairs(int *xy, int nVals, int tabIdx, int bitsLeft, unsigned char *buf, int bitOffset);
 int DecodeHuffmanQuads(int *vwxy, int nVals, int tabIdx, int bitsLeft, unsigned char *buf, int bitOffset);
@@ -400,7 +392,6 @@ int MP3DecodeHelper(
     MPEGVersion_t *m_MPEGVersion,
     StereoMode_t *m_sMode,
     SFBandTable_t *m_SFBandTable,
-    SideInfoSub_t (*m_SideInfoSub)[2][2],
     HuffmanInfo_t *m_HuffmanInfo,
     DequantInfo_t *m_DequantInfo,
     ScaleFactorInfoSub_t (*m_ScaleFactorInfoSub)[2][2],

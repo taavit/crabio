@@ -394,6 +394,7 @@ pub struct MP3Decoder {
     pub m_FrameHeader:FrameHeader,
     pub m_MP3FrameInfo: MP3FrameInfo,
     pub m_SideInfo: SideInfo,
+    pub m_SideInfoSub: [[SideInfoSub; MAX_NCHAN]; MAX_NGRAN],
 }
 
 
