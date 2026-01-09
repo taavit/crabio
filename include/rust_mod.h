@@ -308,8 +308,6 @@ uint64_t xSAR64(uint64_t x, int n);
 int MULSHIFT32(int x, int y);
 uint64_t MADD64(uint64_t sum64, int x, int y);
 
-
-void FDCT32(int *buf, int *dest, int offset, int oddBlock, int gb);
 int IMDCT36(int *xCurr, int *xPrev, int *y, int btCurr, int btPrev, int blockIdx, int gb);
 void AntiAlias(int *x, int nBfly);
 short ClipToShort(int x, int fracBits);

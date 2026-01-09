@@ -223,15 +223,6 @@ pub unsafe fn PolyphaseMono(pcm: *mut i16, vbuf: *const i32, coef_base: *const u
     polyphase_mono(pcm, vbuf, coef_base);
 }
 
-#[unsafe(no_mangle)]
-#[allow(non_snake_case)]
-pub fn FDCT32(buf: *mut i32, dest: *mut i32, offset: i32, odd_block: i32, gb: i32) {
-    let buf_slice = unsafe { core::slice::from_raw_parts_mut(buf, 32) };
-    let dest_slice = unsafe { core::slice::from_raw_parts_mut(dest, VBUF_LENGTH * 2) };
-
-    fdct_32(buf_slice, dest_slice, offset, odd_block, gb);
-}
-
 /***********************************************************************************************************************
  * Function:    FreqInvertRescale
  *
@@ -2965,9 +2956,9 @@ pub unsafe fn Subband(
     if (m_MP3DecInfo.nChans == 2) {
         /* stereo */
         for b in 0..BLOCK_SIZE {
-            FDCT32(m_IMDCTInfo.outBuf[0][b].as_mut_ptr(), m_SubbandInfo.vbuf.as_mut_ptr(), m_SubbandInfo.vindex,
+            fdct_32(&mut m_IMDCTInfo.outBuf[0][b], &mut m_SubbandInfo.vbuf, m_SubbandInfo.vindex,
                     (b as i32 & 0x01), m_IMDCTInfo.gb[0]);
-            FDCT32(m_IMDCTInfo.outBuf[1][b].as_mut_ptr(), m_SubbandInfo.vbuf.as_mut_ptr().add( 1 * 32), m_SubbandInfo.vindex,
+            fdct_32(&mut m_IMDCTInfo.outBuf[1][b], &mut m_SubbandInfo.vbuf[1 * 32..], m_SubbandInfo.vindex,
                     (b as i32 & 0x01), m_IMDCTInfo.gb[1]);
             PolyphaseStereo(pcmBuf,
                     m_SubbandInfo.vbuf.as_mut_ptr().add( m_SubbandInfo.vindex as usize + VBUF_LENGTH * (b as i32 & 0x01) as usize),
@@ -2978,7 +2969,7 @@ pub unsafe fn Subband(
     } else {
         /* mono */
         for b in 0..BLOCK_SIZE {
-            FDCT32(m_IMDCTInfo.outBuf[0][b].as_mut_ptr(), m_SubbandInfo.vbuf.as_mut_ptr(), m_SubbandInfo.vindex,
+            fdct_32(&mut m_IMDCTInfo.outBuf[0][b], &mut m_SubbandInfo.vbuf, m_SubbandInfo.vindex,
                     (b as i32 & 0x01), m_IMDCTInfo.gb[0]);
             PolyphaseMono(pcmBuf,
                     m_SubbandInfo.vbuf.as_mut_ptr().add( m_SubbandInfo.vindex as usize + VBUF_LENGTH * (b & 0x01)),
