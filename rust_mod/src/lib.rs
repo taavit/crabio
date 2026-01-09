@@ -3151,7 +3151,6 @@ pub unsafe fn MP3DecodeHelper(
     m_MP3Decoder: *mut MP3Decoder,
     m_MPEGVersion: *mut i32,
     m_sMode: *mut i32,
-    m_HuffmanInfo: *mut HuffmanInfo,
     m_DequantInfo: *mut DequantInfo,
     m_IMDCTInfo: *mut IMDCTInfo,
 ) -> i32 {
@@ -3298,7 +3297,7 @@ pub unsafe fn MP3DecodeHelper(
             prevBitOffset = bitOffset;
             offset = DecodeHuffman(
                 mainPtr, &mut bitOffset, huffBlockBits, gr, ch,
-                m_HuffmanInfo, m_SFBandTable, &mut m_MP3Decoder.m_SideInfoSub, m_MPEGVersion
+                &mut m_MP3Decoder.m_HuffmanInfo, m_SFBandTable, &mut m_MP3Decoder.m_SideInfoSub, m_MPEGVersion
             );
             if offset < 0 {
                 MP3ClearBadFrame(m_MP3DecInfo, outbuf);
@@ -3311,7 +3310,7 @@ pub unsafe fn MP3DecodeHelper(
         if MP3Dequantize(
             gr,
             m_MP3DecInfo,
-            m_HuffmanInfo, m_DequantInfo, &mut m_MP3Decoder.m_SideInfoSub, 
+            &mut m_MP3Decoder.m_HuffmanInfo, m_DequantInfo, &mut m_MP3Decoder.m_SideInfoSub, 
             &mut m_MP3Decoder.m_ScaleFactorInfoSub, &mut m_MP3Decoder.m_CriticalBandInfo, m_FrameHeader, 
             m_SFBandTable,&mut m_MP3Decoder.m_ScaleFactorJS, *m_MPEGVersion
         ) < 0 {
@@ -3320,7 +3319,7 @@ pub unsafe fn MP3DecodeHelper(
         }
 
         for ch in 0..(*m_MP3DecInfo).nChans {
-            if IMDCT(gr, ch, m_SFBandTable, *m_MPEGVersion, &mut m_MP3Decoder.m_SideInfoSub, m_HuffmanInfo, m_IMDCTInfo) < 0 {
+            if IMDCT(gr, ch, m_SFBandTable, *m_MPEGVersion, &mut m_MP3Decoder.m_SideInfoSub, &mut m_MP3Decoder.m_HuffmanInfo, m_IMDCTInfo) < 0 {
                 MP3ClearBadFrame(m_MP3DecInfo, outbuf);
                 return -9; // ERR_MP3_INVALID_IMDCT
             }

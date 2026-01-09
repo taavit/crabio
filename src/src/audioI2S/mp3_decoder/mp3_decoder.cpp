@@ -26,7 +26,6 @@ MP3Decoder_t *m_MP3Decoder;
 StereoMode_t m_sMode;  /* mono/stereo mode */
 MPEGVersion_t m_MPEGVersion;  /* version ID */
 DequantInfo_t *m_DequantInfo;
-HuffmanInfo_t *m_HuffmanInfo;
 IMDCTInfo_t *m_IMDCTInfo;
 
 /* format = Q30, range = [0.0981, 1.9976]
@@ -89,7 +88,6 @@ int MP3Decode( unsigned char *inbuf, size_t inbuf_len, int *bytesLeft, short *ou
         m_MP3Decoder,
         &m_MPEGVersion,
         &m_sMode,
-        m_HuffmanInfo,
         m_DequantInfo,
         m_IMDCTInfo
     );
@@ -111,7 +109,6 @@ void MP3Decoder_ClearBuffer(void) {
 
     /* important to do this - DSP primitives assume a bunch of state variables are 0 on first use */
     memset( m_MP3Decoder,         0, sizeof(MP3Decoder_t));                                    //Clear MP3DecInfo
-    memset( m_HuffmanInfo,        0, sizeof(HuffmanInfo_t));                                   //Clear HuffmanInfo
     memset( m_DequantInfo,        0, sizeof(DequantInfo_t));                                   //Clear DequantInfo
     memset( m_IMDCTInfo,          0, sizeof(IMDCTInfo_t));                                     //Clear IMDCTInfo
 
@@ -147,12 +144,10 @@ void MP3Decoder_ClearBuffer(void) {
 
 bool MP3Decoder_AllocateBuffers(void) {
     if(!m_MP3Decoder)       {m_MP3Decoder    = (MP3Decoder_t*)    __malloc_heap_psram(sizeof(MP3Decoder_t)   );}
-    if(!m_HuffmanInfo)      {m_HuffmanInfo   = (HuffmanInfo_t*)   __malloc_heap_psram(sizeof(HuffmanInfo_t)  );}
     if(!m_DequantInfo)      {m_DequantInfo   = (DequantInfo_t*)   __malloc_heap_psram(sizeof(DequantInfo_t)  );}
     if(!m_IMDCTInfo)        {m_IMDCTInfo     = (IMDCTInfo_t*)     __malloc_heap_psram(sizeof(IMDCTInfo_t)    );}
 
-    if(!m_MP3Decoder || !m_HuffmanInfo ||
-       !m_DequantInfo || !m_IMDCTInfo) {
+    if(!m_MP3Decoder || !m_DequantInfo || !m_IMDCTInfo) {
         MP3Decoder_FreeBuffers();
         log_e("not enough memory to allocate mp3decoder buffers");
         return false;
@@ -178,7 +173,6 @@ void MP3Decoder_FreeBuffers()
 //    uint32_t i = ESP.getFreeHeap();
 
     if(m_MP3Decoder)        {free(m_MP3Decoder);      m_MP3Decoder=NULL;}
-    if(m_HuffmanInfo)       {free(m_HuffmanInfo);     m_HuffmanInfo=NULL;}
     if(m_DequantInfo)       {free(m_DequantInfo);     m_DequantInfo=0;}
     if(m_IMDCTInfo)         {free(m_IMDCTInfo);       m_IMDCTInfo=0;}
 
