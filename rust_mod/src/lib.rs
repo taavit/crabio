@@ -3186,8 +3186,6 @@ pub unsafe extern "C" fn MP3Dequantize(
     0
 }
 
-use esp_println::println as esp_println;
-
 #[unsafe(no_mangle)]
 pub unsafe fn MP3DecodeHelper(
     mut inbuf: *mut u8,
@@ -3211,7 +3209,7 @@ pub unsafe fn MP3DecodeHelper(
     let m_mp3_decoder = unsafe { &mut *m_MP3Decoder };
     let mut buf = unsafe { core::slice::from_raw_parts(inbuf, inbuf_len) };
     /* unpack frame header */
-    esp_println::println!("{:?}", &buf[..5]);
+    // esp_println::println!("{:?}", &buf[..5]);
     let fh_bytes = match m_mp3_decoder.unpack_frame_header(buf) {
         Ok(v) => v,
         Err(e) => {
