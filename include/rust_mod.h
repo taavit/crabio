@@ -277,6 +277,7 @@ typedef struct MP3Decoder {
     MP3DecInfo_t m_MP3DecInfo;
     FrameHeader_t m_FrameHeader;
     MP3FrameInfo_t m_MP3FrameInfo;
+    SideInfo_t m_SideInfo;
 } MP3Decoder_t;
 
 void RefillBitstreamCache(BitStreamInfo_t *bsi);
@@ -399,7 +400,6 @@ int MP3DecodeHelper(
     MPEGVersion_t *m_MPEGVersion,
     StereoMode_t *m_sMode,
     SFBandTable_t *m_SFBandTable,
-    SideInfo_t *m_SideInfo,
     SideInfoSub_t (*m_SideInfoSub)[2][2],
     HuffmanInfo_t *m_HuffmanInfo,
     DequantInfo_t *m_DequantInfo,

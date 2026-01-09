@@ -27,7 +27,6 @@ SFBandTable_t m_SFBandTable;
 StereoMode_t m_sMode;  /* mono/stereo mode */
 MPEGVersion_t m_MPEGVersion;  /* version ID */
 SideInfoSub_t m_SideInfoSub[m_MAX_NGRAN][m_MAX_NCHAN];
-SideInfo_t *m_SideInfo;
 CriticalBandInfo_t m_CriticalBandInfo[m_MAX_NCHAN];  /* filled in dequantizer, used in joint stereo reconstruction */
 DequantInfo_t *m_DequantInfo;
 HuffmanInfo_t *m_HuffmanInfo;
@@ -97,7 +96,6 @@ int MP3Decode( unsigned char *inbuf, size_t inbuf_len, int *bytesLeft, short *ou
         &m_MPEGVersion,
         &m_sMode,
         &m_SFBandTable,
-        m_SideInfo,
         &m_SideInfoSub,
         m_HuffmanInfo,
         m_DequantInfo,
@@ -126,7 +124,6 @@ void MP3Decoder_ClearBuffer(void) {
     /* important to do this - DSP primitives assume a bunch of state variables are 0 on first use */
     memset( m_MP3Decoder,         0, sizeof(MP3Decoder_t));                                    //Clear MP3DecInfo
     memset(&m_ScaleFactorInfoSub, 0, sizeof(ScaleFactorInfoSub_t)*(m_MAX_NGRAN *m_MAX_NCHAN)); //Clear ScaleFactorInfo
-    memset( m_SideInfo,           0, sizeof(SideInfo_t));                                      //Clear SideInfo
     memset( m_HuffmanInfo,        0, sizeof(HuffmanInfo_t));                                   //Clear HuffmanInfo
     memset( m_DequantInfo,        0, sizeof(DequantInfo_t));                                   //Clear DequantInfo
     memset( m_IMDCTInfo,          0, sizeof(IMDCTInfo_t));                                     //Clear IMDCTInfo
@@ -168,14 +165,13 @@ void MP3Decoder_ClearBuffer(void) {
 
 bool MP3Decoder_AllocateBuffers(void) {
     if(!m_MP3Decoder)       {m_MP3Decoder    = (MP3Decoder_t*)    __malloc_heap_psram(sizeof(MP3Decoder_t)   );}
-    if(!m_SideInfo)         {m_SideInfo      = (SideInfo_t*)      __malloc_heap_psram(sizeof(SideInfo_t)     );}
     if(!m_ScaleFactorJS)    {m_ScaleFactorJS = (ScaleFactorJS_t*) __malloc_heap_psram(sizeof(ScaleFactorJS_t));}
     if(!m_HuffmanInfo)      {m_HuffmanInfo   = (HuffmanInfo_t*)   __malloc_heap_psram(sizeof(HuffmanInfo_t)  );}
     if(!m_DequantInfo)      {m_DequantInfo   = (DequantInfo_t*)   __malloc_heap_psram(sizeof(DequantInfo_t)  );}
     if(!m_IMDCTInfo)        {m_IMDCTInfo     = (IMDCTInfo_t*)     __malloc_heap_psram(sizeof(IMDCTInfo_t)    );}
     if(!m_SubbandInfo)      {m_SubbandInfo   = (SubbandInfo_t*)   __malloc_heap_psram(sizeof(SubbandInfo_t)  );}
 
-    if(!m_MP3Decoder || !m_SideInfo || !m_ScaleFactorJS || !m_HuffmanInfo ||
+    if(!m_MP3Decoder || !m_ScaleFactorJS || !m_HuffmanInfo ||
        !m_DequantInfo || !m_IMDCTInfo || !m_SubbandInfo) {
         MP3Decoder_FreeBuffers();
         log_e("not enough memory to allocate mp3decoder buffers");
@@ -202,7 +198,6 @@ void MP3Decoder_FreeBuffers()
 //    uint32_t i = ESP.getFreeHeap();
 
     if(m_MP3Decoder)        {free(m_MP3Decoder);      m_MP3Decoder=NULL;}
-    if(m_SideInfo)          {free(m_SideInfo);        m_SideInfo=NULL;}
     if(m_ScaleFactorJS )    {free(m_ScaleFactorJS);   m_ScaleFactorJS=NULL;}
     if(m_HuffmanInfo)       {free(m_HuffmanInfo);     m_HuffmanInfo=NULL;}
     if(m_DequantInfo)       {free(m_DequantInfo);     m_DequantInfo=0;}

@@ -3,7 +3,7 @@
 use core::{panic::PanicInfo, ptr::null};
 
 use crabio::mp3_decoder::{
-    BLOCK_SIZE, BitStreamInfo, DequantInfo, FrameHeader, HUFF_PAIRTABS, HuffTabLookup, HuffTabType, HuffmanInfo, IMDCT_SCALE, IMDCTInfo, MAX_NCHAN, MAX_NGRAN, MAX_NSAMP, MAX_SCFBD, MP3DecInfo, MP3Decoder, MP3FrameInfo, MPEGVersion, NBANDS, POLY_COEF, SFBandTable, SIBYTES_MPEG1_MONO, SIBYTES_MPEG1_STEREO, SIBYTES_MPEG2_MONO, SIBYTES_MPEG2_STEREO, SQRTHALF, ScaleFactorInfoSub, ScaleFactorJS, SideInfoSub, StereoMode, SubbandInfo, VBUF_LENGTH, clip_2n, clip_to_short, fdct_32, freq_invert_rescale, get_bits, idct_9, imdct_12, madd_64, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, polyphase_mono, polyphase_stereo, refill_bitstream_cache, samplesPerFrameTab, sar_64, win_previous
+    BLOCK_SIZE, BitStreamInfo, DequantInfo, FrameHeader, HUFF_PAIRTABS, HuffTabLookup, HuffTabType, HuffmanInfo, IMDCT_SCALE, IMDCTInfo, MAX_NCHAN, MAX_NGRAN, MAX_NSAMP, MAX_SCFBD, MP3DecInfo, MP3Decoder, MP3FrameInfo, MPEGVersion, NBANDS, POLY_COEF, SFBandTable, SIBYTES_MPEG1_MONO, SIBYTES_MPEG1_STEREO, SIBYTES_MPEG2_MONO, SIBYTES_MPEG2_STEREO, SQRTHALF, ScaleFactorInfoSub, ScaleFactorJS, SideInfo, SideInfoSub, StereoMode, SubbandInfo, VBUF_LENGTH, clip_2n, clip_to_short, fdct_32, freq_invert_rescale, get_bits, idct_9, imdct_12, madd_64, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, polyphase_mono, polyphase_stereo, refill_bitstream_cache, samplesPerFrameTab, sar_64, win_previous
 };
 
 #[repr(C)]
@@ -304,17 +304,10 @@ pub fn CheckPadBit(m_FrameHeader: *const FrameHeader) -> i32 {
     }
 }
 
-#[repr(C)]
-pub struct SideInfo {
-    mainDataBegin: i32,
-    privateBits: i32,
-    scfsi: [[i32; MAX_SCFBD]; MAX_NCHAN],                /* 4 scalefactor bands per channel */
-}
-
 #[unsafe(no_mangle)]
 pub unsafe fn UnpackSideInfo(
     buf: *const u8,
-    m_SideInfo: *mut SideInfo,
+    m_SideInfo: &mut SideInfo,
     m_SideInfoSub: *mut [[SideInfoSub; MAX_NCHAN]; MAX_NGRAN],
     // m_SideInfoSub: *mut SideInfoSub,
     m_MP3DecInfo: *mut MP3DecInfo,
@@ -327,7 +320,6 @@ pub unsafe fn UnpackSideInfo(
     let mut nBytes: i32;
 
     let m_SideInfoSub = unsafe { &mut *m_SideInfoSub };
-    let m_SideInfo = unsafe { &mut *m_SideInfo };
     let m_MP3DecInfo = unsafe { &mut *m_MP3DecInfo };
 
     let mut bitStreamInfo: BitStreamInfoC = core::mem::zeroed();
@@ -3169,7 +3161,6 @@ pub unsafe fn MP3DecodeHelper(
     m_MPEGVersion: *mut i32,
     m_sMode: *mut i32,
     m_SFBandTable: *mut SFBandTable,
-    m_SideInfo: *mut SideInfo,
     m_SideInfoSub: *mut [[SideInfoSub; 2]; 2],
     m_HuffmanInfo: *mut HuffmanInfo,
     m_DequantInfo: *mut DequantInfo,
@@ -3206,7 +3197,7 @@ pub unsafe fn MP3DecodeHelper(
     /* unpack side info */
     siBytes = UnpackSideInfo(
         inbuf,
-        m_SideInfo,
+        &mut m_MP3Decoder.m_SideInfo,
         m_SideInfoSub,
         &mut m_MP3Decoder.m_MP3DecInfo,
         *m_MPEGVersion,
@@ -3303,7 +3294,7 @@ pub unsafe fn MP3DecodeHelper(
                 m_SideInfoSub,          // 1. Oczekiwany: *mut [[SideInfoSub; 2]; 2]
                 m_ScaleFactorInfoSub,   // 2. Oczekiwany: *mut [[ScaleFactorInfoSub; 2]; 2]
                 m_MP3DecInfo,           // 3. Oczekiwany: *mut MP3DecInfo
-                m_SideInfo,             // 4. Oczekiwany: *mut SideInfo
+                &mut m_MP3Decoder.m_SideInfo,
                 m_FrameHeader,          // 5. Oczekiwany: *mut FrameHeader
                 m_ScaleFactorJS,        // 6. Oczekiwany: *mut ScaleFactorJS
                 *m_MPEGVersion          // 7. Oczekiwany: i32

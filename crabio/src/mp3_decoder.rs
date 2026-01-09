@@ -299,10 +299,11 @@ pub struct SideInfoSub {
     pub count1TableSelect: i32,  /* index of Huffman table for quad codewords */
 }
 
-struct SideInfo {
-    mainDataBegin: i32,
-    privateBits: i32,
-    scfsi: [[i32; MAX_NCHAN]; MAX_SCFBD],                /* 4 scalefactor bands per channel */
+#[repr(C)]
+pub struct SideInfo {
+    pub mainDataBegin: i32,
+    pub privateBits: i32,
+    pub scfsi: [[i32; MAX_SCFBD]; MAX_NCHAN],                /* 4 scalefactor bands per channel */
 }
 
 struct CriticalBandInfo {
@@ -392,6 +393,7 @@ pub struct MP3Decoder {
     pub m_MP3DecInfo: MP3DecInfo,
     pub m_FrameHeader:FrameHeader,
     pub m_MP3FrameInfo: MP3FrameInfo,
+    pub m_SideInfo: SideInfo,
 }
 
 
@@ -1405,7 +1407,7 @@ impl MP3Decoder {
 
 #[cfg(test)]
 mod unpack_frame_header_test {
-    use crate::mp3_decoder::{MAINBUF_SIZE, MAX_NCHAN, MAX_NGRAN, MP3Decoder, MP3FrameInfo, unpack_frame_header};
+    use crate::mp3_decoder::{MAINBUF_SIZE, MAX_NCHAN, MAX_NGRAN, MAX_SCFBD, MP3Decoder, MP3FrameInfo, SideInfo, unpack_frame_header};
     #[test]
     fn test_unpack_frame() {
         let buf: [u8; 4] = [0xFF,0xFB,0x92, 0x64];
@@ -1434,10 +1436,16 @@ mod unpack_frame_header_test {
             samprate: 0,
             version: 0
         };
+        let m_SideInfo = SideInfo {
+            mainDataBegin: 0,
+            privateBits: 0,
+            scfsi: [[0; MAX_SCFBD]; MAX_NCHAN],
+        };
         let m_MP3Decoder = MP3Decoder {
             m_FrameHeader,
             m_MP3DecInfo,
-            m_MP3FrameInfo
+            m_MP3FrameInfo,
+            m_SideInfo,
         };
         let mut  m_MPEGVersion = super::MPEGVersion::MPEG1 as i32;
         let mut  m_sMode = super::StereoMode::Stereo as i32;
