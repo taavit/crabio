@@ -6,21 +6,22 @@
 /* Put this file next to yoRadio.ino and restart Arduino IDE. */
 /* !!! Do not be alarmed, all right, the default values ​​are not included in this file !!! */
 
-#define myoptions_h
-#define DSP_MODEL DSP_SSD1306
-#define I2C_SDA 5
-#define I2C_SCL 6
+#define myoptions_
+#define DSP_MODEL DSP_SSD1305
+// #define DSP_HSPI			true
+// 4-wire SPI pins (your custom wiring)
+// #define TFT_MOSI              13    // DIN  → GPIO11
+// #define TFT_SCK               14    // CLK  → GPIO10
+#define TFT_CS                46    // CS   → GPIO12
+#define TFT_DC                9    // DC   → GPIO13
+#define TFT_RES               10
 
-#define I2S_DOUT 8
-#define I2S_BCLK 7
-#define I2S_LRC 9
+#define I2S_DOUT 1
+#define I2S_BCLK 2
+#define I2S_LRC 42
 
-#define BTN_LEFT 1
-#define BTN_CENTER 2
-#define BTN_RIGHT 3
-
-#define ENC_BTNR 11
-#define ENC_BTNL 12
-#define ENC_BTNB 10
+#define BTN_LEFT 15
+#define BTN_CENTER 16
+#define BTN_RIGHT 17
 
 #endif
