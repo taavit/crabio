@@ -405,6 +405,7 @@ pub struct MP3Decoder {
     pub m_CriticalBandInfo: [CriticalBandInfo; MAX_NCHAN],  /* filled in dequantizer, used in joint stereo reconstruction */
     pub m_HuffmanInfo: HuffmanInfo,
     pub m_DequantInfo: DequantInfo,
+    pub m_IMDCTInfo: IMDCTInfo,
 }
 
 

@@ -3151,7 +3151,6 @@ pub unsafe fn MP3DecodeHelper(
     m_MP3Decoder: *mut MP3Decoder,
     m_MPEGVersion: *mut i32,
     m_sMode: *mut i32,
-    m_IMDCTInfo: *mut IMDCTInfo,
 ) -> i32 {
     let mut offset: i32;
     let mut bitOffset: i32;
@@ -3318,14 +3317,14 @@ pub unsafe fn MP3DecodeHelper(
         }
 
         for ch in 0..(*m_MP3DecInfo).nChans {
-            if IMDCT(gr, ch, m_SFBandTable, *m_MPEGVersion, &mut m_MP3Decoder.m_SideInfoSub, &mut m_MP3Decoder.m_HuffmanInfo, m_IMDCTInfo) < 0 {
+            if IMDCT(gr, ch, m_SFBandTable, *m_MPEGVersion, &mut m_MP3Decoder.m_SideInfoSub, &mut m_MP3Decoder.m_HuffmanInfo, &mut m_MP3Decoder.m_IMDCTInfo) < 0 {
                 MP3ClearBadFrame(m_MP3DecInfo, outbuf);
                 return -9; // ERR_MP3_INVALID_IMDCT
             }
         }
 
         let pcm_offset = (gr * (*m_MP3DecInfo).nGranSamps * (*m_MP3DecInfo).nChans) as usize;
-        if Subband(outbuf.add(pcm_offset), m_MP3DecInfo, m_IMDCTInfo, &mut m_MP3Decoder.m_SubbandInfo) < 0 {
+        if Subband(outbuf.add(pcm_offset), m_MP3DecInfo, &mut m_MP3Decoder.m_IMDCTInfo, &mut m_MP3Decoder.m_SubbandInfo) < 0 {
             MP3ClearBadFrame(m_MP3DecInfo, outbuf);
             return -10; // ERR_MP3_INVALID_SUBBAND
         }
