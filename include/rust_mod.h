@@ -280,6 +280,7 @@ typedef struct MP3Decoder {
     SideInfo_t m_SideInfo;
     SideInfoSub_t m_SideInfoSub[m_MAX_NGRAN][m_MAX_NCHAN];
     SFBandTable_t m_SFBandTable;
+    ScaleFactorJS_t m_ScaleFactorJS;
 } MP3Decoder_t;
 
 void RefillBitstreamCache(BitStreamInfo_t *bsi);
@@ -396,7 +397,6 @@ int MP3DecodeHelper(
     DequantInfo_t *m_DequantInfo,
     ScaleFactorInfoSub_t (*m_ScaleFactorInfoSub)[2][2],
     CriticalBandInfo_t (*m_CriticalBandInfo)[2],
-    ScaleFactorJS_t *m_ScaleFactorJS,
     IMDCTInfo_t *m_IMDCTInfo,
     SubbandInfo_t *m_SubbandInfo
 );

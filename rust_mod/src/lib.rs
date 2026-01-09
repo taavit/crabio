@@ -3163,7 +3163,6 @@ pub unsafe fn MP3DecodeHelper(
     m_DequantInfo: *mut DequantInfo,
     m_ScaleFactorInfoSub: *mut [[ScaleFactorInfoSub; 2]; 2],
     m_CriticalBandInfo: *mut [CriticalBandInfo; 2],
-    m_ScaleFactorJS: *mut ScaleFactorJS,
     m_IMDCTInfo: *mut IMDCTInfo,
     m_SubbandInfo: *mut SubbandInfo,
 ) -> i32 {
@@ -3293,7 +3292,7 @@ pub unsafe fn MP3DecodeHelper(
                 m_MP3DecInfo,           // 3. Oczekiwany: *mut MP3DecInfo
                 &mut m_MP3Decoder.m_SideInfo,
                 m_FrameHeader,          // 5. Oczekiwany: *mut FrameHeader
-                m_ScaleFactorJS,        // 6. Oczekiwany: *mut ScaleFactorJS
+                &mut m_MP3Decoder.m_ScaleFactorJS,        // 6. Oczekiwany: *mut ScaleFactorJS
                 *m_MPEGVersion          // 7. Oczekiwany: i32
             );
             
@@ -3325,7 +3324,7 @@ pub unsafe fn MP3DecodeHelper(
             m_MP3DecInfo,
             m_HuffmanInfo, m_DequantInfo, &mut m_MP3Decoder.m_SideInfoSub, 
             m_ScaleFactorInfoSub, m_CriticalBandInfo, m_FrameHeader, 
-            m_SFBandTable, m_ScaleFactorJS, *m_MPEGVersion
+            m_SFBandTable,&mut m_MP3Decoder.m_ScaleFactorJS, *m_MPEGVersion
         ) < 0 {
             MP3ClearBadFrame(m_MP3DecInfo, outbuf);
             return -8; // ERR_MP3_INVALID_DEQUANTIZE

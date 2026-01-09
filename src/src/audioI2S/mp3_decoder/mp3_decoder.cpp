@@ -30,7 +30,6 @@ DequantInfo_t *m_DequantInfo;
 HuffmanInfo_t *m_HuffmanInfo;
 IMDCTInfo_t *m_IMDCTInfo;
 ScaleFactorInfoSub_t m_ScaleFactorInfoSub[m_MAX_NGRAN][m_MAX_NCHAN];
-ScaleFactorJS_t *m_ScaleFactorJS;
 SubbandInfo_t *m_SubbandInfo;
 
 /* format = Q30, range = [0.0981, 1.9976]
@@ -97,7 +96,6 @@ int MP3Decode( unsigned char *inbuf, size_t inbuf_len, int *bytesLeft, short *ou
         m_DequantInfo,
         &m_ScaleFactorInfoSub,
         &m_CriticalBandInfo,
-        m_ScaleFactorJS,
         m_IMDCTInfo,
         m_SubbandInfo
     );
@@ -125,7 +123,6 @@ void MP3Decoder_ClearBuffer(void) {
     memset( m_IMDCTInfo,          0, sizeof(IMDCTInfo_t));                                     //Clear IMDCTInfo
     memset( m_SubbandInfo,        0, sizeof(SubbandInfo_t));                                   //Clear SubbandInfo
     memset(&m_CriticalBandInfo,   0, sizeof(CriticalBandInfo_t)*m_MAX_NCHAN);                  //Clear CriticalBandInfo
-    memset( m_ScaleFactorJS,      0, sizeof(ScaleFactorJS_t));                                 //Clear ScaleFactorJS
 
     return;
 
@@ -159,13 +156,12 @@ void MP3Decoder_ClearBuffer(void) {
 
 bool MP3Decoder_AllocateBuffers(void) {
     if(!m_MP3Decoder)       {m_MP3Decoder    = (MP3Decoder_t*)    __malloc_heap_psram(sizeof(MP3Decoder_t)   );}
-    if(!m_ScaleFactorJS)    {m_ScaleFactorJS = (ScaleFactorJS_t*) __malloc_heap_psram(sizeof(ScaleFactorJS_t));}
     if(!m_HuffmanInfo)      {m_HuffmanInfo   = (HuffmanInfo_t*)   __malloc_heap_psram(sizeof(HuffmanInfo_t)  );}
     if(!m_DequantInfo)      {m_DequantInfo   = (DequantInfo_t*)   __malloc_heap_psram(sizeof(DequantInfo_t)  );}
     if(!m_IMDCTInfo)        {m_IMDCTInfo     = (IMDCTInfo_t*)     __malloc_heap_psram(sizeof(IMDCTInfo_t)    );}
     if(!m_SubbandInfo)      {m_SubbandInfo   = (SubbandInfo_t*)   __malloc_heap_psram(sizeof(SubbandInfo_t)  );}
 
-    if(!m_MP3Decoder || !m_ScaleFactorJS || !m_HuffmanInfo ||
+    if(!m_MP3Decoder || !m_HuffmanInfo ||
        !m_DequantInfo || !m_IMDCTInfo || !m_SubbandInfo) {
         MP3Decoder_FreeBuffers();
         log_e("not enough memory to allocate mp3decoder buffers");
@@ -192,7 +188,6 @@ void MP3Decoder_FreeBuffers()
 //    uint32_t i = ESP.getFreeHeap();
 
     if(m_MP3Decoder)        {free(m_MP3Decoder);      m_MP3Decoder=NULL;}
-    if(m_ScaleFactorJS )    {free(m_ScaleFactorJS);   m_ScaleFactorJS=NULL;}
     if(m_HuffmanInfo)       {free(m_HuffmanInfo);     m_HuffmanInfo=NULL;}
     if(m_DequantInfo)       {free(m_DequantInfo);     m_DequantInfo=0;}
     if(m_IMDCTInfo)         {free(m_IMDCTInfo);       m_IMDCTInfo=0;}
