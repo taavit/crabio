@@ -264,8 +264,6 @@ void UnpackSFMPEG1(BitStreamInfo_t *bsi, SideInfoSub_t *sis, ScaleFactorInfoSub_
 void UnpackSFMPEG2(BitStreamInfo_t *bsi, SideInfoSub_t *sis, ScaleFactorInfoSub_t *sfis, int gr, int ch, int modeExt, ScaleFactorJS_t *sfjs);
 int MP3FindFreeSync(unsigned char *buf, unsigned char firstFH[4], int nBytes);
 void MP3ClearBadFrame(MP3DecInfo_t *m_MP3DecInfo, short *outbuf);
-int DecodeHuffmanPairs(int *xy, int nVals, int tabIdx, int bitsLeft, unsigned char *buf, int bitOffset);
-int DecodeHuffmanQuads(int *vwxy, int nVals, int tabIdx, int bitsLeft, unsigned char *buf, int bitOffset);
 int DequantBlock(int *inbuf, int *outbuf, int num, int scale);
 void AntiAlias(int *x, int nBfly);
 void WinPrevious(int *xPrev, int *xPrevWin, int btPrev);

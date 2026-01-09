@@ -243,20 +243,20 @@ pub const MAX_NCHAN: usize           = 2;     // max channels
 pub const MAX_NSAMP: usize           = 576;   // max samples per channel, per granule
 
 
-const ERR_MP3_NONE: i8 =                  0;
-const ERR_MP3_INDATA_UNDERFLOW: i8 =     -1;
-const ERR_MP3_MAINDATA_UNDERFLOW: i8 =   -2;
-const ERR_MP3_FREE_BITRATE_SYNC: i8 =    -3;
-const ERR_MP3_OUT_OF_MEMORY: i8 =        -4;
-const ERR_MP3_NULL_POINTER: i8 =         -5;
-const ERR_MP3_INVALID_FRAMEHEADER: i8 =  -6;
-const ERR_MP3_INVALID_SIDEINFO: i8 =     -7;
-const ERR_MP3_INVALID_SCALEFACT: i8 =    -8;
-const ERR_MP3_INVALID_HUFFCODES: i8 =    -9;
-const ERR_MP3_INVALID_DEQUANTIZE: i8 =   -10;
-const ERR_MP3_INVALID_IMDCT: i8 =        -11;
-const ERR_MP3_INVALID_SUBBAND: i8 =      -12;
-const ERR_UNKNOWN: i8 =                  -127;
+pub const ERR_MP3_NONE: i8 =                  0;
+pub const ERR_MP3_INDATA_UNDERFLOW: i8 =     -1;
+pub const ERR_MP3_MAINDATA_UNDERFLOW: i8 =   -2;
+pub const ERR_MP3_FREE_BITRATE_SYNC: i8 =    -3;
+pub const ERR_MP3_OUT_OF_MEMORY: i8 =        -4;
+pub const ERR_MP3_NULL_POINTER: i8 =         -5;
+pub const ERR_MP3_INVALID_FRAMEHEADER: i8 =  -6;
+pub const ERR_MP3_INVALID_SIDEINFO: i8 =     -7;
+pub const ERR_MP3_INVALID_SCALEFACT: i8 =    -8;
+pub const ERR_MP3_INVALID_HUFFCODES: i8 =    -9;
+pub const ERR_MP3_INVALID_DEQUANTIZE: i8 =   -10;
+pub const ERR_MP3_INVALID_IMDCT: i8 =        -11;
+pub const ERR_MP3_INVALID_SUBBAND: i8 =      -12;
+pub const ERR_UNKNOWN: i8 =                  -127;
 
 pub struct BitStreamInfo<'a> {
     pub bytes: &'a [u8],
@@ -392,8 +392,8 @@ pub struct DequantInfo {
 
 #[repr(C)]
 pub struct HuffmanInfo {
-    pub huffDecBuf: [[i32; MAX_NSAMP]; MAX_NCHAN],       /* used both for decoded Huffman values and dequantized coefficients */
-    pub nonZeroBound: [i32; MAX_NCHAN],                /* number of coeffs in huffDecBuf[ch] which can be > 0 */
+    pub huff_dec_buf: [[i32; MAX_NSAMP]; MAX_NCHAN],       /* used both for decoded Huffman values and dequantized coefficients */
+    pub non_zero_bound: [i32; MAX_NCHAN],                /* number of coeffs in huffDecBuf[ch] which can be > 0 */
     pub gb: [i32; MAX_NCHAN],                          /* minimum number of guard bits in huffDecBuf[ch] */
 }
 
