@@ -265,7 +265,6 @@ void UnpackSFMPEG2(BitStreamInfo_t *bsi, SideInfoSub_t *sis, ScaleFactorInfoSub_
 int MP3FindFreeSync(unsigned char *buf, unsigned char firstFH[4], int nBytes);
 void MP3ClearBadFrame(MP3DecInfo_t *m_MP3DecInfo, short *outbuf);
 int DequantBlock(int *inbuf, int *outbuf, int num, int scale);
-void AntiAlias(int *x, int nBfly);
 void WinPrevious(int *xPrev, int *xPrevWin, int btPrev);
 int FreqInvertRescale(int *y, int *xPrev, int blockIdx, int es);
 void idct9(int *x);

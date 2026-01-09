@@ -2,9 +2,9 @@
 #![feature(asm_experimental_arch)]
 use core::{panic::PanicInfo, ptr::null};
 
-use crabio::mp3_decoder::{
-    BLOCK_SIZE, BitStreamInfo, CriticalBandInfo, DequantInfo, ERR_MP3_INVALID_DEQUANTIZE, ERR_MP3_INVALID_SIDEINFO, ERR_MP3_NONE, FrameHeader, HUFF_PAIRTABS, HuffTabLookup, HuffTabType, HuffmanInfo, IMDCT_SCALE, IMDCTInfo, MAX_NCHAN, MAX_NGRAN, MAX_NSAMP, MAX_SCFBD, MP3DecInfo, MP3Decoder, MP3FrameInfo, MPEGVersion, NBANDS, POLY_COEF, SFBandTable, SIBYTES_MPEG1_MONO, SIBYTES_MPEG1_STEREO, SIBYTES_MPEG2_MONO, SIBYTES_MPEG2_STEREO, SQRTHALF, ScaleFactorInfoSub, ScaleFactorJS, SideInfo, SideInfoSub, StereoMode, SubbandInfo, VBUF_LENGTH, clip_2n, clip_to_short, fdct_32, freq_invert_rescale, idct_9, imdct_12, madd_64, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, polyphase_mono, polyphase_stereo, sar_64, win_previous
-};
+use crabio::{mp3_decoder::{
+    BLOCK_SIZE, CriticalBandInfo, DequantInfo, ERR_MP3_INVALID_DEQUANTIZE, ERR_MP3_INVALID_SIDEINFO, ERR_MP3_INVALID_SUBBAND, ERR_MP3_NONE, FrameHeader, HUFF_PAIRTABS, HuffTabLookup, HuffTabType, HuffmanInfo, IMDCT_SCALE, IMDCTInfo, MAX_NCHAN, MAX_NGRAN, MAX_NSAMP, MAX_SCFBD, MP3DecInfo, MP3Decoder, MP3FrameInfo, MPEGVersion, NBANDS, POLY_COEF, SFBandTable, SIBYTES_MPEG1_MONO, SIBYTES_MPEG1_STEREO, SIBYTES_MPEG2_MONO, SIBYTES_MPEG2_STEREO, SQRTHALF, ScaleFactorInfoSub, ScaleFactorJS, SideInfo, SideInfoSub, StereoMode, SubbandInfo, VBUF_LENGTH, clip_2n, fdct_32, freq_invert_rescale, idct_9, imdct_12, madd_64, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, polyphase_mono, polyphase_stereo, sar_64, win_previous
+}, utils::bit_stream_cache::BitStreamInfo};
 
 #[repr(C)]
 pub struct BlockCount {
@@ -18,8 +18,6 @@ pub struct BlockCount {
     gbOut: i32,
 }
 
-
-#[repr(C)]
 pub struct BitStreamInfoC {
     pub byte_ptr: *const u8, // unsigned char *bytePtr;
     pub i_cache: u32,        // unsigned int iCache;
@@ -46,12 +44,6 @@ pub extern "C" fn SAR64(x: u64, n: i32) -> u64 {
 #[unsafe(no_mangle)]
 pub extern "C" fn xSAR64(x: u64, n: i32) -> u64 {
     sar_64(x, n)
-}
-
-#[unsafe(no_mangle)]
-#[allow(non_snake_case)]
-pub fn MULSHIFT32(x: i32, y: i32) -> i32 {
-    mulshift_32(x, y)
 }
 
 #[unsafe(no_mangle)]
@@ -84,12 +76,6 @@ pub extern "C" fn idct9(x: *mut i32) {
 #[allow(non_snake_case)]
 pub fn MADD64(sum64: u64, x: i32, y: i32) -> u64 {
     madd_64(sum64, x, y)
-}
-
-#[unsafe(no_mangle)]
-#[allow(non_snake_case)]
-pub fn ClipToShort(x: i32, frac_bits: i32) -> i16 {
-    clip_to_short(x, frac_bits)
 }
 
 #[panic_handler]
@@ -1740,9 +1726,9 @@ pub unsafe fn IMDCT36(mut xCurr: *mut i32, mut xPrev: *mut i32, y: *mut i32, btC
             xPrev = xPrev.add(1);
             t = s - d;
 
-            yLo = (d + (MULSHIFT32(t, *wp as i32) << 2));
+            yLo = (d + (mulshift_32(t, *wp as i32) << 2));
             wp = wp.add(1);
-            yHi = (s + (MULSHIFT32(t, *wp as i32) << 2));
+            yHi = (s + (mulshift_32(t, *wp as i32) << 2));
             wp = wp.add(1);
             *y.add((i) * NBANDS as usize) = yLo;
             *y.add((17 - i) * NBANDS as usize) = yHi;
@@ -1763,15 +1749,15 @@ pub unsafe fn IMDCT36(mut xCurr: *mut i32, mut xPrev: *mut i32, y: *mut i32, btC
             xe = *xp;
             xp = xp.sub(1);
             /* gain 2 int bits here */
-            xo = MULSHIFT32(c as i32, xo); /* 2*c18*xOdd (mul by 2 implicit in scaling)  */
+            xo = mulshift_32(c as i32, xo); /* 2*c18*xOdd (mul by 2 implicit in scaling)  */
             xe >>= 2;
 
             d = xe - xo;
             (*xPrev) = xe + xo; /* symmetry - xPrev[i] = xPrev[17-i] for long blocks */
             xPrev = xPrev.add(1);
 
-            yLo = (xPrevWin[i] + MULSHIFT32(d, wp[i] as i32)) << 2;
-            yHi = (xPrevWin[17 - i] + MULSHIFT32(d, wp[17 - i] as i32)) << 2;
+            yLo = (xPrevWin[i] + mulshift_32(d, wp[i] as i32)) << 2;
+            yHi = (xPrevWin[17 - i] + mulshift_32(d, wp[17 - i] as i32)) << 2;
             *(y.add((i) * NBANDS)) = yLo;
             *(y.add((17 - i) * NBANDS)) = yHi;
             mOut |= yLo.abs();
@@ -1822,17 +1808,16 @@ const CSA: [[u32; 2];8 ] = [
     [0x7fffc694, 0xff86c25d],
 ];
 
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn AntiAlias(x: *mut i32, n_bfly: i32) {
-    if n_bfly <= 0 || x.is_null() {
+pub fn AntiAlias(x: &mut [i32], n_bfly: usize) {
+    if n_bfly <= 0 {
         return;
     }
 
     // Tworzymy slice (bezpieczny widok na pamięć C++)
-    let total_len = (n_bfly as usize * 18) + 8;
-    let samples = core::slice::from_raw_parts_mut(x, total_len);
+    let total_len = (n_bfly * 18) + 8;
+    let samples = &mut x[..total_len];
 
-    for k in 1..=(n_bfly as usize) {
+    for k in 1..=n_bfly {
         let center = k * 18;
 
         // Iterujemy bezpośrednio po parach współczynników w CSA
@@ -1849,8 +1834,8 @@ pub unsafe extern "C" fn AntiAlias(x: *mut i32, n_bfly: i32) {
             let b0 = samples[idx_b];
 
             // Obliczenia (Q31 butterfly)
-            let tmp1 = MULSHIFT32(a0, c0 as i32) - MULSHIFT32(b0, c1 as i32);
-            let tmp2 = MULSHIFT32(b0, c0 as i32) + MULSHIFT32(a0, c1 as i32);
+            let tmp1 = mulshift_32(a0, c0 as i32) - mulshift_32(b0, c1 as i32);
+            let tmp2 = mulshift_32(b0, c0 as i32) + mulshift_32(a0, c1 as i32);
 
             // Zapis z powrotem
             samples[idx_a] = tmp1 << 1;
@@ -2019,24 +2004,24 @@ pub unsafe extern "C" fn IMDCT12x3(
         *y.add((3 + i) * n_bands) = y_lo;
 
         // Kolejne próbki to suma poprzedniego okna i nowych danych (xBuf) z oknem wp
-        y_lo = (x_prev_win[6 + i] << 2) + MULSHIFT32(wp[i] as i32, x_buf[3 + i]);
+        y_lo = (x_prev_win[6 + i] << 2) + mulshift_32(wp[i] as i32, x_buf[3 + i]);
         m_out |= y_lo.abs();
         *y.add((6 + i) * n_bands) = y_lo;
 
-        y_lo = (x_prev_win[9 + i] << 2) + MULSHIFT32(wp[3 + i] as i32, x_buf[5 - i]);
+        y_lo = (x_prev_win[9 + i] << 2) + mulshift_32(wp[3 + i] as i32, x_buf[5 - i]);
         m_out |= y_lo.abs();
         *y.add((9 + i) * n_bands) = y_lo;
 
         // Składanie na stykach bloków wewnętrznych (short block concatenation)
         y_lo = (x_prev_win[12 + i] << 2) 
-               + MULSHIFT32(wp[6 + i] as i32, x_buf[2 - i]) 
-               + MULSHIFT32(wp[i] as i32, x_buf[9 + i]);
+               + mulshift_32(wp[6 + i] as i32, x_buf[2 - i]) 
+               + mulshift_32(wp[i] as i32, x_buf[9 + i]);
         m_out |= y_lo.abs();
         *y.add((12 + i) * n_bands) = y_lo;
 
         y_lo = (x_prev_win[15 + i] << 2) 
-               + MULSHIFT32(wp[9 + i] as i32, x_buf[i]) 
-               + MULSHIFT32(wp[3 + i] as i32, x_buf[11 - i]);
+               + mulshift_32(wp[9 + i] as i32, x_buf[i]) 
+               + mulshift_32(wp[3 + i] as i32, x_buf[11 - i]);
         m_out |= y_lo.abs();
         *y.add((15 + i) * n_bands) = y_lo;
     }
@@ -2104,7 +2089,9 @@ pub unsafe extern "C" fn IMDCT(
 
     // Wywołanie AntiAlias na buforze konkretnego kanału
     // huffDecBuf[ch] to tablica 576 intów
-    AntiAlias(hi.huff_dec_buf[ch as usize].as_mut_ptr(), n_bfly);
+    if let Ok(size) = n_bfly.try_into() {
+        AntiAlias(&mut hi.huff_dec_buf[ch as usize], size);
+    }
 
     // Aktualizacja nonZeroBound
     let x_nz = hi.non_zero_bound[ch as usize];
@@ -2244,7 +2231,7 @@ pub unsafe extern "C" fn DequantBlock(
         } else {
             if x < 64 {
                 y = pow43[(x - 16) as usize];
-                y = MULSHIFT32(y, scalef);
+                y = mulshift_32(y, scalef);
                 shift = scalei - 3;
             } else {
                 /* Normalizacja do [0x40000000, 0x7fffffff] */
@@ -2259,16 +2246,16 @@ pub unsafe extern "C" fn DequantBlock(
                 /* Aproksymacja wielomianowa */
                 let x_i = x_norm as i32;
                 y = coef[0] as i32;
-                y = MULSHIFT32(y, x_norm as i32) + (coef[1] as i32);
-                y = MULSHIFT32(y, x_norm as i32) + (coef[2] as i32);
-                y = MULSHIFT32(y, x_norm as i32) + (coef[3] as i32);
-                y = MULSHIFT32(y, x_norm as i32) + (coef[4] as i32);
+                y = mulshift_32(y, x_norm as i32) + (coef[1] as i32);
+                y = mulshift_32(y, x_norm as i32) + (coef[2] as i32);
+                y = mulshift_32(y, x_norm as i32) + (coef[3] as i32);
+                y = mulshift_32(y, x_norm as i32) + (coef[4] as i32);
                 
                 // y = (y * pow2frac[shift]) << 3
-                y = MULSHIFT32(y, pow2frac[shift as usize]) << 3;
+                y = mulshift_32(y, pow2frac[shift as usize]) << 3;
 
                 /* Skala ułamkowa */
-                y = MULSHIFT32(y, scalef);
+                y = mulshift_32(y, scalef);
                 shift = scalei - pow2exp[shift as usize];
             }
 
@@ -2517,11 +2504,11 @@ pub unsafe extern "C" fn IntensityProcMPEG1(
             if samps_left <= 0 { break; }
             let common = x_left[i];
             
-            let xr = MULSHIFT32(fr, common) << 2;
+            let xr = mulshift_32(fr, common) << 2;
             x_right[i] = xr;
             m_out_r |= xr.abs();
 
-            let xl = MULSHIFT32(fl, common) << 2;
+            let xl = mulshift_32(fl, common) << 2;
             x_left[i] = xl;
             m_out_l |= xl.abs();
 
@@ -2551,10 +2538,10 @@ pub unsafe extern "C" fn IntensityProcMPEG1(
             if samps_left < 3 { break; }
             for w in 0..3 {
                 let common = x_left[i + w];
-                let xr = MULSHIFT32(frs[w], common) << 2;
+                let xr = mulshift_32(frs[w], common) << 2;
                 x_right[i + w] = xr;
                 m_out_r |= xr.abs();
-                let xl = MULSHIFT32(fls[w], common) << 2;
+                let xl = mulshift_32(fls[w], common) << 2;
                 x_left[i + w] = xl;
                 m_out_l |= xl.abs();
             }
@@ -2642,8 +2629,8 @@ pub unsafe extern "C" fn IntensityProcMPEG2(
 
             for _ in 0..n {
                 let common = x_left[i];
-                let xr = MULSHIFT32(fr, common) << 2;
-                let xl = MULSHIFT32(fl, common) << 2;
+                let xr = mulshift_32(fr, common) << 2;
+                let xl = mulshift_32(fl, common) << 2;
 
                 x_right[i] = xr;
                 x_left[i] = xl;
@@ -2685,8 +2672,8 @@ pub unsafe extern "C" fn IntensityProcMPEG2(
                 for _ in 0..n {
                     if i < 576 {
                         let common = x_left[i];
-                        let xr = MULSHIFT32(fr, common) << 2;
-                        let xl = MULSHIFT32(fl, common) << 2;
+                        let xr = mulshift_32(fr, common) << 2;
+                        let xl = mulshift_32(fl, common) << 2;
 
                         x_right[i] = xr;
                         x_left[i] = xl;
@@ -2977,7 +2964,7 @@ pub unsafe fn MP3DecodeHelper(
     useSize: i32,
     // SELF
     m_MP3Decoder: *mut MP3Decoder,
-) -> i32 {
+) -> i8 {
     let mut offset: i32;
     let mut bitOffset: i32;
     let mut mainBits: i32;
@@ -2995,7 +2982,7 @@ pub unsafe fn MP3DecodeHelper(
     let fhBytes = match m_MP3Decoder.unpack_frame_header(buf) {
         Ok(v) => v,
         Err(e) => {
-            return e as i32;
+            return e;
         }
     };
     inbuf = inbuf.add(fhBytes);
@@ -3010,7 +2997,7 @@ pub unsafe fn MP3DecodeHelper(
 
     if siBytes < 0 {
         MP3ClearBadFrame(outbuf);
-        return ERR_MP3_INVALID_SIDEINFO as i32; // ERR_MP3_INVALID_SIDEINFO
+        return ERR_MP3_INVALID_SIDEINFO; // ERR_MP3_INVALID_SIDEINFO
     }
     inbuf = inbuf.add(siBytes as usize);
     *bytesLeft -= fhBytes as i32 + siBytes;
@@ -3136,7 +3123,7 @@ pub unsafe fn MP3DecodeHelper(
             m_SFBandTable,&mut m_MP3Decoder.m_ScaleFactorJS, m_MP3Decoder.m_MPEGVersion
         ) < 0 {
             MP3ClearBadFrame(outbuf);
-            return ERR_MP3_INVALID_DEQUANTIZE as i32;
+            return ERR_MP3_INVALID_DEQUANTIZE;
         }
 
         for ch in 0..(*m_MP3DecInfo).nChans {
@@ -3147,13 +3134,18 @@ pub unsafe fn MP3DecodeHelper(
         }
 
         let pcm_offset = (gr * (*m_MP3DecInfo).nGranSamps * (*m_MP3DecInfo).nChans) as usize;
-        if Subband(outbuf.as_mut_ptr().add(pcm_offset), m_MP3DecInfo, &mut m_MP3Decoder.m_IMDCTInfo, &mut m_MP3Decoder.m_SubbandInfo) < 0 {
+        if Subband(
+            outbuf.as_mut_ptr().add(pcm_offset),
+            m_MP3DecInfo,
+            &mut m_MP3Decoder.m_IMDCTInfo,
+            &mut m_MP3Decoder.m_SubbandInfo
+        ) < 0 {
             MP3ClearBadFrame(outbuf);
-            return -10; // ERR_MP3_INVALID_SUBBAND
+            return ERR_MP3_INVALID_SUBBAND; // ERR_MP3_INVALID_SUBBAND
         }
     }
 
     m_MP3Decoder.mp3_get_last_frame_info();
     
-    return ERR_MP3_NONE as i32; // ERR_MP3_NONE
+    ERR_MP3_NONE
 }
