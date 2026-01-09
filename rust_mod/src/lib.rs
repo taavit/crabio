@@ -285,8 +285,8 @@ pub unsafe fn UnpackSideInfo(
     m_SideInfoSub: *mut [[SideInfoSub; MAX_NCHAN]; MAX_NGRAN],
     // m_SideInfoSub: *mut SideInfoSub,
     m_MP3DecInfo: *mut MP3DecInfo,
-    m_MPEGVersion: i32,     // 1 = MPEG1, 0 = MPEG2/2.5
-    m_sMode: i32,
+    m_MPEGVersion: MPEGVersion,     // 1 = MPEG1, 0 = MPEG2/2.5
+    m_sMode: StereoMode,
 ) -> usize {
     let n_bytes: usize;
 
@@ -296,15 +296,15 @@ pub unsafe fn UnpackSideInfo(
     let mut bsi: BitStreamInfo;
 
     /* validate pointers and sync word */
-    if (m_MPEGVersion == MPEGVersion::MPEG1 as i32) {
+    if (m_MPEGVersion == MPEGVersion::MPEG1) {
         /* MPEG 1 */
-        n_bytes= if m_sMode == StereoMode::Mono as i32 { SIBYTES_MPEG1_MONO } else { SIBYTES_MPEG1_STEREO };
+        n_bytes= if m_sMode == StereoMode::Mono { SIBYTES_MPEG1_MONO } else { SIBYTES_MPEG1_STEREO };
         bsi = BitStreamInfo::from_slice(unsafe {
             core::slice::from_raw_parts(buf, n_bytes)
         });
         m_SideInfo.mainDataBegin = bsi.get_bits(9) as i32;
         m_SideInfo.privateBits= bsi.get_bits
-            (if m_sMode == StereoMode::Mono as i32 { 5 } else { 3 }) as i32;
+            (if m_sMode == StereoMode::Mono { 5 } else { 3 }) as i32;
         for ch in 0..m_MP3DecInfo.nChans {
             for bd in 0..MAX_SCFBD {
                 m_SideInfo.scfsi[ch as usize][bd] = bsi.get_bits(1) as i32;
@@ -312,12 +312,12 @@ pub unsafe fn UnpackSideInfo(
         }
     } else {
         /* MPEG 2, MPEG 2.5 */
-        n_bytes = if m_sMode == StereoMode::Mono as i32 { SIBYTES_MPEG2_MONO } else { SIBYTES_MPEG2_STEREO };
+        n_bytes = if m_sMode == StereoMode::Mono { SIBYTES_MPEG2_MONO } else { SIBYTES_MPEG2_STEREO };
         bsi = BitStreamInfo::from_slice(unsafe {
             core::slice::from_raw_parts(buf, n_bytes)
         });
         m_SideInfo.mainDataBegin = bsi.get_bits(8) as i32;
-        m_SideInfo.privateBits = bsi.get_bits(if m_sMode == StereoMode::Mono as i32 { 1 } else { 2 }) as i32;
+        m_SideInfo.privateBits = bsi.get_bits(if m_sMode == StereoMode::Mono { 1 } else { 2 }) as i32;
     }
     for gr in 0..m_MP3DecInfo.nGrans {
         for ch in  0..m_MP3DecInfo.nChans {
@@ -325,7 +325,7 @@ pub unsafe fn UnpackSideInfo(
             sis.part23_length = bsi.get_bits(12) as i32;
             sis.n_bigvals = bsi.get_bits(9) as i32;
             sis.global_gain = bsi.get_bits(8) as i32;
-            sis.sfCompress = bsi.get_bits(if m_MPEGVersion == MPEGVersion::MPEG1 as i32 { 4 } else { 9 }) as i32;
+            sis.sfCompress = bsi.get_bits(if m_MPEGVersion == MPEGVersion::MPEG1 { 4 } else { 9 }) as i32;
             sis.win_switch_flag = bsi.get_bits(1) as i32;
             if sis.win_switch_flag != 0 {
                 /* this is a start, stop, short, or mixed block */
@@ -360,7 +360,7 @@ pub unsafe fn UnpackSideInfo(
                 sis.region0Count = bsi.get_bits(4) as i32;
                 sis.region1Count = bsi.get_bits(3) as i32;
             }
-            sis.preFlag = if m_MPEGVersion == MPEGVersion::MPEG1 as i32 { bsi.get_bits(1) as i32 } else { 0 };
+            sis.preFlag = if m_MPEGVersion == MPEGVersion::MPEG1 { bsi.get_bits(1) as i32 } else { 0 };
             sis.sfactScale = bsi.get_bits(1) as i32;
             sis.count1TableSelect = bsi.get_bits(1) as i32;
         }
@@ -1603,11 +1603,11 @@ pub unsafe extern "C" fn DecodeHuffman(
     m_HuffmanInfo: *mut HuffmanInfo,
     m_SFBandTable: *const SFBandTable,  // SFBandTable_t*
     m_SideInfoSub: *mut [[SideInfoSub; MAX_NCHAN]; MAX_NGRAN],
-    m_MPEGVersion: *const i32,  // MPEGVersion_t*
+    m_MPEGVersion: MPEGVersion,  // MPEGVersion_t*
 ) -> i32 {
     let m_HuffmanInfo =  &mut *m_HuffmanInfo;
     let sf = &*m_SFBandTable;       // &SFBandTable
-    let version = *m_MPEGVersion;
+    let version = m_MPEGVersion;
     let mut rEnd= [0; 4];
     let mut r1Start;
     let mut r2Start;
@@ -1629,7 +1629,7 @@ pub unsafe extern "C" fn DecodeHuffman(
             r1Start = sf.s[((sis.region0Count + 1) / 3) as usize] as i32 * 3;
         } else {
             // Mixed block
-            if version == MPEGVersion::MPEG1 as i32 {
+            if version == MPEGVersion::MPEG1 {
                 r1Start = sf.l[(sis.region0Count + 1) as usize] as i32;
             } else {
                 // MPEG2 / MPEG2.5 – spec wymaga specjalnego obliczenia
@@ -2409,7 +2409,7 @@ pub unsafe extern "C" fn DequantChannel(
     cbi: *mut CriticalBandInfo,
     m_frame_header: *const FrameHeader,
     m_sf_band_table: *const SFBandTable,
-    m_MPEGVersion: i32,
+    m_MPEGVersion: MPEGVersion,
 ) -> i32 {
     let sis = &*sis;
     let sfis = &*sfis;
@@ -2424,7 +2424,7 @@ pub unsafe extern "C" fn DequantChannel(
     // 1. Ustalenie granic dla bloków długich i krótkich
     if sis.blockType == 2 {
         if sis.mixedBlock != 0 {
-            cb_end_l = if m_MPEGVersion == 0 { 8 } else { 6 }; // MPEG1 vs MPEG2
+            cb_end_l = if m_MPEGVersion == MPEGVersion::MPEG1 { 8 } else { 6 }; // MPEG1 vs MPEG2
             cb_start_s = 3;
         } else {
             cb_end_l = 0;
@@ -2869,7 +2869,7 @@ pub unsafe extern "C" fn MidSideProc(
     m_SideInfo: *mut SideInfo,
     m_FrameHeader: *mut FrameHeader,
     m_ScaleFactorJS: *mut ScaleFactorJS,
-    m_MPEGVersion: i32
+    m_MPEGVersion: MPEGVersion
 ) -> i32 {
     /* init GetBits reader */
     let m_SideInfoSub = &mut *m_SideInfoSub;
@@ -2890,7 +2890,7 @@ pub unsafe extern "C" fn MidSideProc(
         GetBits(bsi, *bitOffset as u32);
     }
 
-    if (m_MPEGVersion == MPEGVersion::MPEG1 as i32) {
+    if (m_MPEGVersion == MPEGVersion::MPEG1) {
         UnpackSFMPEG1(bsi, &mut m_SideInfoSub[gr as usize][ch as usize], &mut m_ScaleFactorInfoSub,
                       m_SideInfo.scfsi[ch as usize].as_ptr(), gr as usize, ch as usize);
 } else { 
@@ -2972,7 +2972,7 @@ pub unsafe extern "C" fn MP3Dequantize(
     frame_header: *mut FrameHeader,
     sf_band_table: *const SFBandTable,
     sf_js: *mut ScaleFactorJS,
-    mpeg_version: i32,
+    mpeg_version: MPEGVersion,
 ) -> i32 {
     let di = &mut *dec_info;
     let hi = &mut *huff_info;
@@ -3029,7 +3029,7 @@ pub unsafe extern "C" fn MP3Dequantize(
     // 4. Proces Intensity Stereo
     if (fh.modeExt & 0x01) != 0 {
         let n_samps = hi.nonZeroBound[0];
-        if mpeg_version == 0 { // MPEG1
+        if mpeg_version == MPEGVersion::MPEG1 { // MPEG1
             IntensityProcMPEG1(
                 hi.huffDecBuf.as_mut_ptr(),
                 n_samps,
@@ -3221,7 +3221,7 @@ pub unsafe fn MP3DecodeHelper(
             prevBitOffset = bitOffset;
             offset = DecodeHuffman(
                 mainPtr, &mut bitOffset, huffBlockBits, gr, ch,
-                &mut m_MP3Decoder.m_HuffmanInfo, m_SFBandTable, &mut m_MP3Decoder.m_SideInfoSub, &mut m_MP3Decoder.m_MPEGVersion
+                &mut m_MP3Decoder.m_HuffmanInfo, m_SFBandTable, &mut m_MP3Decoder.m_SideInfoSub, m_MP3Decoder.m_MPEGVersion
             );
             if offset < 0 {
                 MP3ClearBadFrame(m_MP3DecInfo, outbuf);
@@ -3243,7 +3243,7 @@ pub unsafe fn MP3DecodeHelper(
         }
 
         for ch in 0..(*m_MP3DecInfo).nChans {
-            if IMDCT(gr, ch, m_SFBandTable, m_MP3Decoder.m_MPEGVersion, &mut m_MP3Decoder.m_SideInfoSub, &mut m_MP3Decoder.m_HuffmanInfo, &mut m_MP3Decoder.m_IMDCTInfo) < 0 {
+            if IMDCT(gr, ch, m_SFBandTable, m_MP3Decoder.m_MPEGVersion as i32, &mut m_MP3Decoder.m_SideInfoSub, &mut m_MP3Decoder.m_HuffmanInfo, &mut m_MP3Decoder.m_IMDCTInfo) < 0 {
                 MP3ClearBadFrame(m_MP3DecInfo, outbuf);
                 return -9; // ERR_MP3_INVALID_IMDCT
             }

@@ -475,8 +475,8 @@ pub struct MP3Decoder {
     pub m_HuffmanInfo: HuffmanInfo,
     pub m_DequantInfo: DequantInfo,
     pub m_IMDCTInfo: IMDCTInfo,
-    pub m_sMode: i32,  /* mono/stereo mode */
-    pub m_MPEGVersion: i32,  /* version ID */
+    pub m_sMode: StereoMode,  /* mono/stereo mode */
+    pub m_MPEGVersion: MPEGVersion,  /* version ID */
 }
 
 /***********************************************************************************************************************
@@ -1285,7 +1285,7 @@ pub struct MP3FrameInfo {
     pub bitsPerSample: i32,
     pub outputSamps: i32,
     pub layer: i32,
-    pub version: i32,
+    pub version: MPEGVersion,
 }
 
 #[repr(C)]
@@ -1296,7 +1296,7 @@ pub struct SFBandTable {
 }
 
 #[repr(C)]
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum StereoMode {          /* map these to the corresponding 2-bit values in the frame header */
     Stereo = 0x00,      /* two independent channels, but L and R frames might have different # of bits */
     Joint = 0x01,       /* coupled channels - layer III: mix of M-S and intensity, Layers I/II: intensity and direct coding only */
@@ -1362,11 +1362,11 @@ impl MP3Decoder {
         /* read header fields - use bitmasks instead of GetBits() for speed, since format never varies */
         let ver_idx = (buf[1] >> 3) & 0x03;
         self.m_MPEGVersion = if ver_idx == 0 {
-            MPEGVersion::MPEG25 as i32
+            MPEGVersion::MPEG25
         } else if ver_idx & 0x01 == 0x01 {
-            MPEGVersion::MPEG1 as i32
+            MPEGVersion::MPEG1
         } else {
-            MPEGVersion::MPEG2 as i32
+            MPEGVersion::MPEG2
         };
         m_frame_header.layer = 4 - ((buf[1] as i32 >> 1) & 0x03); /* easy mapping of index to layer number, 4 = error */
         m_frame_header.crc = 1 - ((buf[1] as i32>> 0) & 0x01);
@@ -1375,10 +1375,10 @@ impl MP3Decoder {
         m_frame_header.paddingBit = (buf[2] as i32 >> 1) & 0x01;
         m_frame_header.privateBit = (buf[2] as i32 >> 0) & 0x01;
         self.m_sMode = match (buf[3] >> 6) & 0x03 {
-            0x00 => StereoMode::Stereo as i32,
-            0x01 => StereoMode::Joint as i32,
-            0x02 => StereoMode::Dual as i32,
-            0x03 => StereoMode::Mono as i32,
+            0x00 => StereoMode::Stereo,
+            0x01 => StereoMode::Joint,
+            0x02 => StereoMode::Dual,
+            0x03 => StereoMode::Mono,
             _ => { return Err(ERR_MP3_INVALID_FRAMEHEADER) }
         }; /* maps to correct enum (see definition) */
         m_frame_header.modeExt = (buf[3] as i32>> 4) & 0x03;
@@ -1391,13 +1391,13 @@ impl MP3Decoder {
         }
         /* for readability (we reference sfBandTable many times in decoder) */
         self.m_SFBandTable = SF_BAND_TABLE[self.m_MPEGVersion as usize][m_frame_header.srIdx as usize];
-        if self.m_sMode != StereoMode::Joint as i32 { /* just to be safe (dequant, stproc check fh->modeExt) */
+        if self.m_sMode != StereoMode::Joint { /* just to be safe (dequant, stproc check fh->modeExt) */
             m_frame_header.modeExt = 0;
         }
         /* init user-accessible data */
-        m_mp3_dec_info.nChans = if self.m_sMode == StereoMode::Mono as i32 { 1 } else { 2 };
+        m_mp3_dec_info.nChans = if self.m_sMode == StereoMode::Mono { 1 } else { 2 };
         m_mp3_dec_info.samprate = SAMPLERATE_TAB[self.m_MPEGVersion as usize][m_frame_header.srIdx as usize];
-        m_mp3_dec_info.nGrans = if self.m_MPEGVersion == MPEGVersion::MPEG1 as i32 { NGRANS_MPEG1 as i32 } else { NGRANS_MPEG2 as i32 };
+        m_mp3_dec_info.nGrans = if self.m_MPEGVersion == MPEGVersion::MPEG1 { NGRANS_MPEG1 as i32 } else { NGRANS_MPEG2 as i32 };
         m_mp3_dec_info.nGranSamps = (samplesPerFrameTab[self.m_MPEGVersion as usize][(m_frame_header.layer - 1) as usize])/m_mp3_dec_info.nGrans;
         m_mp3_dec_info.layer = m_frame_header.layer;
 
@@ -1411,7 +1411,7 @@ impl MP3Decoder {
                 ((bitrateTab[self.m_MPEGVersion as usize][m_frame_header.layer as usize - 1][m_frame_header.brIdx as usize])) as i32 * 1000;
             /* nSlots = total frame bytes (from table) - sideInfo bytes - header - CRC (if present) + pad (if present) */
             m_mp3_dec_info.nSlots= slotTab[self.m_MPEGVersion as usize][m_frame_header.srIdx as usize][m_frame_header.brIdx as usize]  as i32
-                    - sideBytesTab[self.m_MPEGVersion as usize][if self.m_sMode == StereoMode::Mono as i32 { 0 } else { 1 }] - 4
+                    - sideBytesTab[self.m_MPEGVersion as usize][if self.m_sMode == StereoMode::Mono { 0 } else { 1 }] - 4
                     - (if m_frame_header.crc != 0 { 2 } else { 0 }) + (if m_frame_header.paddingBit != 0 { 1 } else { 0 });
         }
         /* load crc word, if enabled, and return length of frame header (in bytes) */
@@ -1449,7 +1449,7 @@ impl MP3Decoder {
             self.m_MP3FrameInfo.bitsPerSample=0;
             self.m_MP3FrameInfo.outputSamps=0;
             self.m_MP3FrameInfo.layer=0;
-            self.m_MP3FrameInfo.version=0;
+            self.m_MP3FrameInfo.version= MPEGVersion::MPEG1;
         } else{
             self.m_MP3FrameInfo.bitrate=self.m_MP3DecInfo.bitrate;
             self.m_MP3FrameInfo.nChans = self.m_MP3DecInfo.nChans;
@@ -1458,7 +1458,7 @@ impl MP3Decoder {
             self.m_MP3FrameInfo.outputSamps=self.m_MP3DecInfo.nChans
                     * samplesPerFrameTab[self.m_MPEGVersion as usize][self.m_MP3DecInfo.layer as usize-1] as i32;
             self.m_MP3FrameInfo.layer=self.m_MP3DecInfo.layer;
-            self.m_MP3FrameInfo.version=self.m_MPEGVersion;
+            self.m_MP3FrameInfo.version= self.m_MPEGVersion;
         }
     }
 }
@@ -1466,7 +1466,7 @@ impl MP3Decoder {
 
 #[cfg(test)]
 mod unpack_frame_header_test {
-    use crate::mp3_decoder::{MAINBUF_SIZE, MAX_NCHAN, MAX_NGRAN, MAX_SCFBD, MP3Decoder, MP3FrameInfo, SFBandTable, SideInfo, SideInfoSub, unpack_frame_header};
+    use crate::mp3_decoder::{MAINBUF_SIZE, MAX_NCHAN, MAX_NGRAN, MAX_SCFBD, MP3Decoder, MP3FrameInfo, MPEGVersion, SFBandTable, SideInfo, SideInfoSub, unpack_frame_header};
     #[test]
     fn test_unpack_frame() {
         let buf: [u8; 4] = [0xFF,0xFB,0x92, 0x64];
@@ -1493,7 +1493,7 @@ mod unpack_frame_header_test {
             nChans: 0,
             outputSamps: 0,
             samprate: 0,
-            version: 0
+            version: MPEGVersion::MPEG1,
         };
         let m_SideInfo = SideInfo {
             mainDataBegin: 0,
