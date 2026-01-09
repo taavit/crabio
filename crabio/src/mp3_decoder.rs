@@ -1431,7 +1431,7 @@ impl MP3Decoder {
  **********************************************************************************************************************/
 
     pub fn mp3_get_last_frame_info(
-        mut self,
+        &mut self,
     ) {
         if self.m_MP3DecInfo.layer != 3 {
             self.m_MP3FrameInfo.bitrate=0;
