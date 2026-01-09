@@ -378,7 +378,7 @@ int MP3Dequantize(
     int m_MPEGVersion
 );
 
-int MP3DecodeHelper(
+int8_t MP3DecodeHelper(
     unsigned char *inbuf,
     size_t inbuf_len,
     int *bytesLeft,
