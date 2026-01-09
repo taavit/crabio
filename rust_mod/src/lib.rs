@@ -165,7 +165,6 @@ pub unsafe extern "C" fn MP3FindFreeSync(buf: *const u8, first_fh: *const u8, n_
  *
  * Notes:       interleaves PCM samples LRLRLR...
  **********************************************************************************************************************/
-#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub fn PolyphaseStereo(pcm: *mut i16, vbuf: *const i32, coef_base: *const u32) {
     let pcm = unsafe { core::slice::from_raw_parts_mut(pcm, NBANDS * MAX_NCHAN) }; // 32*2
@@ -1166,10 +1165,6 @@ const huffTabLookup: [HuffTabLookup; HUFF_PAIRTABS as usize] = [
 const quadTabOffset: [i32; 2] = [0, 64];
 const quadTabMaxBits: [i32; 2] = [6, 4];
 
-unsafe fn pgm_read_word(ptr: *const u16) -> u16 {
-    *ptr
-}
-
 pub unsafe fn DecodeHuffmanPairs(
     mut xy: *mut i32,
     mut nVals: i32,
@@ -1184,7 +1179,7 @@ pub unsafe fn DecodeHuffmanPairs(
     let mut padBits: i32;
     let mut len: i32;
     let startBits: i32;
-    let mut linBits: i32;
+    let linBits: i32;
     let mut maxBits: i32;
     let mut minBits: i32;
     let tabType: i32; // HuffTabType_t
@@ -1237,7 +1232,7 @@ pub unsafe fn DecodeHuffmanPairs(
         }
         return 0;
     } else if tabType == HuffTabType::OneShot as i32 {
-        maxBits = ((pgm_read_word(tBase) >> 0) & 0x000f) as i32;
+        maxBits = ((*(tBase) >> 0) & 0x000f) as i32;
         let tBase_one_shot = tBase.add(1);
         padBits = 0;
 
@@ -1270,7 +1265,7 @@ pub unsafe fn DecodeHuffmanPairs(
             }
 
             while nVals > 0 && cachedBits >= 11 {
-                cw = pgm_read_word(tBase_one_shot.add((cache >> (32 - maxBits)) as usize));
+                cw = (*tBase_one_shot.add((cache >> (32 - maxBits)) as usize));
 
                 len = ((cw >> 12) & 0x000f) as i32;
                 cachedBits -= len;
@@ -1336,8 +1331,8 @@ pub unsafe fn DecodeHuffmanPairs(
             }
 
             while nVals > 0 && cachedBits >= 11 {
-                maxBits = (pgm_read_word(tCurr) & 0x000f) as i32;
-                cw = pgm_read_word(tCurr.add(((cache >> (32 - maxBits)) + 1) as usize));
+                maxBits = (*tCurr & 0x000f) as i32;
+                cw = *(tCurr.add(((cache >> (32 - maxBits)) + 1) as usize));
                 len = ((cw >> 12) & 0x000f) as i32;
 
                 if len == 0 {

@@ -214,8 +214,6 @@ int  MP3GetOutputSamps();
 
 //internally used
 void MP3Decoder_ClearBuffer(void);
-void PolyphaseMono(short *pcm, int *vbuf, const uint32_t *coefBase);
-void PolyphaseStereo(short *pcm, int *vbuf, const uint32_t *coefBase);
 void SetBitstreamPointer(BitStreamInfo_t *bsi, int nBytes, unsigned char *buf);
 int CalcBitsUsed(BitStreamInfo_t *bsi, unsigned char *startBuf, int startOffset);
 // int DequantChannel(int *sampleBuf, int *workBuf, int *nonZeroBound, SideInfoSub_t *sis, ScaleFactorInfoSub_t *sfis, CriticalBandInfo_t *cbi);

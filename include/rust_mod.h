@@ -309,8 +309,6 @@ int IMDCT36(int *xCurr, int *xPrev, int *y, int btCurr, int btPrev, int blockIdx
 short ClipToShort(int x, int fracBits);
 int FreqInvertRescale(int *y, int *xPrev, int blockIdx, int es);
 
-void PolyphaseStereo(short *pcm, int *vbuf, const uint32_t *coefBase);
-void PolyphaseMono(short *pcm, int *vbuf, const uint32_t *coefBase);
 void WinPrevious(int *xPrev, int *xPrevWin, int btPrev);
 void MP3ClearBadFrame(MP3DecInfo_t *m_MP3DecInfo, short *outbuf);
 void UnpackSFMPEG1(BitStreamInfo_t *bsi, SideInfoSub_t *sis, ScaleFactorInfoSub_t *sfis, int *scfsi, int gr, ScaleFactorInfoSub_t *sfisGr0);
