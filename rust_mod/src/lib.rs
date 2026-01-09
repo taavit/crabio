@@ -2,9 +2,20 @@
 #![feature(asm_experimental_arch)]
 use core::{panic::PanicInfo, ptr::null};
 
-use crabio::{mp3_decoder::{
-    BLOCK_SIZE, CriticalBandInfo, DequantInfo, ERR_MP3_INVALID_DEQUANTIZE, ERR_MP3_INVALID_SIDEINFO, ERR_MP3_INVALID_SUBBAND, ERR_MP3_NONE, FrameHeader, HUFF_PAIRTABS, HuffTabLookup, HuffTabType, HuffmanInfo, IMDCT_SCALE, IMDCTInfo, MAX_NCHAN, MAX_NGRAN, MAX_NSAMP, MAX_SCFBD, MP3DecInfo, MP3Decoder, MP3FrameInfo, MPEGVersion, NBANDS, POLY_COEF, SFBandTable, SIBYTES_MPEG1_MONO, SIBYTES_MPEG1_STEREO, SIBYTES_MPEG2_MONO, SIBYTES_MPEG2_STEREO, SQRTHALF, ScaleFactorInfoSub, ScaleFactorJS, SideInfo, SideInfoSub, StereoMode, SubbandInfo, VBUF_LENGTH, clip_2n, fdct_32, freq_invert_rescale, idct_9, imdct_12, madd_64, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, polyphase_mono, polyphase_stereo, sar_64, win_previous
-}, utils::bit_stream_cache::BitStreamInfo};
+use crabio::{
+    mp3_decoder::{
+        BLOCK_SIZE, CriticalBandInfo, DequantInfo, ERR_MP3_INVALID_DEQUANTIZE,
+        ERR_MP3_INVALID_SIDEINFO, ERR_MP3_INVALID_SUBBAND, ERR_MP3_NONE, FrameHeader,
+        HUFF_PAIRTABS, HuffTabLookup, HuffTabType, HuffmanInfo, IMDCT_SCALE, IMDCTInfo, MAX_NCHAN,
+        MAX_NGRAN, MAX_NSAMP, MAX_SCFBD, MP3DecInfo, MP3Decoder, MP3FrameInfo, MPEGVersion, NBANDS,
+        POLY_COEF, SFBandTable, SIBYTES_MPEG1_MONO, SIBYTES_MPEG1_STEREO, SIBYTES_MPEG2_MONO,
+        SIBYTES_MPEG2_STEREO, SQRTHALF, ScaleFactorInfoSub, ScaleFactorJS, SideInfo, SideInfoSub,
+        StereoMode, SubbandInfo, VBUF_LENGTH, clip_2n, fdct_32, freq_invert_rescale, idct_9,
+        imdct_12, madd_64, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, polyphase_mono,
+        polyphase_stereo, sar_64, win_previous,
+    },
+    utils::bit_stream_cache::BitStreamInfo,
+};
 
 #[repr(C)]
 pub struct BlockCount {
@@ -208,15 +219,10 @@ pub unsafe fn PolyphaseMono(pcm: *mut i16, vbuf: *const i32, coef_base: *const u
  **********************************************************************************************************************/
 #[unsafe(no_mangle)]
 #[allow(non_snake_case)]
-pub unsafe fn FreqInvertRescale(
-    y: *mut i32,
-    x_prev: *mut i32,
-    block_idx: i32,
-    es: i32,
-) -> i32 {
+pub unsafe fn FreqInvertRescale(y: *mut i32, x_prev: *mut i32, block_idx: i32, es: i32) -> i32 {
     let y_slice = unsafe { core::slice::from_raw_parts_mut(y, 9 * NBANDS * 2 + NBANDS) };
     let x_prev: &mut [i32] = unsafe { core::slice::from_raw_parts_mut(x_prev, 9) };
-    
+
     freq_invert_rescale(y_slice, x_prev, block_idx, es)
 }
 
@@ -225,7 +231,7 @@ pub unsafe fn FreqInvertRescale(
 pub fn WinPrevious(xPrev: *mut i32, xPrevWin: *mut i32, bt_prev: i32) {
     let x_prev: &mut [i32; 9] = unsafe { &mut *xPrev.cast::<[i32; 9]>() };
     let x_prev_win: &mut [i32; 18] = unsafe { &mut *xPrevWin.cast::<[i32; 18]>() };
-    
+
     win_previous(x_prev, x_prev_win, bt_prev);
 }
 
@@ -234,7 +240,7 @@ pub fn WinPrevious(xPrev: *mut i32, xPrevWin: *mut i32, bt_prev: i32) {
  **********************************************************************************************************************/
 #[unsafe(no_mangle)]
 pub unsafe fn SetBitstreamPointer(bsi: *mut BitStreamInfoC, nBytes: i32, buf: *const u8) {
-    let bsi = unsafe { &mut *bsi};
+    let bsi = unsafe { &mut *bsi };
     /* init bitstream */
     bsi.byte_ptr = buf;
     bsi.i_cache = 0; /* 4-byte unsigned int */
@@ -244,23 +250,18 @@ pub unsafe fn SetBitstreamPointer(bsi: *mut BitStreamInfoC, nBytes: i32, buf: *c
 
 //----------------------------------------------------------------------------------------------------------------------
 #[unsafe(no_mangle)]
-pub unsafe fn CalcBitsUsed(bsi: *const BitStreamInfoC, startBuf: *const u8, startOffset: usize) -> i32 {
-    let bsi = unsafe { & *bsi};
+pub unsafe fn CalcBitsUsed(
+    bsi: *const BitStreamInfoC,
+    startBuf: *const u8,
+    startOffset: usize,
+) -> i32 {
+    let bsi = unsafe { &*bsi };
     let mut bitsUsed = unsafe { (bsi.byte_ptr.offset_from(startBuf) * 8) as i32 };
     bitsUsed -= bsi.cached_bits;
     bitsUsed -= startOffset as i32;
     bitsUsed
 }
 //----------------------------------------------------------------------------------------------------------------------
-#[unsafe(no_mangle)]
-pub fn CheckPadBit(m_FrameHeader: *const FrameHeader) -> i32 {
-    let m_FrameHeader = unsafe { & *m_FrameHeader};
-    if m_FrameHeader.paddingBit != 0 {
-        1
-     } else {
-        0
-    }
-}
 
 /***********************************************************************************************************************
  * Function:    MP3ClearBadFrame
@@ -275,10 +276,10 @@ pub fn CheckPadBit(m_FrameHeader: *const FrameHeader) -> i32 {
  * Return:      none
  **********************************************************************************************************************/
 pub fn MP3ClearBadFrame(outbuf: &mut [i16]) {
-    outbuf.iter_mut().for_each(|e| *e = 0 );
+    outbuf.iter_mut().for_each(|e| *e = 0);
 }
 
-const m_SFLenTab: [[u8; 2]; 16] = [
+const M_SFLEN_TAB: [[u8; 2]; 16] = [
     [0, 0],
     [0, 1],
     [0, 2],
@@ -294,7 +295,7 @@ const m_SFLenTab: [[u8; 2]; 16] = [
     [3, 2],
     [3, 3],
     [4, 2],
-    [4, 3]
+    [4, 3],
 ];
 
 //----------------------------------------------------------------------------------------------------------------------
@@ -321,108 +322,109 @@ const m_SFLenTab: [[u8; 2]; 16] = [
  *                (make sure dequantizer follows same convention)
  *              Illegal Intensity Position = 7 (always) for MPEG1 scale factors
  **********************************************************************************************************************/
-pub unsafe fn UnpackSFMPEG1(bsi: *mut BitStreamInfoC, sis: *mut SideInfoSub,
-                   m_ScaleFactorInfoSub: &mut [[ScaleFactorInfoSub; 2]; 2], scfsi: *const i32, gr: usize, ch: usize,
-                ) {
-    let mut sfb: i32;
-    let mut slen0: i32;
-    let mut slen1: i32;
+pub unsafe fn UnpackSFMPEG1(
+    bsi: *mut BitStreamInfoC,
+    sis: *mut SideInfoSub,
+    m_scale_factor_info_sub: &mut [[ScaleFactorInfoSub; 2]; 2],
+    scfsi: *const i32,
+    gr: usize,
+    ch: usize,
+) {
+    let sfb: i32;
+    let slen0: i32;
+    let slen1: i32;
 
     let sis = unsafe { &*sis };
     let bsi = unsafe { &mut *bsi };
     let scfsi = unsafe { core::slice::from_raw_parts(scfsi, 4) };
     /* these can be 0, so make sure GetBits(bsi, 0) returns 0 (no >> 32 or anything) */
-    slen0 = m_SFLenTab[sis.sfCompress as usize][0] as i32;
-    slen1 = m_SFLenTab[sis.sfCompress as usize][1] as i32;
-    if (sis.blockType == 2){
+    slen0 = M_SFLEN_TAB[sis.sfCompress as usize][0] as i32;
+    slen1 = M_SFLEN_TAB[sis.sfCompress as usize][1] as i32;
+    if (sis.blockType == 2) {
         /* short block, type 2 (implies winSwitchFlag == 1) */
-        if (sis.mixedBlock != 0){
+        if (sis.mixedBlock != 0) {
             /* do long block portion */
             for sfb in 0..8 {
-                m_ScaleFactorInfoSub[gr][ch].l[sfb]= GetBits(bsi, slen0 as u32) as u8;
+                m_scale_factor_info_sub[gr][ch].l[sfb] = GetBits(bsi, slen0 as u32) as u8;
             }
-            sfb=3;
-        }
-        else {
+            sfb = 3;
+        } else {
             /* all short blocks */
-            sfb=0;
+            sfb = 0;
         }
         for sfb in sfb..6 {
-            m_ScaleFactorInfoSub[gr][ch].s[sfb as usize][0] = GetBits(bsi, slen0 as u32) as u8;
-            m_ScaleFactorInfoSub[gr][ch].s[sfb as usize][1] = GetBits(bsi, slen0 as u32) as u8;
-            m_ScaleFactorInfoSub[gr][ch].s[sfb as usize][2] = GetBits(bsi, slen0 as u32) as u8;
+            m_scale_factor_info_sub[gr][ch].s[sfb as usize][0] = GetBits(bsi, slen0 as u32) as u8;
+            m_scale_factor_info_sub[gr][ch].s[sfb as usize][1] = GetBits(bsi, slen0 as u32) as u8;
+            m_scale_factor_info_sub[gr][ch].s[sfb as usize][2] = GetBits(bsi, slen0 as u32) as u8;
         }
         for sfb in 6..12 {
-            m_ScaleFactorInfoSub[gr][ch].s[sfb][0] = GetBits(bsi, slen1 as u32) as u8;
-            m_ScaleFactorInfoSub[gr][ch].s[sfb][1] = GetBits(bsi, slen1 as u32) as u8;
-            m_ScaleFactorInfoSub[gr][ch].s[sfb][2] = GetBits(bsi, slen1 as u32) as u8;
+            m_scale_factor_info_sub[gr][ch].s[sfb][0] = GetBits(bsi, slen1 as u32) as u8;
+            m_scale_factor_info_sub[gr][ch].s[sfb][1] = GetBits(bsi, slen1 as u32) as u8;
+            m_scale_factor_info_sub[gr][ch].s[sfb][2] = GetBits(bsi, slen1 as u32) as u8;
         }
         /* last sf band not transmitted */
-        m_ScaleFactorInfoSub[gr][ch].s[12][0] = 0;
-        m_ScaleFactorInfoSub[gr][ch].s[12][1] = 0;
-        m_ScaleFactorInfoSub[gr][ch].s[12][2] = 0;
-    }
-    else{
+        m_scale_factor_info_sub[gr][ch].s[12][0] = 0;
+        m_scale_factor_info_sub[gr][ch].s[12][1] = 0;
+        m_scale_factor_info_sub[gr][ch].s[12][2] = 0;
+    } else {
         /* long blocks, type 0, 1, or 3 */
-        if(gr == 0) {
+        if (gr == 0) {
             /* first granule */
             for sfb in 0..11 {
-                m_ScaleFactorInfoSub[gr][ch].l[sfb] = GetBits(bsi, slen0 as u32) as u8;
+                m_scale_factor_info_sub[gr][ch].l[sfb] = GetBits(bsi, slen0 as u32) as u8;
             }
             for sfb in 11..21 {
-                m_ScaleFactorInfoSub[gr][ch].l[sfb] = GetBits(bsi, slen1 as u32) as u8;
+                m_scale_factor_info_sub[gr][ch].l[sfb] = GetBits(bsi, slen1 as u32) as u8;
             }
             return;
-        }
-        else{
+        } else {
             /* second granule
              * scfsi: 0 = different scalefactors for each granule,
              *        1 = copy sf's from granule 0 into granule 1
              * for block type == 2, scfsi is always 0
              */
-            sfb = 0;
-            if(scfsi[0] != 0) {
+            if (scfsi[0] != 0) {
                 for sfb in 0..6 {
-                    m_ScaleFactorInfoSub[gr][ch].l[sfb] = m_ScaleFactorInfoSub[0][ch].l[sfb];
+                    m_scale_factor_info_sub[gr][ch].l[sfb] = m_scale_factor_info_sub[0][ch].l[sfb];
                 }
             } else {
                 for sfb in 0..6 {
-                    m_ScaleFactorInfoSub[gr][ch].l[sfb] = GetBits(bsi, slen0 as u32) as u8;
+                    m_scale_factor_info_sub[gr][ch].l[sfb] = GetBits(bsi, slen0 as u32) as u8;
                 }
             }
 
-            if(scfsi[1] != 0) {
+            if (scfsi[1] != 0) {
                 for sfb in 6..11 {
-                    m_ScaleFactorInfoSub[gr][ch].l[sfb] = m_ScaleFactorInfoSub[0][ch].l[sfb];
+                    m_scale_factor_info_sub[gr][ch].l[sfb] = m_scale_factor_info_sub[0][ch].l[sfb];
                 }
             } else {
                 for sfb in 6..11 {
-                    m_ScaleFactorInfoSub[gr][ch].l[sfb] = GetBits(bsi, slen0 as u32) as u8;
+                    m_scale_factor_info_sub[gr][ch].l[sfb] = GetBits(bsi, slen0 as u32) as u8;
                 }
             }
-            if(scfsi[2] != 0) {
+            if (scfsi[2] != 0) {
                 for sfb in 11..16 {
-                    m_ScaleFactorInfoSub[gr][ch].l[sfb] = m_ScaleFactorInfoSub[0][ch].l[sfb];
+                    m_scale_factor_info_sub[gr][ch].l[sfb] = m_scale_factor_info_sub[0][ch].l[sfb];
                 }
             } else {
                 for sfb in 11..16 {
-                    m_ScaleFactorInfoSub[gr][ch].l[sfb] = GetBits(bsi, slen1 as u32) as u8;
+                    m_scale_factor_info_sub[gr][ch].l[sfb] = GetBits(bsi, slen1 as u32) as u8;
                 }
             }
 
-            if(scfsi[3] != 0) {
+            if (scfsi[3] != 0) {
                 for sfb in 16..21 {
-                    m_ScaleFactorInfoSub[gr][ch].l[sfb] = m_ScaleFactorInfoSub[0][ch].l[sfb];
+                    m_scale_factor_info_sub[gr][ch].l[sfb] = m_scale_factor_info_sub[0][ch].l[sfb];
                 }
             } else {
                 for sfb in 16..21 {
-                    m_ScaleFactorInfoSub[gr][ch].l[sfb] = GetBits(bsi, slen1 as u32) as u8;
+                    m_scale_factor_info_sub[gr][ch].l[sfb] = GetBits(bsi, slen1 as u32) as u8;
                 }
             }
         }
         /* last sf band not transmitted */
-        m_ScaleFactorInfoSub[gr][ch].l[21] = 0;
-        m_ScaleFactorInfoSub[gr][ch].l[22] = 0;
+        m_scale_factor_info_sub[gr][ch].l[21] = 0;
+        m_scale_factor_info_sub[gr][ch].l[22] = 0;
     }
 }
 
@@ -436,15 +438,14 @@ pub unsafe fn UnpackSFMPEG1(bsi: *mut BitStreamInfoC, sis: *mut SideInfoSub,
  *   NRTab[x][1][y]   --> (NRTab[x][1][y])   / 3
  *   NRTab[x][2][>=1] --> (NRTab[x][2][>=1]) / 3  (first partition is long block)
  */
-const NRTab:[[[u8; 4]; 3]; 6] = [
-    [[ 6,  5, 5, 5], [3, 3, 3, 3], [6, 3, 3, 3]],
-    [[ 6,  5, 7, 3], [3, 3, 4, 2], [6, 3, 4, 2]],
+const NRTAB: [[[u8; 4]; 3]; 6] = [
+    [[6, 5, 5, 5], [3, 3, 3, 3], [6, 3, 3, 3]],
+    [[6, 5, 7, 3], [3, 3, 4, 2], [6, 3, 4, 2]],
     [[11, 10, 0, 0], [6, 6, 0, 0], [6, 3, 6, 0]],
-    [[ 7,  7, 7, 0], [4, 4, 4, 0], [6, 5, 4, 0]],
-    [[ 6,  6, 6, 3], [4, 3, 3, 2], [6, 4, 3, 2]],
-    [[ 8,  8, 5, 0], [5, 4, 3, 0], [6, 6, 3, 0]]
+    [[7, 7, 7, 0], [4, 4, 4, 0], [6, 5, 4, 0]],
+    [[6, 6, 6, 3], [4, 3, 3, 2], [6, 4, 3, 2]],
+    [[8, 8, 5, 0], [5, 4, 3, 0], [6, 6, 3, 0]],
 ];
-
 
 pub unsafe extern "C" fn UnpackSFMPEG2(
     bsi: *mut BitStreamInfoC,
@@ -461,7 +462,7 @@ pub unsafe extern "C" fn UnpackSFMPEG2(
     let mut nrIdx: i32;
     let mut slen = [0i32; 4];
     let mut nr = [0i32; 4];
-    
+
     let sis = &mut *sis;
 
     let mut sfCompress = sis.sfCompress;
@@ -531,7 +532,7 @@ pub unsafe extern "C" fn UnpackSFMPEG2(
 
     for i in 0..4 {
         // Zakładamy, że NRTab jest dostępny jako static/extern
-        nr[i] = NRTab[sfcIdx as usize][btIdx as usize][i] as i32;
+        nr[i] = NRTAB[sfcIdx as usize][btIdx as usize][i] as i32;
     }
 
     /* save intensity stereo scale factor info */
@@ -551,7 +552,7 @@ pub unsafe extern "C" fn UnpackSFMPEG2(
             for sfb in 0..6 {
                 sfis.l[sfb] = GetBits(bsi, slen[0] as u32) as u8;
             }
-            sfb = 3;  /* Startowy indeks sfb dla krótkich */
+            sfb = 3; /* Startowy indeks sfb dla krótkich */
             nrIdx = 1;
         } else {
             sfb = 0;
@@ -569,7 +570,9 @@ pub unsafe extern "C" fn UnpackSFMPEG2(
             nrIdx += 1;
         }
         /* Ostatnie pasmo nie jest przesyłane */
-        sfis.s[12][0] = 0; sfis.s[12][1] = 0; sfis.s[12][2] = 0;
+        sfis.s[12][0] = 0;
+        sfis.s[12][1] = 0;
+        sfis.s[12][2] = 0;
     } else {
         /* Bloki długie (long) */
         sfb = 0;
@@ -617,15 +620,13 @@ const huffTable: [u16; 4242] = [
     0x3101, 0x3011, 0x3011, 0x3011, 0x3011, 0x3011, 0x3011, 0x3011, 0x3011, 0x1000, 0x1000, 0x1000,
     0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000,
     0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000,
-    0x1000, 0x1000, 0x1000, 0x1000, 0x1000,
-    /* huffTable03[65] */
+    0x1000, 0x1000, 0x1000, 0x1000, 0x1000, /* huffTable03[65] */
     0xf006, 0x6222, 0x6201, 0x5212, 0x5212, 0x5122, 0x5122, 0x5021, 0x5021, 0x3011, 0x3011, 0x3011,
     0x3011, 0x3011, 0x3011, 0x3011, 0x3011, 0x2112, 0x2112, 0x2112, 0x2112, 0x2112, 0x2112, 0x2112,
     0x2112, 0x2112, 0x2112, 0x2112, 0x2112, 0x2112, 0x2112, 0x2112, 0x2112, 0x2101, 0x2101, 0x2101,
     0x2101, 0x2101, 0x2101, 0x2101, 0x2101, 0x2101, 0x2101, 0x2101, 0x2101, 0x2101, 0x2101, 0x2101,
     0x2101, 0x2000, 0x2000, 0x2000, 0x2000, 0x2000, 0x2000, 0x2000, 0x2000, 0x2000, 0x2000, 0x2000,
-    0x2000, 0x2000, 0x2000, 0x2000, 0x2000,
-    /* huffTable05[257] */
+    0x2000, 0x2000, 0x2000, 0x2000, 0x2000, /* huffTable05[257] */
     0xf008, 0x8332, 0x8322, 0x7232, 0x7232, 0x6132, 0x6132, 0x6132, 0x6132, 0x7312, 0x7312, 0x7301,
     0x7301, 0x7031, 0x7031, 0x7222, 0x7222, 0x6212, 0x6212, 0x6212, 0x6212, 0x6122, 0x6122, 0x6122,
     0x6122, 0x6201, 0x6201, 0x6201, 0x6201, 0x6021, 0x6021, 0x6021, 0x6021, 0x3112, 0x3112, 0x3112,
@@ -647,8 +648,7 @@ const huffTable: [u16; 4242] = [
     0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000,
     0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000,
     0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000,
-    0x1000, 0x1000, 0x1000, 0x1000, 0x1000,
-    /* huffTable06[129] */
+    0x1000, 0x1000, 0x1000, 0x1000, 0x1000, /* huffTable06[129] */
     0xf007, 0x7332, 0x7301, 0x6322, 0x6322, 0x6232, 0x6232, 0x6031, 0x6031, 0x5312, 0x5312, 0x5312,
     0x5312, 0x5132, 0x5132, 0x5132, 0x5132, 0x5222, 0x5222, 0x5222, 0x5222, 0x5201, 0x5201, 0x5201,
     0x5201, 0x4212, 0x4212, 0x4212, 0x4212, 0x4212, 0x4212, 0x4212, 0x4212, 0x4122, 0x4122, 0x4122,
@@ -670,8 +670,7 @@ const huffTable: [u16; 4242] = [
     0x3442, 0x3442, 0x3522, 0x3522, 0x3252, 0x3252, 0x2512, 0x2512, 0x2512, 0x2512, 0xf003, 0x2152,
     0x2152, 0x3501, 0x3432, 0x2051, 0x2051, 0x3342, 0x3332, 0xf002, 0x2422, 0x2242, 0x1412, 0x1412,
     0xf001, 0x1142, 0x1041, 0xf002, 0x2401, 0x2322, 0x2232, 0x2301, 0xf001, 0x1312, 0x1132, 0xf001,
-    0x1031, 0x1222,
-    /* huffTable08[280] */
+    0x1031, 0x1222, /* huffTable08[280] */
     0xf008, 0x0101, 0x010a, 0x010f, 0x8512, 0x8152, 0x0112, 0x0115, 0x8422, 0x8242, 0x8412, 0x7142,
     0x7142, 0x8401, 0x8041, 0x8322, 0x8232, 0x8312, 0x8132, 0x8301, 0x8031, 0x6222, 0x6222, 0x6222,
     0x6222, 0x6201, 0x6201, 0x6201, 0x6201, 0x6021, 0x6021, 0x6021, 0x6021, 0x4212, 0x4212, 0x4212,
@@ -695,8 +694,7 @@ const huffTable: [u16; 4242] = [
     0x2000, 0x2000, 0x2000, 0x2000, 0x2000, 0x2000, 0x2000, 0x2000, 0x2000, 0x2000, 0x2000, 0x2000,
     0x2000, 0x2000, 0x2000, 0x2000, 0x2000, 0xf003, 0x3552, 0x3452, 0x2542, 0x2542, 0x1352, 0x1352,
     0x1352, 0x1352, 0xf002, 0x2532, 0x2442, 0x1522, 0x1522, 0xf001, 0x1252, 0x1501, 0xf001, 0x1432,
-    0x1342, 0xf001, 0x1051, 0x1332,
-    /* huffTable09[93] */
+    0x1342, 0xf001, 0x1051, 0x1332, /* huffTable09[93] */
     0xf006, 0x0041, 0x004a, 0x004f, 0x0052, 0x0057, 0x005a, 0x6412, 0x6142, 0x6322, 0x6232, 0x5312,
     0x5312, 0x5132, 0x5132, 0x6301, 0x6031, 0x5222, 0x5222, 0x5201, 0x5201, 0x4212, 0x4212, 0x4212,
     0x4212, 0x4122, 0x4122, 0x4122, 0x4122, 0x4021, 0x4021, 0x4021, 0x4021, 0x3112, 0x3112, 0x3112,
@@ -775,8 +773,7 @@ const huffTable: [u16; 4242] = [
     0x1652, 0x1732, 0xf002, 0x2372, 0x2552, 0x1722, 0x1722, 0xf001, 0x1272, 0x1642, 0xf001, 0x1462,
     0x1712, 0xf002, 0x1172, 0x1172, 0x2701, 0x2071, 0xf001, 0x1632, 0x1362, 0xf001, 0x1542, 0x1452,
     0xf002, 0x1442, 0x1442, 0x2601, 0x2501, 0xf001, 0x1612, 0x1061, 0xf001, 0x1532, 0x1352, 0xf001,
-    0x1522, 0x1252, 0xf001, 0x1051, 0x1401,
-    /* huffTable13[497] */
+    0x1522, 0x1252, 0xf001, 0x1051, 0x1401, /* huffTable13[497] */
     0xf006, 0x0041, 0x0082, 0x00c3, 0x00e4, 0x0105, 0x0116, 0x011f, 0x0130, 0x0139, 0x013e, 0x0143,
     0x0146, 0x6212, 0x6122, 0x6201, 0x6021, 0x4112, 0x4112, 0x4112, 0x4112, 0x4101, 0x4101, 0x4101,
     0x4101, 0x3011, 0x3011, 0x3011, 0x3011, 0x3011, 0x3011, 0x3011, 0x3011, 0x1000, 0x1000, 0x1000,
@@ -818,8 +815,7 @@ const huffTable: [u16; 4242] = [
     0xf001, 0x17a2, 0x1792, 0xf003, 0x0023, 0x3df2, 0x2de2, 0x2de2, 0x1ff2, 0x1ff2, 0x1ff2, 0x1ff2,
     0xf001, 0x1fe2, 0x1fd2, 0xf001, 0x1ee2, 0x1fc2, 0xf001, 0x1ed2, 0x1fb2, 0xf001, 0x1bf2, 0x1ec2,
     0xf002, 0x1cd2, 0x1cd2, 0x2fa2, 0x29e2, 0xf001, 0x1af2, 0x1dc2, 0xf001, 0x1ea2, 0x1e92, 0xf001,
-    0x1f72, 0x1e72, 0xf001, 0x1ef2, 0x1cf2,
-    /* huffTable15[580] */
+    0x1f72, 0x1e72, 0xf001, 0x1ef2, 0x1cf2, /* huffTable15[580] */
     0xf008, 0x0101, 0x0122, 0x0143, 0x0154, 0x0165, 0x0176, 0x017f, 0x0188, 0x0199, 0x01a2, 0x01ab,
     0x01b4, 0x01bd, 0x01c2, 0x01cb, 0x01d4, 0x01d9, 0x01de, 0x01e3, 0x01e8, 0x01ed, 0x01f2, 0x01f7,
     0x01fc, 0x0201, 0x0204, 0x0207, 0x020a, 0x020f, 0x0212, 0x0215, 0x021a, 0x021d, 0x0220, 0x8192,
@@ -868,8 +864,7 @@ const huffTable: [u16; 4242] = [
     0x1582, 0xf001, 0x1922, 0x1762, 0xf001, 0x1672, 0x1292, 0xf001, 0x1912, 0x1091, 0xf001, 0x1842,
     0x1482, 0xf001, 0x1752, 0x1572, 0xf001, 0x1832, 0x1382, 0xf001, 0x1662, 0x1742, 0xf001, 0x1472,
     0x1801, 0xf001, 0x1081, 0x1652, 0xf001, 0x1562, 0x1732, 0xf001, 0x1372, 0x1642, 0xf001, 0x1701,
-    0x1071, 0xf001, 0x1601, 0x1061,
-    /* huffTable16[651] */
+    0x1071, 0xf001, 0x1601, 0x1061, /* huffTable16[651] */
     0xf008, 0x0101, 0x010a, 0x0113, 0x8ff2, 0x0118, 0x011d, 0x0120, 0x82f2, 0x0131, 0x8f12, 0x81f2,
     0x0134, 0x0145, 0x0156, 0x0167, 0x0178, 0x0189, 0x019a, 0x01a3, 0x01ac, 0x01b5, 0x01be, 0x01c7,
     0x01d0, 0x01d9, 0x01de, 0x01e3, 0x01e6, 0x01eb, 0x01f0, 0x8152, 0x01f3, 0x01f6, 0x01f9, 0x01fc,
@@ -924,8 +919,7 @@ const huffTable: [u16; 4242] = [
     0xf001, 0x1d52, 0x15d2, 0xf001, 0x1c72, 0x17c2, 0xf001, 0x1d42, 0x1b82, 0xf001, 0x1a92, 0x1c62,
     0xf001, 0x16c2, 0x1d32, 0xf001, 0x1c52, 0x15c2, 0xf001, 0x1a82, 0x18a2, 0xf001, 0x1992, 0x1c42,
     0xf001, 0x16b2, 0x1a72, 0xf001, 0x1b52, 0x1982, 0xf001, 0x1892, 0x1972, 0xf001, 0x1792, 0x1882,
-    0xf001, 0x1ce2, 0x1dd2,
-    /* huffTable24[705] */
+    0xf001, 0x1ce2, 0x1dd2, /* huffTable24[705] */
     0xf009, 0x8fe2, 0x8fe2, 0x8ef2, 0x8ef2, 0x8fd2, 0x8fd2, 0x8df2, 0x8df2, 0x8fc2, 0x8fc2, 0x8cf2,
     0x8cf2, 0x8fb2, 0x8fb2, 0x8bf2, 0x8bf2, 0x7af2, 0x7af2, 0x7af2, 0x7af2, 0x8fa2, 0x8fa2, 0x8f92,
     0x8f92, 0x79f2, 0x79f2, 0x79f2, 0x79f2, 0x78f2, 0x78f2, 0x78f2, 0x78f2, 0x8f82, 0x8f82, 0x8f72,
@@ -987,72 +981,190 @@ const huffTable: [u16; 4242] = [
     0xf001, 0x1a42, 0x1872, 0xf001, 0x1801, 0x1081, 0xf001, 0x1701, 0x1071,
 ];
 
-
 const m_HUFF_OFFSET_01: u16 = 0;
-const m_HUFF_OFFSET_02: u16 =  9 + m_HUFF_OFFSET_01;
+const m_HUFF_OFFSET_02: u16 = 9 + m_HUFF_OFFSET_01;
 const m_HUFF_OFFSET_03: u16 = 65 + m_HUFF_OFFSET_02;
 const m_HUFF_OFFSET_05: u16 = 65 + m_HUFF_OFFSET_03;
-const m_HUFF_OFFSET_06: u16 =257 + m_HUFF_OFFSET_05;
-const m_HUFF_OFFSET_07: u16 =129 + m_HUFF_OFFSET_06;
-const m_HUFF_OFFSET_08: u16 =110 + m_HUFF_OFFSET_07;
-const m_HUFF_OFFSET_09: u16 =280 + m_HUFF_OFFSET_08;
+const m_HUFF_OFFSET_06: u16 = 257 + m_HUFF_OFFSET_05;
+const m_HUFF_OFFSET_07: u16 = 129 + m_HUFF_OFFSET_06;
+const m_HUFF_OFFSET_08: u16 = 110 + m_HUFF_OFFSET_07;
+const m_HUFF_OFFSET_09: u16 = 280 + m_HUFF_OFFSET_08;
 const m_HUFF_OFFSET_10: u16 = 93 + m_HUFF_OFFSET_09;
-const m_HUFF_OFFSET_11: u16 =320 + m_HUFF_OFFSET_10;
-const m_HUFF_OFFSET_12: u16 =296 + m_HUFF_OFFSET_11;
-const m_HUFF_OFFSET_13: u16 =185 + m_HUFF_OFFSET_12;
-const m_HUFF_OFFSET_15: u16 =497 + m_HUFF_OFFSET_13;
-const m_HUFF_OFFSET_16: u16 =580 + m_HUFF_OFFSET_15;
-const m_HUFF_OFFSET_24: u16 =651 + m_HUFF_OFFSET_16;
+const m_HUFF_OFFSET_11: u16 = 320 + m_HUFF_OFFSET_10;
+const m_HUFF_OFFSET_12: u16 = 296 + m_HUFF_OFFSET_11;
+const m_HUFF_OFFSET_13: u16 = 185 + m_HUFF_OFFSET_12;
+const m_HUFF_OFFSET_15: u16 = 497 + m_HUFF_OFFSET_13;
+const m_HUFF_OFFSET_16: u16 = 580 + m_HUFF_OFFSET_15;
+const m_HUFF_OFFSET_24: u16 = 651 + m_HUFF_OFFSET_16;
 
 const huffTabOffset: [u16; HUFF_PAIRTABS as usize] = [
-    0,                   m_HUFF_OFFSET_01,    m_HUFF_OFFSET_02,    m_HUFF_OFFSET_03,
-    0,                   m_HUFF_OFFSET_05,    m_HUFF_OFFSET_06,    m_HUFF_OFFSET_07,
-    m_HUFF_OFFSET_08,    m_HUFF_OFFSET_09,    m_HUFF_OFFSET_10,    m_HUFF_OFFSET_11,
-    m_HUFF_OFFSET_12,    m_HUFF_OFFSET_13,    0,                   m_HUFF_OFFSET_15,
-    m_HUFF_OFFSET_16,    m_HUFF_OFFSET_16,    m_HUFF_OFFSET_16,    m_HUFF_OFFSET_16,
-    m_HUFF_OFFSET_16,    m_HUFF_OFFSET_16,    m_HUFF_OFFSET_16,    m_HUFF_OFFSET_16,
-    m_HUFF_OFFSET_24,    m_HUFF_OFFSET_24,    m_HUFF_OFFSET_24,    m_HUFF_OFFSET_24,
-    m_HUFF_OFFSET_24,    m_HUFF_OFFSET_24,    m_HUFF_OFFSET_24,    m_HUFF_OFFSET_24,];
-
-const huffTabLookup: [HuffTabLookup; HUFF_PAIRTABS as usize] = [
-    HuffTabLookup { lin_bits: 0,  tab_type: HuffTabType::NoBits as i32 },
-    HuffTabLookup { lin_bits: 0,  tab_type: HuffTabType::OneShot as i32 },
-    HuffTabLookup { lin_bits: 0,  tab_type: HuffTabType::OneShot as i32 },
-    HuffTabLookup { lin_bits: 0,  tab_type: HuffTabType::OneShot as i32 },
-    HuffTabLookup { lin_bits: 0,  tab_type: HuffTabType::InvalidTab as i32 },
-    HuffTabLookup { lin_bits: 0,  tab_type: HuffTabType::OneShot as i32 },
-    HuffTabLookup { lin_bits: 0,  tab_type: HuffTabType::OneShot as i32 },
-    HuffTabLookup { lin_bits: 0,  tab_type: HuffTabType::LoopNoLinbits as i32 },
-    HuffTabLookup { lin_bits: 0,  tab_type: HuffTabType::LoopNoLinbits as i32 },
-    HuffTabLookup { lin_bits: 0,  tab_type: HuffTabType::LoopNoLinbits as i32 },
-    HuffTabLookup { lin_bits: 0,  tab_type: HuffTabType::LoopNoLinbits as i32 },
-    HuffTabLookup { lin_bits: 0,  tab_type: HuffTabType::LoopNoLinbits as i32 },
-    HuffTabLookup { lin_bits: 0,  tab_type: HuffTabType::LoopNoLinbits as i32 },
-    HuffTabLookup { lin_bits: 0,  tab_type: HuffTabType::LoopNoLinbits as i32 },
-    HuffTabLookup { lin_bits: 0,  tab_type: HuffTabType::InvalidTab as i32 },
-    HuffTabLookup { lin_bits: 0,  tab_type: HuffTabType::LoopNoLinbits as i32 },
-    HuffTabLookup { lin_bits: 1,  tab_type: HuffTabType::LoopLinbits as i32 },
-    HuffTabLookup { lin_bits: 2,  tab_type: HuffTabType::LoopLinbits as i32 },
-    HuffTabLookup { lin_bits: 3,  tab_type: HuffTabType::LoopLinbits as i32 },
-    HuffTabLookup { lin_bits: 4,  tab_type: HuffTabType::LoopLinbits as i32 },
-    HuffTabLookup { lin_bits: 6,  tab_type: HuffTabType::LoopLinbits as i32 },
-    HuffTabLookup { lin_bits: 8,  tab_type: HuffTabType::LoopLinbits as i32 },
-    HuffTabLookup { lin_bits: 10, tab_type: HuffTabType::LoopLinbits as i32 },
-    HuffTabLookup { lin_bits: 13, tab_type: HuffTabType::LoopLinbits as i32 },
-    HuffTabLookup { lin_bits: 4,  tab_type: HuffTabType::LoopLinbits as i32 },
-    HuffTabLookup { lin_bits: 5,  tab_type: HuffTabType::LoopLinbits as i32 },
-    HuffTabLookup { lin_bits: 6,  tab_type: HuffTabType::LoopLinbits as i32 },
-    HuffTabLookup { lin_bits: 7,  tab_type: HuffTabType::LoopLinbits as i32 },
-    HuffTabLookup { lin_bits: 8,  tab_type: HuffTabType::LoopLinbits as i32 },
-    HuffTabLookup { lin_bits: 9,  tab_type: HuffTabType::LoopLinbits as i32 },
-    HuffTabLookup { lin_bits: 11, tab_type: HuffTabType::LoopLinbits as i32 },
-    HuffTabLookup { lin_bits: 13, tab_type: HuffTabType::LoopLinbits as i32 },
+    0,
+    m_HUFF_OFFSET_01,
+    m_HUFF_OFFSET_02,
+    m_HUFF_OFFSET_03,
+    0,
+    m_HUFF_OFFSET_05,
+    m_HUFF_OFFSET_06,
+    m_HUFF_OFFSET_07,
+    m_HUFF_OFFSET_08,
+    m_HUFF_OFFSET_09,
+    m_HUFF_OFFSET_10,
+    m_HUFF_OFFSET_11,
+    m_HUFF_OFFSET_12,
+    m_HUFF_OFFSET_13,
+    0,
+    m_HUFF_OFFSET_15,
+    m_HUFF_OFFSET_16,
+    m_HUFF_OFFSET_16,
+    m_HUFF_OFFSET_16,
+    m_HUFF_OFFSET_16,
+    m_HUFF_OFFSET_16,
+    m_HUFF_OFFSET_16,
+    m_HUFF_OFFSET_16,
+    m_HUFF_OFFSET_16,
+    m_HUFF_OFFSET_24,
+    m_HUFF_OFFSET_24,
+    m_HUFF_OFFSET_24,
+    m_HUFF_OFFSET_24,
+    m_HUFF_OFFSET_24,
+    m_HUFF_OFFSET_24,
+    m_HUFF_OFFSET_24,
+    m_HUFF_OFFSET_24,
 ];
 
+const huffTabLookup: [HuffTabLookup; HUFF_PAIRTABS as usize] = [
+    HuffTabLookup {
+        lin_bits: 0,
+        tab_type: HuffTabType::NoBits as i32,
+    },
+    HuffTabLookup {
+        lin_bits: 0,
+        tab_type: HuffTabType::OneShot as i32,
+    },
+    HuffTabLookup {
+        lin_bits: 0,
+        tab_type: HuffTabType::OneShot as i32,
+    },
+    HuffTabLookup {
+        lin_bits: 0,
+        tab_type: HuffTabType::OneShot as i32,
+    },
+    HuffTabLookup {
+        lin_bits: 0,
+        tab_type: HuffTabType::InvalidTab as i32,
+    },
+    HuffTabLookup {
+        lin_bits: 0,
+        tab_type: HuffTabType::OneShot as i32,
+    },
+    HuffTabLookup {
+        lin_bits: 0,
+        tab_type: HuffTabType::OneShot as i32,
+    },
+    HuffTabLookup {
+        lin_bits: 0,
+        tab_type: HuffTabType::LoopNoLinbits as i32,
+    },
+    HuffTabLookup {
+        lin_bits: 0,
+        tab_type: HuffTabType::LoopNoLinbits as i32,
+    },
+    HuffTabLookup {
+        lin_bits: 0,
+        tab_type: HuffTabType::LoopNoLinbits as i32,
+    },
+    HuffTabLookup {
+        lin_bits: 0,
+        tab_type: HuffTabType::LoopNoLinbits as i32,
+    },
+    HuffTabLookup {
+        lin_bits: 0,
+        tab_type: HuffTabType::LoopNoLinbits as i32,
+    },
+    HuffTabLookup {
+        lin_bits: 0,
+        tab_type: HuffTabType::LoopNoLinbits as i32,
+    },
+    HuffTabLookup {
+        lin_bits: 0,
+        tab_type: HuffTabType::LoopNoLinbits as i32,
+    },
+    HuffTabLookup {
+        lin_bits: 0,
+        tab_type: HuffTabType::InvalidTab as i32,
+    },
+    HuffTabLookup {
+        lin_bits: 0,
+        tab_type: HuffTabType::LoopNoLinbits as i32,
+    },
+    HuffTabLookup {
+        lin_bits: 1,
+        tab_type: HuffTabType::LoopLinbits as i32,
+    },
+    HuffTabLookup {
+        lin_bits: 2,
+        tab_type: HuffTabType::LoopLinbits as i32,
+    },
+    HuffTabLookup {
+        lin_bits: 3,
+        tab_type: HuffTabType::LoopLinbits as i32,
+    },
+    HuffTabLookup {
+        lin_bits: 4,
+        tab_type: HuffTabType::LoopLinbits as i32,
+    },
+    HuffTabLookup {
+        lin_bits: 6,
+        tab_type: HuffTabType::LoopLinbits as i32,
+    },
+    HuffTabLookup {
+        lin_bits: 8,
+        tab_type: HuffTabType::LoopLinbits as i32,
+    },
+    HuffTabLookup {
+        lin_bits: 10,
+        tab_type: HuffTabType::LoopLinbits as i32,
+    },
+    HuffTabLookup {
+        lin_bits: 13,
+        tab_type: HuffTabType::LoopLinbits as i32,
+    },
+    HuffTabLookup {
+        lin_bits: 4,
+        tab_type: HuffTabType::LoopLinbits as i32,
+    },
+    HuffTabLookup {
+        lin_bits: 5,
+        tab_type: HuffTabType::LoopLinbits as i32,
+    },
+    HuffTabLookup {
+        lin_bits: 6,
+        tab_type: HuffTabType::LoopLinbits as i32,
+    },
+    HuffTabLookup {
+        lin_bits: 7,
+        tab_type: HuffTabType::LoopLinbits as i32,
+    },
+    HuffTabLookup {
+        lin_bits: 8,
+        tab_type: HuffTabType::LoopLinbits as i32,
+    },
+    HuffTabLookup {
+        lin_bits: 9,
+        tab_type: HuffTabType::LoopLinbits as i32,
+    },
+    HuffTabLookup {
+        lin_bits: 11,
+        tab_type: HuffTabType::LoopLinbits as i32,
+    },
+    HuffTabLookup {
+        lin_bits: 13,
+        tab_type: HuffTabType::LoopLinbits as i32,
+    },
+];
 
 const quadTabOffset: [i32; 2] = [0, 64];
 const quadTabMaxBits: [i32; 2] = [6, 4];
-
 
 unsafe fn pgm_read_word(ptr: *const u16) -> u16 {
     *ptr
@@ -1096,10 +1208,18 @@ pub unsafe fn DecodeHuffmanPairs(
     tabType = huffTabLookup[tabIdx as usize].tab_type as i32;
 
     /* Walidacja - zachowanie logiki z log_i */
-    if (nVals & 0x01) != 0 { return -1; }
-    if tabIdx >= HUFF_PAIRTABS as i32 { return -1; }
-    if tabIdx < 0 { return -1; }
-    if tabType == HuffTabType::InvalidTab  as i32{ return -1; }
+    if (nVals & 0x01) != 0 {
+        return -1;
+    }
+    if tabIdx >= HUFF_PAIRTABS as i32 {
+        return -1;
+    }
+    if tabIdx < 0 {
+        return -1;
+    }
+    if tabType == HuffTabType::InvalidTab as i32 {
+        return -1;
+    }
 
     /* initially fill cache with any partial byte */
     cache = 0;
@@ -1130,7 +1250,9 @@ pub unsafe fn DecodeHuffmanPairs(
                 cachedBits += 16;
                 bitsLeft -= 16;
             } else {
-                if cachedBits + bitsLeft <= 0 { return -1; }
+                if cachedBits + bitsLeft <= 0 {
+                    return -1;
+                }
                 if bitsLeft > 0 {
                     cache |= (*buf as u32) << (24 - cachedBits);
                     buf = buf.add(1);
@@ -1168,17 +1290,22 @@ pub unsafe fn DecodeHuffmanPairs(
                     cachedBits -= 1;
                 }
 
-                if cachedBits < padBits { return -1; }
+                if cachedBits < padBits {
+                    return -1;
+                }
 
-                *xy = x; xy = xy.add(1);
-                *xy = y; xy = xy.add(1);
+                *xy = x;
+                xy = xy.add(1);
+                *xy = y;
+                xy = xy.add(1);
                 nVals -= 2;
             }
         }
         bitsLeft += cachedBits - padBits;
         return startBits - bitsLeft;
-
-    } else if tabType == HuffTabType::LoopLinbits as i32 || tabType == HuffTabType::LoopNoLinbits as i32 {
+    } else if tabType == HuffTabType::LoopLinbits as i32
+        || tabType == HuffTabType::LoopNoLinbits as i32
+    {
         tCurr = tBase;
         padBits = 0;
         while nVals > 0 {
@@ -1190,7 +1317,9 @@ pub unsafe fn DecodeHuffmanPairs(
                 cachedBits += 16;
                 bitsLeft -= 16;
             } else {
-                if cachedBits + bitsLeft <= 0 { return -1; }
+                if cachedBits + bitsLeft <= 0 {
+                    return -1;
+                }
                 if bitsLeft > 0 {
                     cache |= (*buf as u32) << (24 - cachedBits);
                     buf = buf.add(1);
@@ -1210,7 +1339,7 @@ pub unsafe fn DecodeHuffmanPairs(
                 maxBits = (pgm_read_word(tCurr) & 0x000f) as i32;
                 cw = pgm_read_word(tCurr.add(((cache >> (32 - maxBits)) + 1) as usize));
                 len = ((cw >> 12) & 0x000f) as i32;
-                
+
                 if len == 0 {
                     cachedBits -= maxBits;
                     cache <<= maxBits;
@@ -1225,7 +1354,9 @@ pub unsafe fn DecodeHuffmanPairs(
 
                 if x == 15 && tabType == HuffTabType::LoopLinbits as i32 {
                     minBits = linBits + 1 + (if y != 0 { 1 } else { 0 });
-                    if cachedBits + bitsLeft < minBits { return -1; }
+                    if cachedBits + bitsLeft < minBits {
+                        return -1;
+                    }
                     while cachedBits < minBits {
                         cache |= (*buf as u32) << (24 - cachedBits);
                         buf = buf.add(1);
@@ -1249,7 +1380,9 @@ pub unsafe fn DecodeHuffmanPairs(
 
                 if y == 15 && tabType == HuffTabType::LoopLinbits as i32 {
                     minBits = linBits + 1;
-                    if cachedBits + bitsLeft < minBits { return -1; }
+                    if cachedBits + bitsLeft < minBits {
+                        return -1;
+                    }
                     while cachedBits < minBits {
                         cache |= (*buf as u32) << (24 - cachedBits);
                         buf = buf.add(1);
@@ -1271,10 +1404,14 @@ pub unsafe fn DecodeHuffmanPairs(
                     cachedBits -= 1;
                 }
 
-                if cachedBits < padBits { return -1; }
+                if cachedBits < padBits {
+                    return -1;
+                }
 
-                *xy = x; xy = xy.add(1);
-                *xy = y; xy = xy.add(1);
+                *xy = x;
+                xy = xy.add(1);
+                *xy = y;
+                xy = xy.add(1);
                 nVals -= 2;
                 tCurr = tBase;
             }
@@ -1296,7 +1433,7 @@ unsafe fn pgm_read_byte(ptr: *const u8) -> u8 {
  *  A = length of codeword
  *  B = codeword
  */
-const quadTable: [u8; 64+16] = [
+const quadTable: [u8; 64 + 16] = [
     /* table A */
     0x6b, 0x6f, 0x6d, 0x6e, 0x67, 0x65, 0x59, 0x59, 0x56, 0x56, 0x53, 0x53, 0x5a, 0x5a, 0x5c, 0x5c,
     0x42, 0x42, 0x42, 0x42, 0x41, 0x41, 0x41, 0x41, 0x44, 0x44, 0x44, 0x44, 0x48, 0x48, 0x48, 0x48,
@@ -1305,7 +1442,6 @@ const quadTable: [u8; 64+16] = [
     /* table B */
     0x4f, 0x4e, 0x4d, 0x4c, 0x4b, 0x4a, 0x49, 0x48, 0x47, 0x46, 0x45, 0x44, 0x43, 0x42, 0x41, 0x40,
 ];
-
 
 /***********************************************************************************************************************
  * Function:    DecodeHuffmanQuads
@@ -1328,7 +1464,14 @@ const quadTable: [u8; 64+16] = [
  **********************************************************************************************************************/
 // no improvement with section=data
 #[unsafe(no_mangle)]
-pub unsafe fn DecodeHuffmanQuads(mut vwxy: *mut i32, nVals: i32, tabIdx: i32, mut bits_left: i32, mut buf: *mut u8, bitOffset: i32) -> i32 {
+pub unsafe fn DecodeHuffmanQuads(
+    mut vwxy: *mut i32,
+    nVals: i32,
+    tabIdx: i32,
+    mut bits_left: i32,
+    mut buf: *mut u8,
+    bitOffset: i32,
+) -> i32 {
     let mut v: i32;
     let mut w: i32;
     let mut x: i32;
@@ -1346,8 +1489,7 @@ pub unsafe fn DecodeHuffmanQuads(mut vwxy: *mut i32, nVals: i32, tabIdx: i32, mu
 
     // Pobieranie bazy tabeli i parametrów (zakładamy dostęp do globalnych tablic)
     // tBase = (unsigned char *) quadTable + quadTabOffset[tabIdx];
-    let t_base = (quadTable.as_ptr() as *const u8)
-        .add(quadTabOffset[tabIdx as usize] as usize);
+    let t_base = (quadTable.as_ptr() as *const u8).add(quadTabOffset[tabIdx as usize] as usize);
     maxBits = quadTabMaxBits[tabIdx as usize] as i32;
 
     /* Inicjalizacja cache partial byte */
@@ -1391,7 +1533,7 @@ pub unsafe fn DecodeHuffmanQuads(mut vwxy: *mut i32, nVals: i32, tabIdx: i32, mu
             // W Rust przesunięcie i32 jest arytmetyczne (zachowuje bit znaku)
             let mask = ((0x80000000u32 as i32) >> (cachedBits.wrapping_sub(1))) as u32;
             cache &= mask;
-            
+
             padBits = 10;
             cachedBits += padBits;
         }
@@ -1400,7 +1542,7 @@ pub unsafe fn DecodeHuffmanQuads(mut vwxy: *mut i32, nVals: i32, tabIdx: i32, mu
         while i < (nVals - 3) && cachedBits >= 10 {
             // cw = pgm_read_byte(&tBase[cache >> (32 - maxBits)]);
             cw = pgm_read_byte(t_base.add((cache >> (32 - maxBits)) as usize));
-            
+
             len = ((cw >> 4) & 0x0f) as i32;
             cachedBits -= len;
             cache <<= len;
@@ -1412,7 +1554,7 @@ pub unsafe fn DecodeHuffmanQuads(mut vwxy: *mut i32, nVals: i32, tabIdx: i32, mu
                 cache <<= 1;
                 cachedBits -= 1;
             }
-            
+
             // W
             w = ((cw >> 2) & 0x01) as i32;
             if w != 0 {
@@ -1442,17 +1584,20 @@ pub unsafe fn DecodeHuffmanQuads(mut vwxy: *mut i32, nVals: i32, tabIdx: i32, mu
             }
 
             // Zapis do bufora i inkrementacja wskaźnika (jak vwxy++)
-            *vwxy = v; vwxy = vwxy.add(1);
-            *vwxy = w; vwxy = vwxy.add(1);
-            *vwxy = x; vwxy = vwxy.add(1);
-            *vwxy = y; vwxy = vwxy.add(1);
+            *vwxy = v;
+            vwxy = vwxy.add(1);
+            *vwxy = w;
+            vwxy = vwxy.add(1);
+            *vwxy = x;
+            vwxy = vwxy.add(1);
+            *vwxy = y;
+            vwxy = vwxy.add(1);
             i += 4;
         }
     }
 
     i
 }
-
 
 /***********************************************************************************************************************
  * Function:    DecodeHuffman
@@ -1477,7 +1622,6 @@ pub unsafe fn DecodeHuffmanQuads(mut vwxy: *mut i32, nVals: i32, tabIdx: i32, mu
  *                out of bits prematurely (invalid bitstream)
  **********************************************************************************************************************/
 
-
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn DecodeHuffman(
     mut buf: *mut u8,
@@ -1486,14 +1630,14 @@ pub unsafe extern "C" fn DecodeHuffman(
     gr: i32,
     ch: i32,
     m_HuffmanInfo: *mut HuffmanInfo,
-    m_SFBandTable: *const SFBandTable,  // SFBandTable_t*
+    m_SFBandTable: *const SFBandTable, // SFBandTable_t*
     m_SideInfoSub: *mut [[SideInfoSub; MAX_NCHAN]; MAX_NGRAN],
-    m_MPEGVersion: MPEGVersion,  // MPEGVersion_t*
+    m_MPEGVersion: MPEGVersion, // MPEGVersion_t*
 ) -> i32 {
-    let m_HuffmanInfo =  &mut *m_HuffmanInfo;
-    let sf = &*m_SFBandTable;       // &SFBandTable
+    let m_HuffmanInfo = &mut *m_HuffmanInfo;
+    let sf = &*m_SFBandTable; // &SFBandTable
     let version = m_MPEGVersion;
-    let mut rEnd= [0; 4];
+    let mut rEnd = [0; 4];
     let mut r1Start;
     let mut r2Start;
     let mut w;
@@ -1530,12 +1674,15 @@ pub unsafe extern "C" fn DecodeHuffman(
     }
 
     /* offset rEnd index by 1 so first region = rEnd[1] - rEnd[0], etc. */
-    rEnd[3] = if MAX_NSAMP < (2 * sis.n_bigvals as usize) { MAX_NSAMP as i32 } else {2 * sis.n_bigvals };
-    rEnd[2] = if r2Start < rEnd[3]  { r2Start } else { rEnd[3] };
+    rEnd[3] = if MAX_NSAMP < (2 * sis.n_bigvals as usize) {
+        MAX_NSAMP as i32
+    } else {
+        2 * sis.n_bigvals
+    };
+    rEnd[2] = if r2Start < rEnd[3] { r2Start } else { rEnd[3] };
     rEnd[1] = if r1Start < rEnd[3] { r1Start } else { rEnd[3] };
     rEnd[0] = 0;
 
-    
     /* rounds up to first all-zero pair (we don't check last pair for (x,y) == (non-zero, zero)) */
     (*m_HuffmanInfo).non_zero_bound[ch as usize] = rEnd[3];
 
@@ -1544,10 +1691,19 @@ pub unsafe extern "C" fn DecodeHuffman(
 
     let mut bitsUsed;
     for i in 0..3 {
-        bitsUsed = DecodeHuffmanPairs(m_HuffmanInfo.huff_dec_buf[ch as usize].as_mut_ptr().add(rEnd[i] as usize),
-                rEnd[i + 1] - rEnd[i], sis.tableSelect[i], bitsLeft, buf,
-                *bitOffset);
-        if (bitsUsed < 0 || bitsUsed > bitsLeft) /* error - overran end of bitstream */ {
+        bitsUsed = DecodeHuffmanPairs(
+            m_HuffmanInfo.huff_dec_buf[ch as usize]
+                .as_mut_ptr()
+                .add(rEnd[i] as usize),
+            rEnd[i + 1] - rEnd[i],
+            sis.tableSelect[i],
+            bitsLeft,
+            buf,
+            *bitOffset,
+        );
+        if (bitsUsed < 0 || bitsUsed > bitsLeft)
+        /* error - overran end of bitstream */
+        {
             return -1;
         }
 
@@ -1557,19 +1713,21 @@ pub unsafe extern "C" fn DecodeHuffman(
         bitsLeft -= bitsUsed;
     }
 
-        /* decode Huffman quads (if any) */
+    /* decode Huffman quads (if any) */
     m_HuffmanInfo.non_zero_bound[ch as usize] += DecodeHuffmanQuads(
-        m_HuffmanInfo.huff_dec_buf[ch as usize].as_mut_ptr().add(rEnd[3] as usize),
+        m_HuffmanInfo.huff_dec_buf[ch as usize]
+            .as_mut_ptr()
+            .add(rEnd[3] as usize),
         MAX_NSAMP as i32 - rEnd[3],
         sis.count1TableSelect,
         bitsLeft,
         buf,
-        *bitOffset
+        *bitOffset,
     );
 
     assert!(m_HuffmanInfo.non_zero_bound[ch as usize] <= MAX_NSAMP as i32);
 
-    for i in m_HuffmanInfo.non_zero_bound[ch as usize]..MAX_NSAMP as i32{
+    for i in m_HuffmanInfo.non_zero_bound[ch as usize]..MAX_NSAMP as i32 {
         m_HuffmanInfo.huff_dec_buf[ch as usize][i as usize] = 0;
     }
     /* If bits used for 576 samples < huffBlockBits, then the extras are considered
@@ -1579,12 +1737,9 @@ pub unsafe extern "C" fn DecodeHuffman(
     *bitOffset = (bitsLeft + *bitOffset) & 0x07;
 
     buf.offset_from(startBuf) as i32
-
 }
 
-
 //
-
 
 /***********************************************************************************************************************
  * Function:    IMDCT36
@@ -1616,41 +1771,60 @@ pub unsafe extern "C" fn DecodeHuffman(
  * Return:      mOut (OR of abs(y) for all y calculated here)
  **********************************************************************************************************************/
 // barely faster in RAM
-const c18: [u32; 9] = [0x7f834ed0, 0x7ba3751d, 0x7401e4c1, 0x68d9f964, 0x5a82799a, 0x496af3e2, 0x36185aee, 0x2120fb83, 0x0b27eb5c];
-const fastWin36: [u32; 18] = [
-        0x42aace8b, 0xc2e92724, 0x47311c28, 0xc95f619a, 0x4a868feb, 0xd0859d8c,
-        0x4c913b51, 0xd8243ea0, 0x4d413ccc, 0xe0000000, 0x4c913b51, 0xe7dbc161,
-        0x4a868feb, 0xef7a6275, 0x47311c28, 0xf6a09e67, 0x42aace8b, 0xfd16d8dd
+const c18: [u32; 9] = [
+    0x7f834ed0, 0x7ba3751d, 0x7401e4c1, 0x68d9f964, 0x5a82799a, 0x496af3e2, 0x36185aee, 0x2120fb83,
+    0x0b27eb5c,
 ];
-pub const imdctWin: [[u32; 36];4 ] = [
+const fastWin36: [u32; 18] = [
+    0x42aace8b, 0xc2e92724, 0x47311c28, 0xc95f619a, 0x4a868feb, 0xd0859d8c, 0x4c913b51, 0xd8243ea0,
+    0x4d413ccc, 0xe0000000, 0x4c913b51, 0xe7dbc161, 0x4a868feb, 0xef7a6275, 0x47311c28, 0xf6a09e67,
+    0x42aace8b, 0xfd16d8dd,
+];
+pub const imdctWin: [[u32; 36]; 4] = [
     [
-    0x02aace8b, 0x07311c28, 0x0a868fec, 0x0c913b52, 0x0d413ccd, 0x0c913b52, 0x0a868fec, 0x07311c28,
-    0x02aace8b, 0xfd16d8dd, 0xf6a09e66, 0xef7a6275, 0xe7dbc161, 0xe0000000, 0xd8243e9f, 0xd0859d8b,
-    0xc95f619a, 0xc2e92723, 0xbd553175, 0xb8cee3d8, 0xb5797014, 0xb36ec4ae, 0xb2bec333, 0xb36ec4ae,
-    0xb5797014, 0xb8cee3d8, 0xbd553175, 0xc2e92723, 0xc95f619a, 0xd0859d8b, 0xd8243e9f, 0xe0000000,
-    0xe7dbc161, 0xef7a6275, 0xf6a09e66, 0xfd16d8dd  ],
+        0x02aace8b, 0x07311c28, 0x0a868fec, 0x0c913b52, 0x0d413ccd, 0x0c913b52, 0x0a868fec,
+        0x07311c28, 0x02aace8b, 0xfd16d8dd, 0xf6a09e66, 0xef7a6275, 0xe7dbc161, 0xe0000000,
+        0xd8243e9f, 0xd0859d8b, 0xc95f619a, 0xc2e92723, 0xbd553175, 0xb8cee3d8, 0xb5797014,
+        0xb36ec4ae, 0xb2bec333, 0xb36ec4ae, 0xb5797014, 0xb8cee3d8, 0xbd553175, 0xc2e92723,
+        0xc95f619a, 0xd0859d8b, 0xd8243e9f, 0xe0000000, 0xe7dbc161, 0xef7a6275, 0xf6a09e66,
+        0xfd16d8dd,
+    ],
     [
-    0x02aace8b, 0x07311c28, 0x0a868fec, 0x0c913b52, 0x0d413ccd, 0x0c913b52, 0x0a868fec, 0x07311c28,
-    0x02aace8b, 0xfd16d8dd, 0xf6a09e66, 0xef7a6275, 0xe7dbc161, 0xe0000000, 0xd8243e9f, 0xd0859d8b,
-    0xc95f619a, 0xc2e92723, 0xbd44ef14, 0xb831a052, 0xb3aa3837, 0xafb789a4, 0xac6145bb, 0xa9adecdc,
-    0xa864491f, 0xad1868f0, 0xb8431f49, 0xc8f42236, 0xdda8e6b1, 0xf47755dc, 0x00000000, 0x00000000,
-    0x00000000, 0x00000000, 0x00000000, 0x00000000  ],
+        0x02aace8b, 0x07311c28, 0x0a868fec, 0x0c913b52, 0x0d413ccd, 0x0c913b52, 0x0a868fec,
+        0x07311c28, 0x02aace8b, 0xfd16d8dd, 0xf6a09e66, 0xef7a6275, 0xe7dbc161, 0xe0000000,
+        0xd8243e9f, 0xd0859d8b, 0xc95f619a, 0xc2e92723, 0xbd44ef14, 0xb831a052, 0xb3aa3837,
+        0xafb789a4, 0xac6145bb, 0xa9adecdc, 0xa864491f, 0xad1868f0, 0xb8431f49, 0xc8f42236,
+        0xdda8e6b1, 0xf47755dc, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+        0x00000000,
+    ],
     [
-    0x07311c28, 0x0d413ccd, 0x07311c28, 0xf6a09e66, 0xe0000000, 0xc95f619a, 0xb8cee3d8, 0xb2bec333,
-    0xb8cee3d8, 0xc95f619a, 0xe0000000, 0xf6a09e66, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
-    0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
-    0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
-    0x00000000, 0x00000000, 0x00000000, 0x00000000  ],
+        0x07311c28, 0x0d413ccd, 0x07311c28, 0xf6a09e66, 0xe0000000, 0xc95f619a, 0xb8cee3d8,
+        0xb2bec333, 0xb8cee3d8, 0xc95f619a, 0xe0000000, 0xf6a09e66, 0x00000000, 0x00000000,
+        0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+        0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+        0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+        0x00000000,
+    ],
     [
-    0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x028e9709, 0x04855ec0,
-    0x026743a1, 0xfcde2c10, 0xf515dc82, 0xec93e53b, 0xe4c880f8, 0xdd5d0b08, 0xd63510b7, 0xcf5e834a,
-    0xc8e6b562, 0xc2da4105, 0xbd553175, 0xb8cee3d8, 0xb5797014, 0xb36ec4ae, 0xb2bec333, 0xb36ec4ae,
-    0xb5797014, 0xb8cee3d8, 0xbd553175, 0xc2e92723, 0xc95f619a, 0xd0859d8b, 0xd8243e9f, 0xe0000000,
-    0xe7dbc161, 0xef7a6275, 0xf6a09e66, 0xfd16d8dd  ],
-    ];
+        0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x028e9709,
+        0x04855ec0, 0x026743a1, 0xfcde2c10, 0xf515dc82, 0xec93e53b, 0xe4c880f8, 0xdd5d0b08,
+        0xd63510b7, 0xcf5e834a, 0xc8e6b562, 0xc2da4105, 0xbd553175, 0xb8cee3d8, 0xb5797014,
+        0xb36ec4ae, 0xb2bec333, 0xb36ec4ae, 0xb5797014, 0xb8cee3d8, 0xbd553175, 0xc2e92723,
+        0xc95f619a, 0xd0859d8b, 0xd8243e9f, 0xe0000000, 0xe7dbc161, 0xef7a6275, 0xf6a09e66,
+        0xfd16d8dd,
+    ],
+];
 
 #[unsafe(no_mangle)]
-pub unsafe fn IMDCT36(mut xCurr: *mut i32, mut xPrev: *mut i32, y: *mut i32, btCurr: i32, btPrev: i32, blockIdx: i32, gb: i32) -> i32 {
+pub unsafe fn IMDCT36(
+    mut xCurr: *mut i32,
+    mut xPrev: *mut i32,
+    y: *mut i32,
+    btCurr: i32,
+    btPrev: i32,
+    blockIdx: i32,
+    gb: i32,
+) -> i32 {
     let mut acc1 = 0;
     let mut acc2 = 0;
     let mut es;
@@ -1703,7 +1877,7 @@ pub unsafe fn IMDCT36(mut xCurr: *mut i32, mut xPrev: *mut i32, y: *mut i32, btC
     idct9(xBuf.as_mut_ptr()); /* even */
     idct9(xBuf.as_mut_ptr().add(9)); /* odd */
 
-    xp = xBuf.as_mut_ptr().add( 8);
+    xp = xBuf.as_mut_ptr().add(8);
     cp = c18.as_ptr().add(8);
     let mut mOut = 0;
     if (btPrev == 0 && btCurr == 0) {
@@ -1713,7 +1887,7 @@ pub unsafe fn IMDCT36(mut xCurr: *mut i32, mut xPrev: *mut i32, y: *mut i32, btC
             /* do ARM-style pointer arithmetic (i still needed for y[] indexing - compiler spills if 2 y pointers) */
             c = *cp;
             cp = cp.sub(1);
-            xo = *(xp.add( 9));
+            xo = *(xp.add(9));
             xe = *xp;
             xp = xp.sub(1);
             /* gain 2 int bits here */
@@ -1745,7 +1919,7 @@ pub unsafe fn IMDCT36(mut xCurr: *mut i32, mut xPrev: *mut i32, y: *mut i32, btC
         for i in 0..9 {
             c = *cp;
             cp = cp.sub(1);
-            xo = *(xp.add( 9));
+            xo = *(xp.add(9));
             xe = *xp;
             xp = xp.sub(1);
             /* gain 2 int bits here */
@@ -1797,7 +1971,7 @@ pub unsafe fn IMDCT36(mut xCurr: *mut i32, mut xPrev: *mut i32, y: *mut i32, btC
  **********************************************************************************************************************/
 // a little bit faster in RAM (< 1 ms per block)
 /* __attribute__ ((section (".data"))) */
-const CSA: [[u32; 2];8 ] = [
+const CSA: [[u32; 2]; 8] = [
     [0x6dc253f0, 0xbe2500aa],
     [0x70dcebe4, 0xc39e4949],
     [0x798d6e73, 0xd7e33f4a],
@@ -1823,12 +1997,11 @@ pub fn AntiAlias(x: &mut [i32], n_bfly: usize) {
         // Iterujemy bezpośrednio po parach współczynników w CSA
         // enumerate() daje nam indeks 'i', którego używamy do sięgania w głąb bloku audio
         for (i, &[c0, c1]) in CSA.iter().enumerate() {
-            
             // Wyliczamy indeksy próbek wokół granicy (center)
             let idx_a = center - (i + 1);
             let idx_b = center + i;
 
-            // Pobieramy próbki - używamy get_unchecked dla maksymalnej wydajności 
+            // Pobieramy próbki - używamy get_unchecked dla maksymalnej wydajności
             // (wiemy, że indeksy są poprawne dzięki total_len) lub zwykłego indeksowania
             let a0 = samples[idx_a];
             let b0 = samples[idx_b];
@@ -1875,8 +2048,16 @@ pub unsafe extern "C" fn HybridTransform(
 
         // Adresowanie y[0][i] w tablicy y[18][32] to po prostu y + i
         // ponieważ y[row][col] = y[row * 32 + col]
-        m_out |= IMDCT36(x_curr, x_prev, y.add(i as usize), curr_win_idx, prev_win_idx, i, bc.gbIn);
-        
+        m_out |= IMDCT36(
+            x_curr,
+            x_prev,
+            y.add(i as usize),
+            curr_win_idx,
+            prev_win_idx,
+            i,
+            bc.gbIn,
+        );
+
         x_curr = x_curr.add(18);
         x_prev = x_prev.add(9);
         i += 1;
@@ -1890,7 +2071,7 @@ pub unsafe extern "C" fn HybridTransform(
         }
 
         m_out |= IMDCT12x3(x_curr, x_prev, y.add(i as usize), prev_win_idx, i, bc.gbIn);
-        
+
         x_curr = x_curr.add(18);
         x_prev = x_prev.add(9);
         i += 1;
@@ -1903,12 +2084,12 @@ pub unsafe extern "C" fn HybridTransform(
         if i < bc.prevWinSwitch {
             prev_win_idx = 0;
         }
-        
+
         WinPrevious(x_prev, x_prev_win.as_mut_ptr(), prev_win_idx);
 
         let mut non_zero = 0i32;
         let fi_bit = (i as i32) << 31;
-        
+
         for j in 0..9 {
             // Próbki parzyste (2*j)
             let mut xp = x_prev_win[2 * j] << 2;
@@ -1921,14 +2102,14 @@ pub unsafe extern "C" fn HybridTransform(
             xp = x_prev_win[2 * j + 1] << 2;
             let mask = fi_bit >> 31; // Arytmetyczne przesunięcie: i odd -> 0xFFFFFFFF, i even -> 0
             xp = (xp ^ mask).wrapping_add(i & 0x01);
-            
+
             non_zero |= xp;
             *y.add((2 * j + 1) * 32 + i as usize) = xp;
             m_out |= xp.abs();
 
             *x_prev.add(j) = 0;
         }
-        
+
         x_prev = x_prev.add(9);
         if non_zero != 0 {
             n_blocks_out = i;
@@ -1979,8 +2160,8 @@ pub unsafe extern "C" fn IMDCT12x3(
 
     // 2. Trzy transformaty IMDCT 12-punktowe
     // Dane wejściowe są przeplatane: b0[0], b1[0], b2[0], b0[1]...
-    imdct12(x_curr, x_buf.as_mut_ptr());             // Block 0
-    imdct12(x_curr.offset(1), x_buf.as_mut_ptr().add(6));  // Block 1
+    imdct12(x_curr, x_buf.as_mut_ptr()); // Block 0
+    imdct12(x_curr.offset(1), x_buf.as_mut_ptr().add(6)); // Block 1
     imdct12(x_curr.offset(2), x_buf.as_mut_ptr().add(12)); // Block 2
 
     // 3. Okienkowanie poprzedniego bloku (Overlap z poprzedniej ramki)
@@ -2013,15 +2194,15 @@ pub unsafe extern "C" fn IMDCT12x3(
         *y.add((9 + i) * n_bands) = y_lo;
 
         // Składanie na stykach bloków wewnętrznych (short block concatenation)
-        y_lo = (x_prev_win[12 + i] << 2) 
-               + mulshift_32(wp[6 + i] as i32, x_buf[2 - i]) 
-               + mulshift_32(wp[i] as i32, x_buf[9 + i]);
+        y_lo = (x_prev_win[12 + i] << 2)
+            + mulshift_32(wp[6 + i] as i32, x_buf[2 - i])
+            + mulshift_32(wp[i] as i32, x_buf[9 + i]);
         m_out |= y_lo.abs();
         *y.add((12 + i) * n_bands) = y_lo;
 
-        y_lo = (x_prev_win[15 + i] << 2) 
-               + mulshift_32(wp[9 + i] as i32, x_buf[i]) 
-               + mulshift_32(wp[3 + i] as i32, x_buf[11 - i]);
+        y_lo = (x_prev_win[15 + i] << 2)
+            + mulshift_32(wp[9 + i] as i32, x_buf[i])
+            + mulshift_32(wp[3 + i] as i32, x_buf[11 - i]);
         m_out |= y_lo.abs();
         *y.add((15 + i) * n_bands) = y_lo;
     }
@@ -2056,11 +2237,16 @@ pub unsafe extern "C" fn IMDCT(
     }
 
     let mut bc = BlockCount {
-        nBlocksLong: 0, nBlocksTotal: 0, nBlocksPrev: 0,
-        prevType: 0, prevWinSwitch: 0, currWinSwitch: 0,
-        gbIn: 0, gbOut: 0,
+        nBlocksLong: 0,
+        nBlocksTotal: 0,
+        nBlocksPrev: 0,
+        prevType: 0,
+        prevWinSwitch: 0,
+        currWinSwitch: 0,
+        gbIn: 0,
+        gbOut: 0,
     };
-    
+
     let n_bfly: i32;
     let sis = &(*m_SideInfoSub)[gr as usize][ch as usize];
     let hi = &mut *m_HuffmanInfo;
@@ -2105,7 +2291,7 @@ pub unsafe extern "C" fn IMDCT(
     bc.prevWinSwitch = im.prevWinSwitch[ch as usize];
     bc.currWinSwitch = if sis.mixedBlock != 0 { block_cutoff } else { 0 };
     // Założenie: HuffmanInfo ma pole gb (guard bits)
-    // bc.gbIn = hi.gb[ch as usize]; 
+    // bc.gbIn = hi.gb[ch as usize];
 
     // Wywołanie HybridTransform
     im.numPrevIMDCT[ch as usize] = HybridTransform(
@@ -2124,39 +2310,41 @@ pub unsafe extern "C" fn IMDCT(
 }
 
 /* pow(2,-i/4) * pow(j,4/3) for i=0..3 j=0..15, Q25 format */
-const pow43_14: [[i32; 16]; 4] = [ /* Q28 */
-[   0x00000000, 0x10000000, 0x285145f3, 0x453a5cdb, 0x0cb2ff53, 0x111989d6,
-    0x15ce31c8, 0x1ac7f203, 0x20000000, 0x257106b9, 0x2b16b4a3, 0x30ed74b4,
-    0x36f23fa5, 0x3d227bd3, 0x437be656, 0x49fc823c, ],
-
-[   0x00000000, 0x0d744fcd, 0x21e71f26, 0x3a36abd9, 0x0aadc084, 0x0e610e6e,
-    0x12560c1d, 0x168523cf, 0x1ae89f99, 0x1f7c03a4, 0x243bae49, 0x29249c67,
-    0x2e34420f, 0x33686f85, 0x38bf3dff, 0x3e370182, ],
-
-[   0x00000000, 0x0b504f33, 0x1c823e07, 0x30f39a55, 0x08facd62, 0x0c176319,
-    0x0f6b3522, 0x12efe2ad, 0x16a09e66, 0x1a79a317, 0x1e77e301, 0x2298d5b4,
-    0x26da56fc, 0x2b3a902a, 0x2fb7e7e7, 0x3450f650, ],
-
-[   0x00000000, 0x09837f05, 0x17f910d7, 0x2929c7a9, 0x078d0dfa, 0x0a2ae661,
-    0x0cf73154, 0x0fec91cb, 0x1306fe0a, 0x16434a6c, 0x199ee595, 0x1d17ae3d,
-    0x20abd76a, 0x2459d551, 0x28204fbb, 0x2bfe1808, ],
+const pow43_14: [[i32; 16]; 4] = [
+    /* Q28 */
+    [
+        0x00000000, 0x10000000, 0x285145f3, 0x453a5cdb, 0x0cb2ff53, 0x111989d6, 0x15ce31c8,
+        0x1ac7f203, 0x20000000, 0x257106b9, 0x2b16b4a3, 0x30ed74b4, 0x36f23fa5, 0x3d227bd3,
+        0x437be656, 0x49fc823c,
+    ],
+    [
+        0x00000000, 0x0d744fcd, 0x21e71f26, 0x3a36abd9, 0x0aadc084, 0x0e610e6e, 0x12560c1d,
+        0x168523cf, 0x1ae89f99, 0x1f7c03a4, 0x243bae49, 0x29249c67, 0x2e34420f, 0x33686f85,
+        0x38bf3dff, 0x3e370182,
+    ],
+    [
+        0x00000000, 0x0b504f33, 0x1c823e07, 0x30f39a55, 0x08facd62, 0x0c176319, 0x0f6b3522,
+        0x12efe2ad, 0x16a09e66, 0x1a79a317, 0x1e77e301, 0x2298d5b4, 0x26da56fc, 0x2b3a902a,
+        0x2fb7e7e7, 0x3450f650,
+    ],
+    [
+        0x00000000, 0x09837f05, 0x17f910d7, 0x2929c7a9, 0x078d0dfa, 0x0a2ae661, 0x0cf73154,
+        0x0fec91cb, 0x1306fe0a, 0x16434a6c, 0x199ee595, 0x1d17ae3d, 0x20abd76a, 0x2459d551,
+        0x28204fbb, 0x2bfe1808,
+    ],
 ];
 
 /* pow(2,-i/4) for i=0..3, Q31 format */
-const pow14: [i32; 4] = [
-    0x7fffffff, 0x6ba27e65, 0x5a82799a, 0x4c1bf829
-];
+const pow14: [i32; 4] = [0x7fffffff, 0x6ba27e65, 0x5a82799a, 0x4c1bf829];
 
 /* pow(j,4/3) for j=16..63, Q23 format */
 const pow43: [i32; 48] = [
-    0x1428a2fa, 0x15db1bd6, 0x1796302c, 0x19598d85, 0x1b24e8bb, 0x1cf7fcfa,
-    0x1ed28af2, 0x20b4582a, 0x229d2e6e, 0x248cdb55, 0x26832fda, 0x28800000,
-    0x2a832287, 0x2c8c70a8, 0x2e9bc5d8, 0x30b0ff99, 0x32cbfd4a, 0x34eca001,
-    0x3712ca62, 0x393e6088, 0x3b6f47e0, 0x3da56717, 0x3fe0a5fc, 0x4220ed72,
-    0x44662758, 0x46b03e7c, 0x48ff1e87, 0x4b52b3f3, 0x4daaebfd, 0x5007b497,
-    0x5268fc62, 0x54ceb29c, 0x5738c721, 0x59a72a59, 0x5c19cd35, 0x5e90a129,
-    0x610b9821, 0x638aa47f, 0x660db90f, 0x6894c90b, 0x6b1fc80c, 0x6daeaa0d,
-    0x70416360, 0x72d7e8b0, 0x75722ef9, 0x78102b85, 0x7ab1d3ec, 0x7d571e09,
+    0x1428a2fa, 0x15db1bd6, 0x1796302c, 0x19598d85, 0x1b24e8bb, 0x1cf7fcfa, 0x1ed28af2, 0x20b4582a,
+    0x229d2e6e, 0x248cdb55, 0x26832fda, 0x28800000, 0x2a832287, 0x2c8c70a8, 0x2e9bc5d8, 0x30b0ff99,
+    0x32cbfd4a, 0x34eca001, 0x3712ca62, 0x393e6088, 0x3b6f47e0, 0x3da56717, 0x3fe0a5fc, 0x4220ed72,
+    0x44662758, 0x46b03e7c, 0x48ff1e87, 0x4b52b3f3, 0x4daaebfd, 0x5007b497, 0x5268fc62, 0x54ceb29c,
+    0x5738c721, 0x59a72a59, 0x5c19cd35, 0x5e90a129, 0x610b9821, 0x638aa47f, 0x660db90f, 0x6894c90b,
+    0x6b1fc80c, 0x6daeaa0d, 0x70416360, 0x72d7e8b0, 0x75722ef9, 0x78102b85, 0x7ab1d3ec, 0x7d571e09,
 ];
 
 /*
@@ -2167,15 +2355,14 @@ const pow43: [i32; 48] = [
  * Relative error < 1E-7
  * Coefs are scaled by 4, 2, 1, 0.5, 0.25
  */
-const poly43lo: [u32; 5] = [ 0x29a0bda9, 0xb02e4828, 0x5957aa1b, 0x236c498d, 0xff581859 ];
-const poly43hi: [u32; 5] = [ 0x10852163, 0xd333f6a4, 0x46e9408b, 0x27c2cef0, 0xfef577b4 ];
+const poly43lo: [u32; 5] = [0x29a0bda9, 0xb02e4828, 0x5957aa1b, 0x236c498d, 0xff581859];
+const poly43hi: [u32; 5] = [0x10852163, 0xd333f6a4, 0x46e9408b, 0x27c2cef0, 0xfef577b4];
 
 /* pow(2, i*4/3) as exp and frac */
-const pow2exp: [i32; 8] = [ 14, 13, 11, 10, 9, 7, 6, 5 ];
+const pow2exp: [i32; 8] = [14, 13, 11, 10, 9, 7, 6, 5];
 
 const pow2frac: [i32; 8] = [
-    0x6597fa94, 0x50a28be6, 0x7fffffff, 0x6597fa94,
-    0x50a28be6, 0x7fffffff, 0x6597fa94, 0x50a28be6
+    0x6597fa94, 0x50a28be6, 0x7fffffff, 0x6597fa94, 0x50a28be6, 0x7fffffff, 0x6597fa94, 0x50a28be6,
 ];
 
 #[unsafe(no_mangle)]
@@ -2195,15 +2382,21 @@ pub unsafe extern "C" fn DequantBlock(
     // Pobranie tablicy dla skali ułamkowej
     let tab16 = &pow43_14[(scale & 0x3) as usize];
     let scalef = pow14[(scale & 0x3) as usize];
-    
+
     // scalei = min(scale >> 2, 31)
     let mut scalei = scale >> 2;
-    if scalei > 31 { scalei = 31; }
+    if scalei > 31 {
+        scalei = 31;
+    }
 
     /* Cache first 4 values */
     let mut shift_init = scalei + 3;
-    if shift_init > 31 { shift_init = 31; }
-    if shift_init < 0 { shift_init = 0; }
+    if shift_init > 31 {
+        shift_init = 31;
+    }
+    if shift_init < 0 {
+        shift_init = 0;
+    }
 
     tab4[0] = 0;
     tab4[1] = tab16[1] >> shift_init;
@@ -2214,7 +2407,7 @@ pub unsafe extern "C" fn DequantBlock(
     for _ in 0..num {
         let sx = *in_buf;
         in_buf = in_buf.add(1);
-        
+
         let x = (sx & 0x7fffffff) as u32; // x = magnitude
         let mut y: i32;
         let mut shift: i32;
@@ -2237,11 +2430,24 @@ pub unsafe extern "C" fn DequantBlock(
                 /* Normalizacja do [0x40000000, 0x7fffffff] */
                 let mut x_norm = x << 17;
                 shift = 0;
-                if x_norm < 0x08000000 { x_norm <<= 4; shift += 4; }
-                if x_norm < 0x20000000 { x_norm <<= 2; shift += 2; }
-                if x_norm < 0x40000000 { x_norm <<= 1; shift += 1; }
+                if x_norm < 0x08000000 {
+                    x_norm <<= 4;
+                    shift += 4;
+                }
+                if x_norm < 0x20000000 {
+                    x_norm <<= 2;
+                    shift += 2;
+                }
+                if x_norm < 0x40000000 {
+                    x_norm <<= 1;
+                    shift += 1;
+                }
 
-                let coef = if x_norm < SQRTHALF { &poly43lo } else { &poly43hi };
+                let coef = if x_norm < SQRTHALF {
+                    &poly43lo
+                } else {
+                    &poly43hi
+                };
 
                 /* Aproksymacja wielomianowa */
                 let x_i = x_norm as i32;
@@ -2250,7 +2456,7 @@ pub unsafe extern "C" fn DequantBlock(
                 y = mulshift_32(y, x_norm as i32) + (coef[2] as i32);
                 y = mulshift_32(y, x_norm as i32) + (coef[3] as i32);
                 y = mulshift_32(y, x_norm as i32) + (coef[4] as i32);
-                
+
                 // y = (y * pow2frac[shift]) << 3
                 y = mulshift_32(y, pow2frac[shift as usize]) << 3;
 
@@ -2283,7 +2489,9 @@ pub unsafe extern "C" fn DequantBlock(
 }
 
 /* optional pre-emphasis for high-frequency scale factor bands */
-const PRE_TAB: [u8; 22] = [ 0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,2,2,3,3,3,2,0 ];
+const PRE_TAB: [u8; 22] = [
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 3, 3, 3, 2, 0,
+];
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn DequantChannel(
@@ -2310,7 +2518,11 @@ pub unsafe extern "C" fn DequantChannel(
     // 1. Ustalenie granic dla bloków długich i krótkich
     if sis.blockType == 2 {
         if sis.mixedBlock != 0 {
-            cb_end_l = if m_MPEGVersion == MPEGVersion::MPEG1 { 8 } else { 6 }; // MPEG1 vs MPEG2
+            cb_end_l = if m_MPEGVersion == MPEGVersion::MPEG1 {
+                8
+            } else {
+                6
+            }; // MPEG1 vs MPEG2
             cb_start_s = 3;
         } else {
             cb_end_l = 0;
@@ -2340,16 +2552,15 @@ pub unsafe extern "C" fn DequantChannel(
     // 2. Dekwantyzacja bloków długich
     for cb in 0..cb_end_l {
         let n_samps = (sfbt.l[(cb + 1) as usize] - sfbt.l[cb as usize]) as i32;
-        
-        let pre_val = if sis.preFlag != 0 { PRE_TAB[cb as usize] as i32 } else { 0 };
+
+        let pre_val = if sis.preFlag != 0 {
+            PRE_TAB[cb as usize] as i32
+        } else {
+            0
+        };
         let gain_i = 210 - global_gain + s_multiplier * (sfis.l[cb as usize] as i32 + pre_val);
 
-        let non_zero = DequantBlock(
-            sample_buf.add(i), 
-            sample_buf.add(i), 
-            n_samps, 
-            gain_i
-        );
+        let non_zero = DequantBlock(sample_buf.add(i), sample_buf.add(i), n_samps, gain_i);
 
         if non_zero != 0 {
             cb_max[0] = cb;
@@ -2376,16 +2587,18 @@ pub unsafe extern "C" fn DequantChannel(
     cb_max = [cb_start_s, cb_start_s, cb_start_s];
     for cb in cb_start_s..cb_end_s {
         let n_samps = (sfbt.s[(cb + 1) as usize] - sfbt.s[cb as usize]) as i32;
-        
+
         for w in 0..3 {
-            let gain_i = 210 - global_gain + 8 * sis.subBlockGain[w] + s_multiplier * (sfis.s[cb as usize][w] as i32);
-            
+            let gain_i = 210 - global_gain
+                + 8 * sis.subBlockGain[w]
+                + s_multiplier * (sfis.s[cb as usize][w] as i32);
+
             // Dekwantyzujemy do workBuf, aby móc potem bezpiecznie przełożyć dane do sampleBuf
             let non_zero = DequantBlock(
                 sample_buf.add(i + (n_samps * w as i32) as usize),
                 work_buf.add((n_samps * w as i32) as usize),
                 n_samps,
-                gain_i
+                gain_i,
             );
 
             if non_zero != 0 {
@@ -2420,23 +2633,43 @@ pub unsafe extern "C" fn DequantChannel(
 }
 
 const ISFMpeg1: [[i32; 7]; 2] = [
-    [0x00000000, 0x0d8658ba, 0x176cf5d0, 0x20000000, 0x28930a2f, 0x3279a745, 0x40000000],
-    [0x00000000, 0x13207f5c, 0x2120fb83, 0x2d413ccc, 0x39617e16, 0x4761fa3d, 0x5a827999]
+    [
+        0x00000000, 0x0d8658ba, 0x176cf5d0, 0x20000000, 0x28930a2f, 0x3279a745, 0x40000000,
+    ],
+    [
+        0x00000000, 0x13207f5c, 0x2120fb83, 0x2d413ccc, 0x39617e16, 0x4761fa3d, 0x5a827999,
+    ],
 ];
 
 const ISFMpeg2: [[[i32; 16]; 2]; 2] = [
-[   [   /* intensityScale off, mid-side off */
-        0x40000000, 0x35d13f32, 0x2d413ccc, 0x260dfc14, 0x1fffffff, 0x1ae89f99, 0x16a09e66, 0x1306fe0a,
-        0x0fffffff, 0x0d744fcc, 0x0b504f33, 0x09837f05, 0x07ffffff, 0x06ba27e6, 0x05a82799, 0x04c1bf82 ],
-    [   /* intensityScale off, mid-side on */
-        0x5a827999, 0x4c1bf827, 0x3fffffff, 0x35d13f32, 0x2d413ccc, 0x260dfc13, 0x1fffffff, 0x1ae89f99,
-        0x16a09e66, 0x1306fe09, 0x0fffffff, 0x0d744fcc, 0x0b504f33, 0x09837f04, 0x07ffffff, 0x06ba27e6 ],  ],
-[   [   /* intensityScale on, mid-side off */
-        0x40000000, 0x2d413ccc, 0x20000000, 0x16a09e66, 0x10000000, 0x0b504f33, 0x08000000, 0x05a82799,
-        0x04000000, 0x02d413cc, 0x02000000, 0x016a09e6, 0x01000000, 0x00b504f3, 0x00800000, 0x005a8279 ],
-    [   /* intensityScale on, mid-side on */
-        0x5a827999, 0x3fffffff, 0x2d413ccc, 0x1fffffff, 0x16a09e66, 0x0fffffff, 0x0b504f33, 0x07ffffff,
-        0x05a82799, 0x03ffffff, 0x02d413cc, 0x01ffffff, 0x016a09e6, 0x00ffffff, 0x00b504f3, 0x007fffff ]   ]
+    [
+        [
+            /* intensityScale off, mid-side off */
+            0x40000000, 0x35d13f32, 0x2d413ccc, 0x260dfc14, 0x1fffffff, 0x1ae89f99, 0x16a09e66,
+            0x1306fe0a, 0x0fffffff, 0x0d744fcc, 0x0b504f33, 0x09837f05, 0x07ffffff, 0x06ba27e6,
+            0x05a82799, 0x04c1bf82,
+        ],
+        [
+            /* intensityScale off, mid-side on */
+            0x5a827999, 0x4c1bf827, 0x3fffffff, 0x35d13f32, 0x2d413ccc, 0x260dfc13, 0x1fffffff,
+            0x1ae89f99, 0x16a09e66, 0x1306fe09, 0x0fffffff, 0x0d744fcc, 0x0b504f33, 0x09837f04,
+            0x07ffffff, 0x06ba27e6,
+        ],
+    ],
+    [
+        [
+            /* intensityScale on, mid-side off */
+            0x40000000, 0x2d413ccc, 0x20000000, 0x16a09e66, 0x10000000, 0x0b504f33, 0x08000000,
+            0x05a82799, 0x04000000, 0x02d413cc, 0x02000000, 0x016a09e6, 0x01000000, 0x00b504f3,
+            0x00800000, 0x005a8279,
+        ],
+        [
+            /* intensityScale on, mid-side on */
+            0x5a827999, 0x3fffffff, 0x2d413ccc, 0x1fffffff, 0x16a09e66, 0x0fffffff, 0x0b504f33,
+            0x07ffffff, 0x05a82799, 0x03ffffff, 0x02d413cc, 0x01ffffff, 0x016a09e6, 0x00ffffff,
+            0x00b504f3, 0x007fffff,
+        ],
+    ],
 ];
 /* indexing = [intensity scale on/off][left/right]
  * format = Q30, range = [0.0, 1.414]
@@ -2444,11 +2677,10 @@ const ISFMpeg2: [[[i32; 16]; 2]; 2] = [
  * illegal intensity position scalefactors (see comments on ISFMpeg1)
  */
 
- const ISFIIP: [[i32; 2]; 2] = [
+const ISFIIP: [[i32; 2]; 2] = [
     [0x40000000, 0x00000000], /* mid-side off */
     [0x40000000, 0x40000000], /* mid-side on */
- ];
-
+];
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn IntensityProcMPEG1(
@@ -2491,19 +2723,26 @@ pub unsafe extern "C" fn IntensityProcMPEG1(
 
     // Bloki długie
     for cb in cb_start_l..cb_end_l {
-        if samps_left <= 0 { break; }
+        if samps_left <= 0 {
+            break;
+        }
         let isf = sfis.l[cb] as usize;
         let (fl, fr) = if isf == 7 {
-            (ISFIIP[mid_side_flag as usize][0], ISFIIP[mid_side_flag as usize][1])
+            (
+                ISFIIP[mid_side_flag as usize][0],
+                ISFIIP[mid_side_flag as usize][1],
+            )
         } else {
             (isf_tab[isf], isf_tab[6] - isf_tab[isf])
         };
 
         let n = (sfbt.l[cb + 1] - sfbt.l[cb]) as usize;
         for _ in 0..n {
-            if samps_left <= 0 { break; }
+            if samps_left <= 0 {
+                break;
+            }
             let common = x_left[i];
-            
+
             let xr = mulshift_32(fr, common) << 2;
             x_right[i] = xr;
             m_out_r |= xr.abs();
@@ -2519,7 +2758,9 @@ pub unsafe extern "C" fn IntensityProcMPEG1(
 
     // Bloki krótkie (uproszczona logika i += 3)
     for cb in cb_start_s..cb_end_s {
-        if samps_left < 3 { break; }
+        if samps_left < 3 {
+            break;
+        }
         let mut fls = [0; 3];
         let mut frs = [0; 3];
         for w in 0..3 {
@@ -2535,7 +2776,9 @@ pub unsafe extern "C" fn IntensityProcMPEG1(
 
         let n = (sfbt.s[cb + 1] - sfbt.s[cb]) as usize;
         for _ in 0..n {
-            if samps_left < 3 { break; }
+            if samps_left < 3 {
+                break;
+            }
             for w in 0..3 {
                 let common = x_left[i + w];
                 let xr = mulshift_32(frs[w], common) << 2;
@@ -2556,14 +2799,14 @@ pub unsafe extern "C" fn IntensityProcMPEG1(
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn IntensityProcMPEG2(
-    x: *mut [i32; 576],      // x[2][576]
+    x: *mut [i32; 576], // x[2][576]
     n_samps: i32,
     sfis: *const ScaleFactorInfoSub,
     cbi: *const CriticalBandInfo,
     sfjs: *const ScaleFactorJS,
     mid_side_flag: i32,
     _mix_flag: i32,
-    m_out: *mut i32,         // mOut[2]
+    m_out: *mut i32, // mOut[2]
     sfbt: *const SFBandTable,
 ) {
     let sfis = &*sfis;
@@ -2605,7 +2848,9 @@ pub unsafe extern "C" fn IntensityProcMPEG2(
         let mut samps_left = n_samps - i as i32;
 
         for cb in cb_start_l..cb_end_l {
-            if samps_left <= 0 { break; }
+            if samps_left <= 0 {
+                break;
+            }
 
             let sf_idx = sfis.l[cb] as i32;
             let (fl, fr);
@@ -2625,7 +2870,11 @@ pub unsafe extern "C" fn IntensityProcMPEG2(
             }
 
             let band_len = (sfbt.l[cb + 1] - sfbt.l[cb]) as i32;
-            let n = if band_len < samps_left { band_len } else { samps_left };
+            let n = if band_len < samps_left {
+                band_len
+            } else {
+                samps_left
+            };
 
             for _ in 0..n {
                 let common = x_left[i];
@@ -2634,7 +2883,7 @@ pub unsafe extern "C" fn IntensityProcMPEG2(
 
                 x_right[i] = xr;
                 x_left[i] = xl;
-                
+
                 m_out_r |= xr.abs();
                 m_out_l |= xl.abs();
                 i += 1;
@@ -2695,7 +2944,7 @@ pub unsafe extern "C" fn IntensityProcMPEG2(
 pub unsafe extern "C" fn MidSideProc(
     x: *mut [i32; 576], // x[2][576]
     n_samps: i32,
-    m_out: *mut i32,    // mOut[2]
+    m_out: *mut i32, // mOut[2]
 ) {
     let mut m_out_l = 0i32;
     let mut m_out_r = 0i32;
@@ -2746,16 +2995,19 @@ pub unsafe extern "C" fn MidSideProc(
  * Return:      length (in bytes) of scale factor data, -1 if null input pointers
  **********************************************************************************************************************/
 #[unsafe(no_mangle)]
- pub unsafe fn UnpackScaleFactors(
+pub unsafe fn UnpackScaleFactors(
     mut buf: *mut u8,
-    bitOffset: *mut i32, bitsAvail: i32, gr: i32, ch: i32,
+    bitOffset: *mut i32,
+    bitsAvail: i32,
+    gr: i32,
+    ch: i32,
     m_SideInfoSub: *mut [[SideInfoSub; 2]; 2],
     m_ScaleFactorInfoSub: *mut [[ScaleFactorInfoSub; 2]; 2],
     m_MP3DecInfo: *mut MP3DecInfo,
     m_SideInfo: *mut SideInfo,
     m_FrameHeader: *mut FrameHeader,
-    m_ScaleFactorJS: &mut  ScaleFactorJS,
-    m_MPEGVersion: MPEGVersion
+    m_ScaleFactorJS: &mut ScaleFactorJS,
+    m_MPEGVersion: MPEGVersion,
 ) -> i32 {
     /* init GetBits reader */
     let m_SideInfoSub = &mut *m_SideInfoSub;
@@ -2771,28 +3023,45 @@ pub unsafe extern "C" fn MidSideProc(
         n_bytes: 0,
     };
     let bsi = &mut bitStreamInfo;
-    SetBitstreamPointer(bsi as *mut BitStreamInfoC, (bitsAvail + *bitOffset + 7) / 8, buf);
+    SetBitstreamPointer(
+        bsi as *mut BitStreamInfoC,
+        (bitsAvail + *bitOffset + 7) / 8,
+        buf,
+    );
     if (*bitOffset != 0) {
         GetBits(bsi, *bitOffset as u32);
     }
 
     if (m_MPEGVersion == MPEGVersion::MPEG1) {
-        UnpackSFMPEG1(bsi, &mut m_SideInfoSub[gr as usize][ch as usize], &mut m_ScaleFactorInfoSub,
-                      m_SideInfo.scfsi[ch as usize].as_ptr(), gr as usize, ch as usize);
-} else { 
-        UnpackSFMPEG2(bsi, &mut m_SideInfoSub[gr as usize][ch as usize], &mut m_ScaleFactorInfoSub[gr as usize][ch as usize],
-                      gr, ch, m_FrameHeader.modeExt, m_ScaleFactorJS);
-        }
+        UnpackSFMPEG1(
+            bsi,
+            &mut m_SideInfoSub[gr as usize][ch as usize],
+            &mut m_ScaleFactorInfoSub,
+            m_SideInfo.scfsi[ch as usize].as_ptr(),
+            gr as usize,
+            ch as usize,
+        );
+    } else {
+        UnpackSFMPEG2(
+            bsi,
+            &mut m_SideInfoSub[gr as usize][ch as usize],
+            &mut m_ScaleFactorInfoSub[gr as usize][ch as usize],
+            gr,
+            ch,
+            m_FrameHeader.modeExt,
+            m_ScaleFactorJS,
+        );
+    }
 
-    m_MP3DecInfo.part23Length[gr as usize][ch as usize] = m_SideInfoSub[gr as usize][ch as usize].part23_length;
+    m_MP3DecInfo.part23Length[gr as usize][ch as usize] =
+        m_SideInfoSub[gr as usize][ch as usize].part23_length;
 
     let mut bitsUsed = CalcBitsUsed(bsi, buf, *bitOffset as usize);
-    buf = buf.add((bitsUsed + *bitOffset) as usize>> 3);
+    buf = buf.add((bitsUsed + *bitOffset) as usize >> 3);
     *bitOffset = (bitsUsed + *bitOffset) & 0x07;
 
     buf.offset_from(startBuf) as i32
 }
-
 
 /***********************************************************************************************************************
  * Function:    Subband
@@ -2806,7 +3075,7 @@ pub unsafe extern "C" fn MidSideProc(
  *
  * Return:      0 on success,  -1 if null input pointers
  **********************************************************************************************************************/
- 
+
 #[unsafe(no_mangle)]
 pub unsafe fn Subband(
     mut pcmBuf: *mut i16,
@@ -2820,24 +3089,49 @@ pub unsafe fn Subband(
     if (m_MP3DecInfo.nChans == 2) {
         /* stereo */
         for b in 0..BLOCK_SIZE {
-            fdct_32(&mut m_IMDCTInfo.outBuf[0][b], &mut m_SubbandInfo.vbuf, m_SubbandInfo.vindex,
-                    (b as i32 & 0x01), m_IMDCTInfo.gb[0]);
-            fdct_32(&mut m_IMDCTInfo.outBuf[1][b], &mut m_SubbandInfo.vbuf[1 * 32..], m_SubbandInfo.vindex,
-                    (b as i32 & 0x01), m_IMDCTInfo.gb[1]);
-            PolyphaseStereo(pcmBuf,
-                    m_SubbandInfo.vbuf.as_mut_ptr().add( m_SubbandInfo.vindex as usize + VBUF_LENGTH * (b as i32 & 0x01) as usize),
-                    POLY_COEF.as_ptr());
+            fdct_32(
+                &mut m_IMDCTInfo.outBuf[0][b],
+                &mut m_SubbandInfo.vbuf,
+                m_SubbandInfo.vindex,
+                (b as i32 & 0x01),
+                m_IMDCTInfo.gb[0],
+            );
+            fdct_32(
+                &mut m_IMDCTInfo.outBuf[1][b],
+                &mut m_SubbandInfo.vbuf[1 * 32..],
+                m_SubbandInfo.vindex,
+                (b as i32 & 0x01),
+                m_IMDCTInfo.gb[1],
+            );
+            PolyphaseStereo(
+                pcmBuf,
+                m_SubbandInfo
+                    .vbuf
+                    .as_mut_ptr()
+                    .add(m_SubbandInfo.vindex as usize + VBUF_LENGTH * (b as i32 & 0x01) as usize),
+                POLY_COEF.as_ptr(),
+            );
             m_SubbandInfo.vindex = (m_SubbandInfo.vindex - (b as i32 & 0x01)) & 7;
             pcmBuf = pcmBuf.add(2 * NBANDS);
         }
     } else {
         /* mono */
         for b in 0..BLOCK_SIZE {
-            fdct_32(&mut m_IMDCTInfo.outBuf[0][b], &mut m_SubbandInfo.vbuf, m_SubbandInfo.vindex,
-                    (b as i32 & 0x01), m_IMDCTInfo.gb[0]);
-            PolyphaseMono(pcmBuf,
-                    m_SubbandInfo.vbuf.as_mut_ptr().add( m_SubbandInfo.vindex as usize + VBUF_LENGTH * (b & 0x01)),
-                    POLY_COEF.as_ptr());
+            fdct_32(
+                &mut m_IMDCTInfo.outBuf[0][b],
+                &mut m_SubbandInfo.vbuf,
+                m_SubbandInfo.vindex,
+                (b as i32 & 0x01),
+                m_IMDCTInfo.gb[0],
+            );
+            PolyphaseMono(
+                pcmBuf,
+                m_SubbandInfo
+                    .vbuf
+                    .as_mut_ptr()
+                    .add(m_SubbandInfo.vindex as usize + VBUF_LENGTH * (b & 0x01)),
+                POLY_COEF.as_ptr(),
+            );
             m_SubbandInfo.vindex = (m_SubbandInfo.vindex - (b as i32 & 0x01)) & 7;
             pcmBuf = pcmBuf.add(NBANDS as usize);
         }
@@ -2888,8 +3182,12 @@ pub unsafe extern "C" fn MP3Dequantize(
     if fh.modeExt != 0 && (hi.gb[0] < 1 || hi.gb[1] < 1) {
         for ch in 0..2 {
             for i in 0..hi.non_zero_bound[ch] as usize {
-                if hi.huff_dec_buf[ch][i] < -0x3fffffff { hi.huff_dec_buf[ch][i] = -0x3fffffff; }
-                if hi.huff_dec_buf[ch][i] > 0x3fffffff { hi.huff_dec_buf[ch][i] = 0x3fffffff; }
+                if hi.huff_dec_buf[ch][i] < -0x3fffffff {
+                    hi.huff_dec_buf[ch][i] = -0x3fffffff;
+                }
+                if hi.huff_dec_buf[ch][i] > 0x3fffffff {
+                    hi.huff_dec_buf[ch][i] = 0x3fffffff;
+                }
             }
         }
     }
@@ -2914,7 +3212,8 @@ pub unsafe extern "C" fn MP3Dequantize(
     // 4. Proces Intensity Stereo
     if (fh.modeExt & 0x01) != 0 {
         let n_samps = hi.non_zero_bound[0];
-        if mpeg_version == MPEGVersion::MPEG1 { // MPEG1
+        if mpeg_version == MPEGVersion::MPEG1 {
+            // MPEG1
             IntensityProcMPEG1(
                 hi.huff_dec_buf.as_mut_ptr(),
                 n_samps,
@@ -2925,7 +3224,8 @@ pub unsafe extern "C" fn MP3Dequantize(
                 m_out.as_mut_ptr(),
                 sfbt,
             );
-        } else { // MPEG2
+        } else {
+            // MPEG2
             IntensityProcMPEG2(
                 hi.huff_dec_buf.as_mut_ptr(),
                 n_samps,
@@ -2935,7 +3235,7 @@ pub unsafe extern "C" fn MP3Dequantize(
                 fh.modeExt >> 1,
                 (*side_info_sub)[gr_idx][1].mixedBlock,
                 m_out.as_mut_ptr(),
-                sfbt
+                sfbt,
             );
         }
     }
@@ -2992,7 +3292,11 @@ pub unsafe fn MP3DecodeHelper(
 
     let outbuf = unsafe {
         core::slice::from_raw_parts_mut(
-            outbuf, (m_MP3Decoder.m_MP3DecInfo.nGrans * m_MP3Decoder.m_MP3DecInfo.nGranSamps * m_MP3Decoder.m_MP3DecInfo.nChans) as usize)
+            outbuf,
+            (m_MP3Decoder.m_MP3DecInfo.nGrans
+                * m_MP3Decoder.m_MP3DecInfo.nGranSamps
+                * m_MP3Decoder.m_MP3DecInfo.nChans) as usize,
+        )
     };
 
     if siBytes < 0 {
@@ -3008,16 +3312,21 @@ pub unsafe fn MP3DecodeHelper(
     if (*m_MP3DecInfo).bitrate == 0 || (*m_MP3DecInfo).freeBitrateFlag != 0 {
         if (*m_MP3DecInfo).freeBitrateFlag == 0 {
             (*m_MP3DecInfo).freeBitrateFlag = 1;
-            (*m_MP3DecInfo).freeBitrateSlots = MP3FindFreeSync(inbuf, inbuf.offset(-(fhBytes as isize) - (siBytes as isize)), *bytesLeft);
+            (*m_MP3DecInfo).freeBitrateSlots = MP3FindFreeSync(
+                inbuf,
+                inbuf.offset(-(fhBytes as isize) - (siBytes as isize)),
+                *bytesLeft,
+            );
             if (*m_MP3DecInfo).freeBitrateSlots < 0 {
                 MP3ClearBadFrame(outbuf);
                 (*m_MP3DecInfo).freeBitrateFlag = 0;
                 return -3; // ERR_MP3_FREE_BITRATE_SYNC
             }
             freeFrameBytes = (*m_MP3DecInfo).freeBitrateSlots + fhBytes as i32 + siBytes;
-            (*m_MP3DecInfo).bitrate = (freeFrameBytes * (*m_MP3DecInfo).samprate * 8) / ((*m_MP3DecInfo).nGrans * (*m_MP3DecInfo).nGranSamps);
+            (*m_MP3DecInfo).bitrate = (freeFrameBytes * (*m_MP3DecInfo).samprate * 8)
+                / ((*m_MP3DecInfo).nGrans * (*m_MP3DecInfo).nGranSamps);
         }
-        (*m_MP3DecInfo).nSlots = (*m_MP3DecInfo).freeBitrateSlots + CheckPadBit(m_FrameHeader); 
+        (*m_MP3DecInfo).nSlots = (*m_MP3DecInfo).freeBitrateSlots + m_FrameHeader.check_pad_bit();
     }
 
     /* Bit Reservoir Management */
@@ -3040,15 +3349,21 @@ pub unsafe fn MP3DecodeHelper(
         if (*m_MP3DecInfo).mainDataBytes >= (*m_MP3DecInfo).mainDataBegin {
             // memmove(mainBuf, mainBuf + mainDataBytes - mainDataBegin, mainDataBegin)
             core::ptr::copy(
-                (*m_MP3DecInfo).mainBuf.as_ptr().add(((*m_MP3DecInfo).mainDataBytes - (*m_MP3DecInfo).mainDataBegin) as usize),
+                (*m_MP3DecInfo)
+                    .mainBuf
+                    .as_ptr()
+                    .add(((*m_MP3DecInfo).mainDataBytes - (*m_MP3DecInfo).mainDataBegin) as usize),
                 (*m_MP3DecInfo).mainBuf.as_mut_ptr(),
-                (*m_MP3DecInfo).mainDataBegin as usize
+                (*m_MP3DecInfo).mainDataBegin as usize,
             );
             // memcpy(mainBuf + mainDataBegin, inbuf, nSlots)
             core::ptr::copy_nonoverlapping(
                 inbuf,
-                (*m_MP3DecInfo).mainBuf.as_mut_ptr().add((*m_MP3DecInfo).mainDataBegin as usize),
-                (*m_MP3DecInfo).nSlots as usize
+                (*m_MP3DecInfo)
+                    .mainBuf
+                    .as_mut_ptr()
+                    .add((*m_MP3DecInfo).mainDataBegin as usize),
+                (*m_MP3DecInfo).nSlots as usize,
             );
 
             (*m_MP3DecInfo).mainDataBytes = (*m_MP3DecInfo).mainDataBegin + (*m_MP3DecInfo).nSlots;
@@ -3059,8 +3374,11 @@ pub unsafe fn MP3DecodeHelper(
             // memcpy(mainBuf + mainDataBytes, inbuf, nSlots)
             core::ptr::copy_nonoverlapping(
                 inbuf,
-                (*m_MP3DecInfo).mainBuf.as_mut_ptr().add((*m_MP3DecInfo).mainDataBytes as usize),
-                (*m_MP3DecInfo).nSlots as usize
+                (*m_MP3DecInfo)
+                    .mainBuf
+                    .as_mut_ptr()
+                    .add((*m_MP3DecInfo).mainDataBytes as usize),
+                (*m_MP3DecInfo).nSlots as usize,
             );
             (*m_MP3DecInfo).mainDataBytes += (*m_MP3DecInfo).nSlots;
             inbuf = inbuf.add((*m_MP3DecInfo).nSlots as usize);
@@ -3083,15 +3401,15 @@ pub unsafe fn MP3DecodeHelper(
                 mainBits,
                 gr,
                 ch,
-                &mut m_MP3Decoder.m_SideInfoSub,          // 1. Oczekiwany: *mut [[SideInfoSub; 2]; 2]
-                &mut m_MP3Decoder.m_ScaleFactorInfoSub,   // 2. Oczekiwany: *mut [[ScaleFactorInfoSub; 2]; 2]
-                m_MP3DecInfo,           // 3. Oczekiwany: *mut MP3DecInfo
+                &mut m_MP3Decoder.m_SideInfoSub, // 1. Oczekiwany: *mut [[SideInfoSub; 2]; 2]
+                &mut m_MP3Decoder.m_ScaleFactorInfoSub, // 2. Oczekiwany: *mut [[ScaleFactorInfoSub; 2]; 2]
+                m_MP3DecInfo,                           // 3. Oczekiwany: *mut MP3DecInfo
                 &mut m_MP3Decoder.m_SideInfo,
-                m_FrameHeader,          // 5. Oczekiwany: *mut FrameHeader
-                &mut m_MP3Decoder.m_ScaleFactorJS,        // 6. Oczekiwany: *mut ScaleFactorJS
-                m_MP3Decoder.m_MPEGVersion          // 7. Oczekiwany: i32
+                m_FrameHeader,                     // 5. Oczekiwany: *mut FrameHeader
+                &mut m_MP3Decoder.m_ScaleFactorJS, // 6. Oczekiwany: *mut ScaleFactorJS
+                m_MP3Decoder.m_MPEGVersion,        // 7. Oczekiwany: i32
             );
-            
+
             sfBlockBits = 8 * offset - prevBitOffset + bitOffset;
             huffBlockBits = (*m_MP3DecInfo).part23Length[gr as usize][ch as usize] - sfBlockBits;
             mainPtr = mainPtr.add(offset as usize);
@@ -3104,8 +3422,15 @@ pub unsafe fn MP3DecodeHelper(
 
             prevBitOffset = bitOffset;
             offset = DecodeHuffman(
-                mainPtr, &mut bitOffset, huffBlockBits, gr, ch,
-                &mut m_MP3Decoder.m_HuffmanInfo, m_SFBandTable, &mut m_MP3Decoder.m_SideInfoSub, m_MP3Decoder.m_MPEGVersion
+                mainPtr,
+                &mut bitOffset,
+                huffBlockBits,
+                gr,
+                ch,
+                &mut m_MP3Decoder.m_HuffmanInfo,
+                m_SFBandTable,
+                &mut m_MP3Decoder.m_SideInfoSub,
+                m_MP3Decoder.m_MPEGVersion,
             );
             if offset < 0 {
                 MP3ClearBadFrame(outbuf);
@@ -3118,16 +3443,32 @@ pub unsafe fn MP3DecodeHelper(
         if MP3Dequantize(
             gr,
             m_MP3DecInfo,
-            &mut m_MP3Decoder.m_HuffmanInfo, &mut m_MP3Decoder.m_DequantInfo, &mut m_MP3Decoder.m_SideInfoSub, 
-            &mut m_MP3Decoder.m_ScaleFactorInfoSub, &mut m_MP3Decoder.m_CriticalBandInfo, m_FrameHeader, 
-            m_SFBandTable,&mut m_MP3Decoder.m_ScaleFactorJS, m_MP3Decoder.m_MPEGVersion
-        ) < 0 {
+            &mut m_MP3Decoder.m_HuffmanInfo,
+            &mut m_MP3Decoder.m_DequantInfo,
+            &mut m_MP3Decoder.m_SideInfoSub,
+            &mut m_MP3Decoder.m_ScaleFactorInfoSub,
+            &mut m_MP3Decoder.m_CriticalBandInfo,
+            m_FrameHeader,
+            m_SFBandTable,
+            &mut m_MP3Decoder.m_ScaleFactorJS,
+            m_MP3Decoder.m_MPEGVersion,
+        ) < 0
+        {
             MP3ClearBadFrame(outbuf);
             return ERR_MP3_INVALID_DEQUANTIZE;
         }
 
         for ch in 0..(*m_MP3DecInfo).nChans {
-            if IMDCT(gr, ch, m_SFBandTable, m_MP3Decoder.m_MPEGVersion as i32, &mut m_MP3Decoder.m_SideInfoSub, &mut m_MP3Decoder.m_HuffmanInfo, &mut m_MP3Decoder.m_IMDCTInfo) < 0 {
+            if IMDCT(
+                gr,
+                ch,
+                m_SFBandTable,
+                m_MP3Decoder.m_MPEGVersion as i32,
+                &mut m_MP3Decoder.m_SideInfoSub,
+                &mut m_MP3Decoder.m_HuffmanInfo,
+                &mut m_MP3Decoder.m_IMDCTInfo,
+            ) < 0
+            {
                 MP3ClearBadFrame(outbuf);
                 return -9; // ERR_MP3_INVALID_IMDCT
             }
@@ -3138,14 +3479,15 @@ pub unsafe fn MP3DecodeHelper(
             outbuf.as_mut_ptr().add(pcm_offset),
             m_MP3DecInfo,
             &mut m_MP3Decoder.m_IMDCTInfo,
-            &mut m_MP3Decoder.m_SubbandInfo
-        ) < 0 {
+            &mut m_MP3Decoder.m_SubbandInfo,
+        ) < 0
+        {
             MP3ClearBadFrame(outbuf);
             return ERR_MP3_INVALID_SUBBAND; // ERR_MP3_INVALID_SUBBAND
         }
     }
 
     m_MP3Decoder.mp3_get_last_frame_info();
-    
+
     ERR_MP3_NONE
 }

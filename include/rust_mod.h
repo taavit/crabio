@@ -293,7 +293,6 @@ typedef struct MP3Decoder {
 } MP3Decoder_t;
 
 void SetBitstreamPointer(BitStreamInfo_t *bsi, int nBytes, unsigned char *buf);
-int CheckPadBit();
 int CalcBitsUsed(BitStreamInfo_t *bsi, unsigned char *startBuf, int startOffset);
 
 uint64_t rust_add(uint64_t a, uint64_t b);

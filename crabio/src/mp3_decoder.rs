@@ -256,6 +256,12 @@ pub struct FrameHeader {
     pub CRCWord: i32,            /* CRC word (16 bits, 0 if crc not enabled) */
 }
 
+impl FrameHeader {
+    pub fn check_pad_bit(&self) -> i32 {
+        if self.paddingBit != 0 { 1 } else { 0 }
+    }
+}
+
 #[repr(C)]
 #[derive(Debug, Default)]
 pub struct SideInfoSub {
