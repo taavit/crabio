@@ -315,7 +315,7 @@ const M_SFLEN_TAB: [[u8; 2]; 16] = [
  **********************************************************************************************************************/
 pub unsafe fn UnpackSFMPEG1(
     bsi: *mut BitStreamInfoC,
-    sis: *mut SideInfoSub,
+    sis: &SideInfoSub,
     m_scale_factor_info_sub: &mut [[ScaleFactorInfoSub; 2]; 2],
     scfsi: *const i32,
     gr: usize,
@@ -325,7 +325,6 @@ pub unsafe fn UnpackSFMPEG1(
     let slen0: i32;
     let slen1: i32;
 
-    let sis = unsafe { &*sis };
     let bsi = unsafe { &mut *bsi };
     let scfsi = unsafe { core::slice::from_raw_parts(scfsi, 4) };
     /* these can be 0, so make sure GetBits(bsi, 0) returns 0 (no >> 32 or anything) */
@@ -403,7 +402,7 @@ pub unsafe fn UnpackSFMPEG1(
                 }
             }
 
-            if (scfsi[3] != 0) {
+            if scfsi[3] != 0 {
                 for sfb in 16..21 {
                     m_scale_factor_info_sub[gr][ch].l[sfb] = m_scale_factor_info_sub[0][ch].l[sfb];
                 }
@@ -2009,15 +2008,12 @@ pub unsafe extern "C" fn HybridTransform(
     mut x_curr: *mut i32,
     mut x_prev: *mut i32,
     y: *mut i32, // Tablica y[18][32] przekazana jako wskaźnik
-    sis: *const SideInfoSub,
-    bc: *mut BlockCount,
+    sis: &SideInfoSub,
+    bc: &mut BlockCount,
 ) -> i32 {
     let mut x_prev_win = [0i32; 18];
     let mut m_out = 0i32;
     let mut n_blocks_out = 0i32;
-
-    let sis = &*sis;
-    let bc = &mut *bc;
 
     let mut i = 0;
 
@@ -2209,19 +2205,15 @@ pub unsafe extern "C" fn IMDCT12x3(
     m_out
 }
 
-#[unsafe(no_mangle)]
 pub unsafe extern "C" fn IMDCT(
     gr: i32,
     ch: i32,
-    m_SFBandTable: *const SFBandTable,
-    m_MPEGVersion: i32,
-    m_SideInfoSub: *const [[SideInfoSub; 2]; 2],
-    m_HuffmanInfo: *mut HuffmanInfo,
-    m_IMDCTInfo: *mut IMDCTInfo,
+    sfb: &SFBandTable,
+    m_MPEGVersion: MPEGVersion,
+    m_SideInfoSub: &[[SideInfoSub; 2]; 2],
+    m_HuffmanInfo: &mut HuffmanInfo,
+    m_IMDCTInfo: &mut IMDCTInfo,
 ) -> i32 {
-    if m_HuffmanInfo.is_null() || m_IMDCTInfo.is_null() || m_SFBandTable.is_null() {
-        return -1;
-    }
 
     let mut bc = BlockCount {
         nBlocksLong: 0,
@@ -2235,19 +2227,16 @@ pub unsafe extern "C" fn IMDCT(
     };
 
     let n_bfly: i32;
-    let sis = &(*m_SideInfoSub)[gr as usize][ch as usize];
-    let hi = &mut *m_HuffmanInfo;
-    let im = &mut *m_IMDCTInfo;
-    let sfb = &*m_SFBandTable;
+    let sis = &m_SideInfoSub[gr as usize][ch as usize];
 
     // blockCutoff logic
     // MPEG1 = 0, inne = MPEG2/2.5
-    let cutoff_idx = if m_MPEGVersion == 0 { 8 } else { 6 };
+    let cutoff_idx = if m_MPEGVersion == MPEGVersion::MPEG1 { 8 } else { 6 };
     let block_cutoff = (sfb.l[cutoff_idx] as i32) / 18;
 
     if sis.blockType != 2 {
         /* all long transforms */
-        let x = (hi.non_zero_bound[ch as usize] + 7) / 18 + 1;
+        let x = (m_HuffmanInfo.non_zero_bound[ch as usize] + 7) / 18 + 1;
         bc.nBlocksLong = if x < 32 { x } else { 32 };
         n_bfly = bc.nBlocksLong - 1;
     } else if sis.blockType == 2 && sis.mixedBlock != 0 {
@@ -2263,34 +2252,34 @@ pub unsafe extern "C" fn IMDCT(
     // Wywołanie AntiAlias na buforze konkretnego kanału
     // huffDecBuf[ch] to tablica 576 intów
     if let Ok(size) = n_bfly.try_into() {
-        AntiAlias(&mut hi.huff_dec_buf[ch as usize], size);
+        AntiAlias(&mut m_HuffmanInfo.huff_dec_buf[ch as usize], size);
     }
 
     // Aktualizacja nonZeroBound
-    let x_nz = hi.non_zero_bound[ch as usize];
+    let x_nz = m_HuffmanInfo.non_zero_bound[ch as usize];
     let y_nz = n_bfly * 18 + 8;
-    hi.non_zero_bound[ch as usize] = if x_nz > y_nz { x_nz } else { y_nz };
+    m_HuffmanInfo.non_zero_bound[ch as usize] = if x_nz > y_nz { x_nz } else { y_nz };
 
     // bc setup
-    bc.nBlocksTotal = (hi.non_zero_bound[ch as usize] + 17) / 18;
-    bc.nBlocksPrev = im.numPrevIMDCT[ch as usize];
-    bc.prevType = im.prevType[ch as usize];
-    bc.prevWinSwitch = im.prevWinSwitch[ch as usize];
+    bc.nBlocksTotal = (m_HuffmanInfo.non_zero_bound[ch as usize] + 17) / 18;
+    bc.nBlocksPrev = m_IMDCTInfo.numPrevIMDCT[ch as usize];
+    bc.prevType = m_IMDCTInfo.prevType[ch as usize];
+    bc.prevWinSwitch = m_IMDCTInfo.prevWinSwitch[ch as usize];
     bc.currWinSwitch = if sis.mixedBlock != 0 { block_cutoff } else { 0 };
     // Założenie: HuffmanInfo ma pole gb (guard bits)
     // bc.gbIn = hi.gb[ch as usize];
 
     // Wywołanie HybridTransform
-    im.numPrevIMDCT[ch as usize] = HybridTransform(
-        hi.huff_dec_buf[ch as usize].as_mut_ptr(),
-        im.overBuf[ch as usize].as_mut_ptr(),
-        im.outBuf[ch as usize].as_mut_ptr() as *mut i32,
+    m_IMDCTInfo.numPrevIMDCT[ch as usize] = HybridTransform(
+        m_HuffmanInfo.huff_dec_buf[ch as usize].as_mut_ptr(),
+        m_IMDCTInfo.overBuf[ch as usize].as_mut_ptr(),
+        m_IMDCTInfo.outBuf[ch as usize].as_mut_ptr() as *mut i32,
         sis,
-        &mut bc as *mut BlockCount,
+        &mut bc,
     );
 
-    im.prevType[ch as usize] = sis.blockType;
-    im.prevWinSwitch[ch as usize] = bc.currWinSwitch;
+    m_IMDCTInfo.prevType[ch as usize] = sis.blockType;
+    m_IMDCTInfo.prevWinSwitch[ch as usize] = bc.currWinSwitch;
     // im.gb[ch as usize] = bc.gbOut;
 
     0
@@ -3129,17 +3118,17 @@ pub unsafe fn Subband(
 
 pub unsafe extern "C" fn MP3Dequantize(
     gr: i32,
-    m_MP3Decoder: &mut MP3Decoder,
+    m_mp3_decoder: &mut MP3Decoder,
 ) -> i32 {
-    let di = &mut m_MP3Decoder.m_MP3DecInfo;
-    let hi = &mut m_MP3Decoder.m_HuffmanInfo;
-    let dqi = &mut m_MP3Decoder.m_DequantInfo;
-    let fh = &mut m_MP3Decoder.m_FrameHeader;
-    let cbi = &mut m_MP3Decoder.m_CriticalBandInfo;
-    let side_info_sub = &mut m_MP3Decoder.m_SideInfoSub;
-    let sf_info_sub = &mut m_MP3Decoder.m_ScaleFactorInfoSub;
-    let sfbt = &mut m_MP3Decoder.m_SFBandTable;
-    let sf_js = &mut m_MP3Decoder.m_ScaleFactorJS;
+    let di = &mut m_mp3_decoder.m_MP3DecInfo;
+    let hi = &mut m_mp3_decoder.m_HuffmanInfo;
+    let dqi = &mut m_mp3_decoder.m_DequantInfo;
+    let fh = &mut m_mp3_decoder.m_FrameHeader;
+    let cbi = &mut m_mp3_decoder.m_CriticalBandInfo;
+    let side_info_sub = &mut m_mp3_decoder.m_SideInfoSub;
+    let sf_info_sub = &mut m_mp3_decoder.m_ScaleFactorInfoSub;
+    let sfbt = &mut m_mp3_decoder.m_SFBandTable;
+    let sf_js = &mut m_mp3_decoder.m_ScaleFactorJS;
 
     let mut m_out = [0i32; 2];
     let gr_idx = gr as usize;
@@ -3155,7 +3144,7 @@ pub unsafe extern "C" fn MP3Dequantize(
             &mut cbi[ch],
             fh,
             sfbt,
-            m_MP3Decoder.m_MPEGVersion,
+            m_mp3_decoder.m_MPEGVersion,
         );
     }
 
@@ -3193,7 +3182,7 @@ pub unsafe extern "C" fn MP3Dequantize(
     // 4. Proces Intensity Stereo
     if (fh.modeExt & 0x01) != 0 {
         let n_samps = hi.non_zero_bound[0];
-        if m_MP3Decoder.m_MPEGVersion == MPEGVersion::MPEG1 {
+        if m_mp3_decoder.m_MPEGVersion == MPEGVersion::MPEG1 {
             // MPEG1
             IntensityProcMPEG1(
                 hi.huff_dec_buf.as_mut_ptr(),
@@ -3240,7 +3229,7 @@ pub unsafe extern "C" fn MP3Dequantize(
 pub unsafe fn MP3DecodeHelper(
     mut inbuf: *mut u8,
     inbuf_len: usize,
-    bytesLeft: *mut i32,
+    bytes_left: *mut i32,
     outbuf: *mut i16,
     useSize: i32,
     // SELF
@@ -3251,31 +3240,31 @@ pub unsafe fn MP3DecodeHelper(
     let mut mainBits: i32;
     let siBytes: i32;
     let freeFrameBytes: i32;
-    let mut prevBitOffset: i32;
+    let mut prev_bit_offset: i32;
     let mut sfBlockBits: i32;
     let mut huffBlockBits: i32;
     let mut mainPtr: *mut u8;
 
-    let m_MP3Decoder = unsafe { &mut *m_MP3Decoder };
+    let m_mp3_decoder = unsafe { &mut *m_MP3Decoder };
     let mut buf = unsafe { core::slice::from_raw_parts(inbuf, inbuf_len) };
     /* unpack frame header */
-    let fhBytes = match m_MP3Decoder.unpack_frame_header(buf) {
+    let fh_bytes = match m_mp3_decoder.unpack_frame_header(buf) {
         Ok(v) => v,
         Err(e) => {
             return e;
         }
     };
-    inbuf = inbuf.add(fhBytes);
-    buf = &buf[fhBytes..];
+    inbuf = unsafe { inbuf.add(fh_bytes) };
+    buf = &buf[fh_bytes..];
     /* unpack side info */
-    siBytes = m_MP3Decoder.unpack_side_info(buf) as i32;
+    siBytes = m_mp3_decoder.unpack_side_info(buf) as i32;
 
     let outbuf = unsafe {
         core::slice::from_raw_parts_mut(
             outbuf,
-            (m_MP3Decoder.m_MP3DecInfo.nGrans
-                * m_MP3Decoder.m_MP3DecInfo.nGranSamps
-                * m_MP3Decoder.m_MP3DecInfo.nChans) as usize,
+            (m_mp3_decoder.m_MP3DecInfo.nGrans
+                * m_mp3_decoder.m_MP3DecInfo.nGranSamps
+                * m_mp3_decoder.m_MP3DecInfo.nChans) as usize,
         )
     };
 
@@ -3283,112 +3272,112 @@ pub unsafe fn MP3DecodeHelper(
         MP3ClearBadFrame(outbuf);
         return ERR_MP3_INVALID_SIDEINFO; // ERR_MP3_INVALID_SIDEINFO
     }
-    inbuf = inbuf.add(siBytes as usize);
-    *bytesLeft -= fhBytes as i32 + siBytes;
+    inbuf = unsafe { inbuf.add(siBytes as usize) };
+    *bytes_left -= fh_bytes as i32 + siBytes;
 
     /* if free mode... */
-    if m_MP3Decoder.m_MP3DecInfo.bitrate == 0 || m_MP3Decoder.m_MP3DecInfo.freeBitrateFlag != 0 {
-        if m_MP3Decoder.m_MP3DecInfo.freeBitrateFlag == 0 {
-            m_MP3Decoder.m_MP3DecInfo.freeBitrateFlag = 1;
-            m_MP3Decoder.m_MP3DecInfo.freeBitrateSlots = MP3FindFreeSync(
+    if m_mp3_decoder.m_MP3DecInfo.bitrate == 0 || m_mp3_decoder.m_MP3DecInfo.freeBitrateFlag != 0 {
+        if m_mp3_decoder.m_MP3DecInfo.freeBitrateFlag == 0 {
+            m_mp3_decoder.m_MP3DecInfo.freeBitrateFlag = 1;
+            m_mp3_decoder.m_MP3DecInfo.freeBitrateSlots = MP3FindFreeSync(
                 inbuf,
-                inbuf.offset(-(fhBytes as isize) - (siBytes as isize)),
-                *bytesLeft,
+                inbuf.offset(-(fh_bytes as isize) - (siBytes as isize)),
+                *bytes_left,
             );
-            if m_MP3Decoder.m_MP3DecInfo.freeBitrateSlots < 0 {
+            if m_mp3_decoder.m_MP3DecInfo.freeBitrateSlots < 0 {
                 MP3ClearBadFrame(outbuf);
-                m_MP3Decoder.m_MP3DecInfo.freeBitrateFlag = 0;
+                m_mp3_decoder.m_MP3DecInfo.freeBitrateFlag = 0;
                 return ERR_MP3_FREE_BITRATE_SYNC;
             }
-            freeFrameBytes = m_MP3Decoder.m_MP3DecInfo.freeBitrateSlots + fhBytes as i32 + siBytes;
-            m_MP3Decoder.m_MP3DecInfo.bitrate = (freeFrameBytes * m_MP3Decoder.m_MP3DecInfo.samprate * 8)
-                / (m_MP3Decoder.m_MP3DecInfo.nGrans * m_MP3Decoder.m_MP3DecInfo.nGranSamps);
+            freeFrameBytes = m_mp3_decoder.m_MP3DecInfo.freeBitrateSlots + fh_bytes as i32 + siBytes;
+            m_mp3_decoder.m_MP3DecInfo.bitrate = (freeFrameBytes * m_mp3_decoder.m_MP3DecInfo.samprate * 8)
+                / (m_mp3_decoder.m_MP3DecInfo.nGrans * m_mp3_decoder.m_MP3DecInfo.nGranSamps);
         }
-        m_MP3Decoder.m_MP3DecInfo.nSlots = m_MP3Decoder.m_MP3DecInfo.freeBitrateSlots + m_MP3Decoder.m_FrameHeader.check_pad_bit();
+        m_mp3_decoder.m_MP3DecInfo.nSlots = m_mp3_decoder.m_MP3DecInfo.freeBitrateSlots + m_mp3_decoder.m_FrameHeader.check_pad_bit();
     }
 
     /* Bit Reservoir Management */
     if useSize != 0 {
-        m_MP3Decoder.m_MP3DecInfo.nSlots = *bytesLeft;
-        if m_MP3Decoder.m_MP3DecInfo.mainDataBegin != 0 || m_MP3Decoder.m_MP3DecInfo.nSlots <= 0 {
+        m_mp3_decoder.m_MP3DecInfo.nSlots = *bytes_left;
+        if m_mp3_decoder.m_MP3DecInfo.mainDataBegin != 0 || m_mp3_decoder.m_MP3DecInfo.nSlots <= 0 {
             MP3ClearBadFrame(outbuf);
             return -1; // ERR_MP3_INVALID_FRAMEHEADER
         }
-        m_MP3Decoder.m_MP3DecInfo.mainDataBytes = m_MP3Decoder.m_MP3DecInfo.nSlots;
+        m_mp3_decoder.m_MP3DecInfo.mainDataBytes = m_mp3_decoder.m_MP3DecInfo.nSlots;
         mainPtr = inbuf;
-        inbuf = inbuf.add(m_MP3Decoder.m_MP3DecInfo.nSlots as usize);
-        *bytesLeft -= m_MP3Decoder.m_MP3DecInfo.nSlots;
+        inbuf = inbuf.add(m_mp3_decoder.m_MP3DecInfo.nSlots as usize);
+        *bytes_left -= m_mp3_decoder.m_MP3DecInfo.nSlots;
     } else {
-        if m_MP3Decoder.m_MP3DecInfo.nSlots > *bytesLeft {
+        if m_mp3_decoder.m_MP3DecInfo.nSlots > *bytes_left {
             MP3ClearBadFrame(outbuf);
             return -4; // ERR_MP3_INDATA_UNDERFLOW
         }
 
-        if m_MP3Decoder.m_MP3DecInfo.mainDataBytes >= m_MP3Decoder.m_MP3DecInfo.mainDataBegin {
+        if m_mp3_decoder.m_MP3DecInfo.mainDataBytes >= m_mp3_decoder.m_MP3DecInfo.mainDataBegin {
             // memmove(mainBuf, mainBuf + mainDataBytes - mainDataBegin, mainDataBegin)
             core::ptr::copy(
-                m_MP3Decoder.m_MP3DecInfo
+                m_mp3_decoder.m_MP3DecInfo
                     .mainBuf
                     .as_ptr()
-                    .add((m_MP3Decoder.m_MP3DecInfo.mainDataBytes - m_MP3Decoder.m_MP3DecInfo.mainDataBegin) as usize),
-                m_MP3Decoder.m_MP3DecInfo.mainBuf.as_mut_ptr(),
-                m_MP3Decoder.m_MP3DecInfo.mainDataBegin as usize,
+                    .add((m_mp3_decoder.m_MP3DecInfo.mainDataBytes - m_mp3_decoder.m_MP3DecInfo.mainDataBegin) as usize),
+                m_mp3_decoder.m_MP3DecInfo.mainBuf.as_mut_ptr(),
+                m_mp3_decoder.m_MP3DecInfo.mainDataBegin as usize,
             );
             // memcpy(mainBuf + mainDataBegin, inbuf, nSlots)
             core::ptr::copy_nonoverlapping(
                 inbuf,
-                m_MP3Decoder.m_MP3DecInfo
+                m_mp3_decoder.m_MP3DecInfo
                     .mainBuf
                     .as_mut_ptr()
-                    .add(m_MP3Decoder.m_MP3DecInfo.mainDataBegin as usize),
-                m_MP3Decoder.m_MP3DecInfo.nSlots as usize,
+                    .add(m_mp3_decoder.m_MP3DecInfo.mainDataBegin as usize),
+                m_mp3_decoder.m_MP3DecInfo.nSlots as usize,
             );
 
-            m_MP3Decoder.m_MP3DecInfo.mainDataBytes = m_MP3Decoder.m_MP3DecInfo.mainDataBegin + m_MP3Decoder.m_MP3DecInfo.nSlots;
-            inbuf = inbuf.add(m_MP3Decoder.m_MP3DecInfo.nSlots as usize);
-            *bytesLeft -= m_MP3Decoder.m_MP3DecInfo.nSlots;
-            mainPtr = m_MP3Decoder.m_MP3DecInfo.mainBuf.as_mut_ptr();
+            m_mp3_decoder.m_MP3DecInfo.mainDataBytes = m_mp3_decoder.m_MP3DecInfo.mainDataBegin + m_mp3_decoder.m_MP3DecInfo.nSlots;
+            inbuf = inbuf.add(m_mp3_decoder.m_MP3DecInfo.nSlots as usize);
+            *bytes_left -= m_mp3_decoder.m_MP3DecInfo.nSlots;
+            mainPtr = m_mp3_decoder.m_MP3DecInfo.mainBuf.as_mut_ptr();
         } else {
             // memcpy(mainBuf + mainDataBytes, inbuf, nSlots)
             core::ptr::copy_nonoverlapping(
                 inbuf,
-                m_MP3Decoder.m_MP3DecInfo
+                m_mp3_decoder.m_MP3DecInfo
                     .mainBuf
                     .as_mut_ptr()
-                    .add(m_MP3Decoder.m_MP3DecInfo.mainDataBytes as usize),
-                m_MP3Decoder.m_MP3DecInfo.nSlots as usize,
+                    .add(m_mp3_decoder.m_MP3DecInfo.mainDataBytes as usize),
+                m_mp3_decoder.m_MP3DecInfo.nSlots as usize,
             );
-            m_MP3Decoder.m_MP3DecInfo.mainDataBytes += m_MP3Decoder.m_MP3DecInfo.nSlots;
-            inbuf = inbuf.add(m_MP3Decoder.m_MP3DecInfo.nSlots as usize);
-            *bytesLeft -= m_MP3Decoder.m_MP3DecInfo.nSlots;
+            m_mp3_decoder.m_MP3DecInfo.mainDataBytes += m_mp3_decoder.m_MP3DecInfo.nSlots;
+            inbuf = inbuf.add(m_mp3_decoder.m_MP3DecInfo.nSlots as usize);
+            *bytes_left -= m_mp3_decoder.m_MP3DecInfo.nSlots;
             MP3ClearBadFrame(outbuf);
             return ERR_MP3_MAINDATA_UNDERFLOW; //
         }
     }
 
     bitOffset = 0;
-    mainBits = m_MP3Decoder.m_MP3DecInfo.mainDataBytes * 8;
+    mainBits = m_mp3_decoder.m_MP3DecInfo.mainDataBytes * 8;
     /* decode one complete frame */
-    for gr in 0..m_MP3Decoder.m_MP3DecInfo.nGrans {
-        for ch in 0..m_MP3Decoder.m_MP3DecInfo.nChans {
-            prevBitOffset = bitOffset;
+    for gr in 0..m_mp3_decoder.m_MP3DecInfo.nGrans {
+        for ch in 0..m_mp3_decoder.m_MP3DecInfo.nChans {
+            prev_bit_offset = bitOffset;
             offset = UnpackScaleFactors(
                 mainPtr,
                 &mut bitOffset,
                 mainBits,
                 gr,
                 ch,
-                &mut m_MP3Decoder.m_SideInfoSub, // 1. Oczekiwany: *mut [[SideInfoSub; 2]; 2]
-                &mut m_MP3Decoder.m_ScaleFactorInfoSub, // 2. Oczekiwany: *mut [[ScaleFactorInfoSub; 2]; 2]
-                &mut m_MP3Decoder.m_MP3DecInfo,                           // 3. Oczekiwany: *mut MP3DecInfo
-                &mut m_MP3Decoder.m_SideInfo,
-                &mut m_MP3Decoder.m_FrameHeader,                     // 5. Oczekiwany: *mut FrameHeader
-                &mut m_MP3Decoder.m_ScaleFactorJS, // 6. Oczekiwany: *mut ScaleFactorJS
-                m_MP3Decoder.m_MPEGVersion,        // 7. Oczekiwany: i32
+                &mut m_mp3_decoder.m_SideInfoSub, // 1. Oczekiwany: *mut [[SideInfoSub; 2]; 2]
+                &mut m_mp3_decoder.m_ScaleFactorInfoSub, // 2. Oczekiwany: *mut [[ScaleFactorInfoSub; 2]; 2]
+                &mut m_mp3_decoder.m_MP3DecInfo,                           // 3. Oczekiwany: *mut MP3DecInfo
+                &mut m_mp3_decoder.m_SideInfo,
+                &mut m_mp3_decoder.m_FrameHeader,                     // 5. Oczekiwany: *mut FrameHeader
+                &mut m_mp3_decoder.m_ScaleFactorJS, // 6. Oczekiwany: *mut ScaleFactorJS
+                m_mp3_decoder.m_MPEGVersion,        // 7. Oczekiwany: i32
             );
 
-            sfBlockBits = 8 * offset - prevBitOffset + bitOffset;
-            huffBlockBits = m_MP3Decoder.m_MP3DecInfo.part23Length[gr as usize][ch as usize] - sfBlockBits;
+            sfBlockBits = 8 * offset - prev_bit_offset + bitOffset;
+            huffBlockBits = m_mp3_decoder.m_MP3DecInfo.part23Length[gr as usize][ch as usize] - sfBlockBits;
             mainPtr = mainPtr.add(offset as usize);
             mainBits -= sfBlockBits;
 
@@ -3397,44 +3386,44 @@ pub unsafe fn MP3DecodeHelper(
                 return -6; // ERR_MP3_INVALID_SCALEFACT
             }
 
-            prevBitOffset = bitOffset;
+            prev_bit_offset = bitOffset;
             offset = DecodeHuffman(
                 mainPtr,
                 &mut bitOffset,
                 huffBlockBits,
                 gr,
                 ch,
-                &mut m_MP3Decoder.m_HuffmanInfo,
-                &mut m_MP3Decoder.m_SFBandTable,
-                &mut m_MP3Decoder.m_SideInfoSub,
-                m_MP3Decoder.m_MPEGVersion,
+                &mut m_mp3_decoder.m_HuffmanInfo,
+                &mut m_mp3_decoder.m_SFBandTable,
+                &mut m_mp3_decoder.m_SideInfoSub,
+                m_mp3_decoder.m_MPEGVersion,
             );
             if offset < 0 {
                 MP3ClearBadFrame(outbuf);
                 return ERR_MP3_INVALID_HUFFCODES;
             }
             mainPtr = mainPtr.add(offset as usize);
-            mainBits -= (8 * offset - prevBitOffset + bitOffset);
+            mainBits -= (8 * offset - prev_bit_offset + bitOffset);
         }
 
         if MP3Dequantize(
             gr,
-            m_MP3Decoder,
+            m_mp3_decoder,
         ) < 0
         {
             MP3ClearBadFrame(outbuf);
             return ERR_MP3_INVALID_DEQUANTIZE;
         }
 
-        for ch in 0..m_MP3Decoder.m_MP3DecInfo.nChans {
+        for ch in 0..m_mp3_decoder.m_MP3DecInfo.nChans {
             if IMDCT(
                 gr,
                 ch,
-                &mut m_MP3Decoder.m_SFBandTable,
-                m_MP3Decoder.m_MPEGVersion as i32,
-                &mut m_MP3Decoder.m_SideInfoSub,
-                &mut m_MP3Decoder.m_HuffmanInfo,
-                &mut m_MP3Decoder.m_IMDCTInfo,
+                &mut m_mp3_decoder.m_SFBandTable,
+                m_mp3_decoder.m_MPEGVersion,
+                &mut m_mp3_decoder.m_SideInfoSub,
+                &mut m_mp3_decoder.m_HuffmanInfo,
+                &mut m_mp3_decoder.m_IMDCTInfo,
             ) < 0
             {
                 MP3ClearBadFrame(outbuf);
@@ -3442,12 +3431,12 @@ pub unsafe fn MP3DecodeHelper(
             }
         }
 
-        let pcm_offset = (gr * m_MP3Decoder.m_MP3DecInfo.nGranSamps * m_MP3Decoder.m_MP3DecInfo.nChans) as usize;
+        let pcm_offset = (gr * m_mp3_decoder.m_MP3DecInfo.nGranSamps * m_mp3_decoder.m_MP3DecInfo.nChans) as usize;
         if Subband(
             outbuf.as_mut_ptr().add(pcm_offset),
-            &mut m_MP3Decoder.m_MP3DecInfo,
-            &mut m_MP3Decoder.m_IMDCTInfo,
-            &mut m_MP3Decoder.m_SubbandInfo,
+            &mut m_mp3_decoder.m_MP3DecInfo,
+            &mut m_mp3_decoder.m_IMDCTInfo,
+            &mut m_mp3_decoder.m_SubbandInfo,
         ) < 0
         {
             MP3ClearBadFrame(outbuf);
@@ -3455,7 +3444,7 @@ pub unsafe fn MP3DecodeHelper(
         }
     }
 
-    m_MP3Decoder.mp3_get_last_frame_info();
+    m_mp3_decoder.mp3_get_last_frame_info();
 
     ERR_MP3_NONE
 }
