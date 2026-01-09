@@ -387,6 +387,13 @@ pub struct SubbandInfo {
     pub vindex: i32,                             /* internal index for tracking position in vbuf */
 }
 
+#[repr(C)]
+pub struct MP3Decoder {
+    pub m_MP3DecInfo: MP3DecInfo,
+    pub m_FrameHeader:FrameHeader,
+}
+
+
 pub fn get_bits(bsi: &mut BitStreamInfo<'_>, mut n_bits: u32) -> u32 {
     n_bits = n_bits.min(32);
 
@@ -1315,87 +1322,89 @@ const slotTab: [[[i16; 15]; 3]; 3] = [
     ],
 ];
 
+impl MP3Decoder {
+    pub fn unpack_frame_header(
+        &mut self,
+        buf: &[u8],
+        m_MPEGVersion: &mut i32,
+        m_sMode: &mut i32,
+        m_SFBandTable: &mut SFBandTable,
+    ) -> i32 {
+    /* validate pointers and sync word */
+        if (buf[0] & SYNCWORDH) != SYNCWORDH || (buf[1] & SYNCWORDL) != SYNCWORDL {
+            return -1;
+        }
+        let m_FrameHeader = &mut self.m_FrameHeader;
+        let m_MP3DecInfo = &mut self.m_MP3DecInfo;
+        /* read header fields - use bitmasks instead of GetBits() for speed, since format never varies */
+        let verIdx = (buf[1] >> 3) & 0x03;
+        *m_MPEGVersion = if verIdx == 0 {
+            MPEGVersion::MPEG25 as i32
+        } else if verIdx & 0x01 == 0x01 {
+            MPEGVersion::MPEG1 as i32
+        } else {
+            MPEGVersion::MPEG2 as i32
+        };
+        m_FrameHeader.layer = 4 - ((buf[1] as i32 >> 1) & 0x03); /* easy mapping of index to layer number, 4 = error */
+        m_FrameHeader.crc = 1 - ((buf[1] as i32>> 0) & 0x01);
+        m_FrameHeader.brIdx = (buf[2] as i32 >> 4) & 0x0f;
+        m_FrameHeader.srIdx = (buf[2] as i32 >> 2) & 0x03;
+        m_FrameHeader.paddingBit = (buf[2] as i32 >> 1) & 0x01;
+        m_FrameHeader.privateBit = (buf[2] as i32 >> 0) & 0x01;
+        *m_sMode = match (buf[3] >> 6) & 0x03 {
+            0x00 => StereoMode::Stereo as i32,
+            0x01 => StereoMode::Joint as i32,
+            0x02 => StereoMode::Dual as i32,
+            0x03 => StereoMode::Mono as i32,
+            _ => { return -1 }
+        }; /* maps to correct enum (see definition) */
+        m_FrameHeader.modeExt = (buf[3] as i32>> 4) & 0x03;
+        m_FrameHeader.copyFlag = (buf[3] as i32 >> 3) & 0x01;
+        m_FrameHeader.origFlag = (buf[3] as i32 >> 2) & 0x01;
+        m_FrameHeader.emphasis = (buf[3] as i32 >> 0) & 0x03;
+        /* check parameters to avoid indexing tables with bad values */
+        if m_FrameHeader.srIdx == 3 || m_FrameHeader.layer == 4 || m_FrameHeader.brIdx == 15 {
+            return -1;
+        }
+        /* for readability (we reference sfBandTable many times in decoder) */
+        *m_SFBandTable = sfBandTable[*m_MPEGVersion as usize][m_FrameHeader.srIdx as usize];
+        if *m_sMode != StereoMode::Joint as i32 { /* just to be safe (dequant, stproc check fh->modeExt) */
+            m_FrameHeader.modeExt = 0;
+        }
+        /* init user-accessible data */
+        m_MP3DecInfo.nChans = if *m_sMode == StereoMode::Mono as i32 { 1 } else { 2 };
+        m_MP3DecInfo.samprate = SAMPLERATE_TAB[*m_MPEGVersion as usize][m_FrameHeader.srIdx as usize];
+        m_MP3DecInfo.nGrans = if *m_MPEGVersion == MPEGVersion::MPEG1 as i32 { NGRANS_MPEG1 as i32 } else { NGRANS_MPEG2 as i32 };
+        m_MP3DecInfo.nGranSamps = (samplesPerFrameTab[*m_MPEGVersion as usize][(m_FrameHeader.layer - 1) as usize])/m_MP3DecInfo.nGrans;
+        m_MP3DecInfo.layer = m_FrameHeader.layer;
 
-pub fn unpack_frame_header(
-    buf: &[u8],
-    m_FrameHeader: &mut FrameHeader,
-    m_MP3DecInfo: &mut MP3DecInfo,
-    m_MPEGVersion: &mut i32,
-    m_sMode: &mut i32,
-    m_SFBandTable: &mut SFBandTable,
-) -> i32 {
-/* validate pointers and sync word */
-    if (buf[0] & SYNCWORDH) != SYNCWORDH || (buf[1] & SYNCWORDL) != SYNCWORDL {
-        return -1;
-    }
-    /* read header fields - use bitmasks instead of GetBits() for speed, since format never varies */
-    let verIdx = (buf[1] >> 3) & 0x03;
-    *m_MPEGVersion = if verIdx == 0 {
-        MPEGVersion::MPEG25 as i32
-    } else if verIdx & 0x01 == 0x01 {
-        MPEGVersion::MPEG1 as i32
-    } else {
-        MPEGVersion::MPEG2 as i32
-    };
-    m_FrameHeader.layer = 4 - ((buf[1] as i32 >> 1) & 0x03); /* easy mapping of index to layer number, 4 = error */
-    m_FrameHeader.crc = 1 - ((buf[1] as i32>> 0) & 0x01);
-    m_FrameHeader.brIdx = (buf[2] as i32 >> 4) & 0x0f;
-    m_FrameHeader.srIdx = (buf[2] as i32 >> 2) & 0x03;
-    m_FrameHeader.paddingBit = (buf[2] as i32 >> 1) & 0x01;
-    m_FrameHeader.privateBit = (buf[2] as i32 >> 0) & 0x01;
-    *m_sMode = match (buf[3] >> 6) & 0x03 {
-        0x00 => StereoMode::Stereo as i32,
-        0x01 => StereoMode::Joint as i32,
-        0x02 => StereoMode::Dual as i32,
-        0x03 => StereoMode::Mono as i32,
-        _ => { return -1 }
-    }; /* maps to correct enum (see definition) */
-    m_FrameHeader.modeExt = (buf[3] as i32>> 4) & 0x03;
-    m_FrameHeader.copyFlag = (buf[3] as i32 >> 3) & 0x01;
-    m_FrameHeader.origFlag = (buf[3] as i32 >> 2) & 0x01;
-    m_FrameHeader.emphasis = (buf[3] as i32 >> 0) & 0x03;
-    /* check parameters to avoid indexing tables with bad values */
-    if m_FrameHeader.srIdx == 3 || m_FrameHeader.layer == 4 || m_FrameHeader.brIdx == 15 {
-        return -1;
-    }
-    /* for readability (we reference sfBandTable many times in decoder) */
-    *m_SFBandTable = sfBandTable[*m_MPEGVersion as usize][m_FrameHeader.srIdx as usize];
-    if *m_sMode != StereoMode::Joint as i32 { /* just to be safe (dequant, stproc check fh->modeExt) */
-        m_FrameHeader.modeExt = 0;
-    }
-    /* init user-accessible data */
-    m_MP3DecInfo.nChans = if *m_sMode == StereoMode::Mono as i32 { 1 } else { 2 };
-    m_MP3DecInfo.samprate = SAMPLERATE_TAB[*m_MPEGVersion as usize][m_FrameHeader.srIdx as usize];
-    m_MP3DecInfo.nGrans = if *m_MPEGVersion == MPEGVersion::MPEG1 as i32 { NGRANS_MPEG1 as i32 } else { NGRANS_MPEG2 as i32 };
-    m_MP3DecInfo.nGranSamps = (samplesPerFrameTab[*m_MPEGVersion as usize][(m_FrameHeader.layer - 1) as usize])/m_MP3DecInfo.nGrans;
-    m_MP3DecInfo.layer = m_FrameHeader.layer;
-
-    /* get bitrate and nSlots from table, unless brIdx == 0 (free mode) in which case caller must figure it out himself
-     * question - do we want to overwrite mp3DecInfo->bitrate with 0 each time if it's free mode, and
-     *  copy the pre-calculated actual free bitrate into it in mp3dec.c (according to the spec,
-     *  this shouldn't be necessary, since it should be either all frames free or none free)
-     */
-    if m_FrameHeader.brIdx != 0 {
-        m_MP3DecInfo.bitrate=
-            ((bitrateTab[*m_MPEGVersion as usize][m_FrameHeader.layer as usize - 1][m_FrameHeader.brIdx as usize])) as i32 * 1000;
-        /* nSlots = total frame bytes (from table) - sideInfo bytes - header - CRC (if present) + pad (if present) */
-        m_MP3DecInfo.nSlots= slotTab[*m_MPEGVersion as usize][m_FrameHeader.srIdx as usize][m_FrameHeader.brIdx as usize]  as i32
-                - sideBytesTab[*m_MPEGVersion as usize][if *m_sMode == StereoMode::Mono as i32 { 0 } else { 1 }] - 4
-                - (if m_FrameHeader.crc != 0 { 2 } else { 0 }) + (if m_FrameHeader.paddingBit != 0 { 1 } else { 0 });
-    }
-    /* load crc word, if enabled, and return length of frame header (in bytes) */
-    if m_FrameHeader.crc != 0 {
-        m_FrameHeader.CRCWord = (buf[4] as i32) << 8 | (buf[5] as i32) << 0;
-        return 6;
-    } else {
-        m_FrameHeader.CRCWord = 0;
-        return 4;
+        /* get bitrate and nSlots from table, unless brIdx == 0 (free mode) in which case caller must figure it out himself
+        * question - do we want to overwrite mp3DecInfo->bitrate with 0 each time if it's free mode, and
+        *  copy the pre-calculated actual free bitrate into it in mp3dec.c (according to the spec,
+        *  this shouldn't be necessary, since it should be either all frames free or none free)
+        */
+        if m_FrameHeader.brIdx != 0 {
+            m_MP3DecInfo.bitrate=
+                ((bitrateTab[*m_MPEGVersion as usize][m_FrameHeader.layer as usize - 1][m_FrameHeader.brIdx as usize])) as i32 * 1000;
+            /* nSlots = total frame bytes (from table) - sideInfo bytes - header - CRC (if present) + pad (if present) */
+            m_MP3DecInfo.nSlots= slotTab[*m_MPEGVersion as usize][m_FrameHeader.srIdx as usize][m_FrameHeader.brIdx as usize]  as i32
+                    - sideBytesTab[*m_MPEGVersion as usize][if *m_sMode == StereoMode::Mono as i32 { 0 } else { 1 }] - 4
+                    - (if m_FrameHeader.crc != 0 { 2 } else { 0 }) + (if m_FrameHeader.paddingBit != 0 { 1 } else { 0 });
+        }
+        /* load crc word, if enabled, and return length of frame header (in bytes) */
+        if m_FrameHeader.crc != 0 {
+            m_FrameHeader.CRCWord = (buf[4] as i32) << 8 | (buf[5] as i32) << 0;
+            return 6;
+        } else {
+            m_FrameHeader.CRCWord = 0;
+            return 4;
+        }
     }
 }
 
 #[cfg(test)]
 mod unpack_frame_header_test {
-    use crate::mp3_decoder::{MAINBUF_SIZE, MAX_NCHAN, MAX_NGRAN, unpack_frame_header};
+    use crate::mp3_decoder::{MAINBUF_SIZE, MAX_NCHAN, MAX_NGRAN, MP3Decoder, unpack_frame_header};
     #[test]
     fn test_unpack_frame() {
         let buf: [u8; 4] = [0xFF,0xFB,0x92, 0x64];
@@ -1415,16 +1424,18 @@ mod unpack_frame_header_test {
             part23Length: [[0; MAX_NCHAN]; MAX_NGRAN],
             samprate: 0,
         };
+        let m_MP3Decoder = MP3Decoder {
+            m_FrameHeader,
+            m_MP3DecInfo,
+        };
         let mut  m_MPEGVersion = super::MPEGVersion::MPEG1 as i32;
         let mut  m_sMode = super::StereoMode::Stereo as i32;
         let mut  m_SFBandTable = super::SFBandTable {
                 l: [0; 23],
                 s: [0; 14],
         };
-        let res = unpack_frame_header(
+        let res = m_m_MP3Decoder.unpack_frame_header(
             &buf,
-            &mut m_FrameHeader,
-            &mut m_MP3DecInfo,
             &mut m_MPEGVersion,
             &mut m_sMode,
             &mut m_SFBandTable

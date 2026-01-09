@@ -231,15 +231,6 @@ void IntensityProcMPEG2(int x[m_MAX_NCHAN][m_MAX_NSAMP], int nSamps, ScaleFactor
 void FDCT32(int *x, int *d, int offset, int oddBlock, int gb);// __attribute__ ((section (".data")));
 void FreeBuffers();
 int CheckPadBit();
-int UnpackFrameHeader(
-    unsigned char *buf,
-    size_t inbuf_len,
-    FrameHeader_t *m_FrameHeader,
-    MP3DecInfo *m_MP3DecInfo,
-    MPEGVersion_t *m_MPEGVersion,
-    StereoMode_t *m_sMode,
-    SFBandTable *m_SFBandTable
-);
 
 int DecodeHuffman(
     unsigned char *buf, int *bitOffset, int huffBlockBits, int gr, int ch, HuffmanInfo_t *m_HuffmanInfo,

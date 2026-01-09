@@ -21,12 +21,12 @@ const uint8_t  m_NGRANS_MPEG1           =2;
 const uint8_t  m_NGRANS_MPEG2           =1;
 const uint32_t m_SQRTHALF               =0x5a82799a;  // sqrt(0.5) in Q31 format
 
+MP3Decoder_t *m_MP3Decoder;
 
 MP3FrameInfo_t *m_MP3FrameInfo;
 SFBandTable_t m_SFBandTable;
 StereoMode_t m_sMode;  /* mono/stereo mode */
 MPEGVersion_t m_MPEGVersion;  /* version ID */
-FrameHeader_t *m_FrameHeader;
 SideInfoSub_t m_SideInfoSub[m_MAX_NGRAN][m_MAX_NCHAN];
 SideInfo_t *m_SideInfo;
 CriticalBandInfo_t m_CriticalBandInfo[m_MAX_NCHAN];  /* filled in dequantizer, used in joint stereo reconstruction */
@@ -36,7 +36,6 @@ IMDCTInfo_t *m_IMDCTInfo;
 ScaleFactorInfoSub_t m_ScaleFactorInfoSub[m_MAX_NGRAN][m_MAX_NCHAN];
 ScaleFactorJS_t *m_ScaleFactorJS;
 SubbandInfo_t *m_SubbandInfo;
-MP3DecInfo_t *m_MP3DecInfo;
 
 /* format = Q30, range = [0.0981, 1.9976]
  *
@@ -95,8 +94,7 @@ int MP3Decode( unsigned char *inbuf, size_t inbuf_len, int *bytesLeft, short *ou
         outbuf,
         useSize,
 
-        m_FrameHeader,
-        m_MP3DecInfo,
+        m_MP3Decoder,
         &m_MPEGVersion,
         &m_sMode,
         &m_SFBandTable,
@@ -128,10 +126,9 @@ int MP3Decode( unsigned char *inbuf, size_t inbuf_len, int *bytesLeft, short *ou
 void MP3Decoder_ClearBuffer(void) {
 
     /* important to do this - DSP primitives assume a bunch of state variables are 0 on first use */
-    memset( m_MP3DecInfo,         0, sizeof(MP3DecInfo_t));                                    //Clear MP3DecInfo
+    memset( m_MP3Decoder,         0, sizeof(MP3Decoder_t));                                    //Clear MP3DecInfo
     memset(&m_ScaleFactorInfoSub, 0, sizeof(ScaleFactorInfoSub_t)*(m_MAX_NGRAN *m_MAX_NCHAN)); //Clear ScaleFactorInfo
     memset( m_SideInfo,           0, sizeof(SideInfo_t));                                      //Clear SideInfo
-    memset( m_FrameHeader,        0, sizeof(FrameHeader_t));                                   //Clear FrameHeader
     memset( m_HuffmanInfo,        0, sizeof(HuffmanInfo_t));                                   //Clear HuffmanInfo
     memset( m_DequantInfo,        0, sizeof(DequantInfo_t));                                   //Clear DequantInfo
     memset( m_IMDCTInfo,          0, sizeof(IMDCTInfo_t));                                     //Clear IMDCTInfo
@@ -173,8 +170,7 @@ void MP3Decoder_ClearBuffer(void) {
 #endif
 
 bool MP3Decoder_AllocateBuffers(void) {
-    if(!m_MP3DecInfo)       {m_MP3DecInfo    = (MP3DecInfo_t*)    __malloc_heap_psram(sizeof(MP3DecInfo_t)   );}
-    if(!m_FrameHeader)      {m_FrameHeader   = (FrameHeader_t*)   __malloc_heap_psram(sizeof(FrameHeader_t)  );}
+    if(!m_MP3Decoder)       {m_MP3Decoder    = (MP3Decoder_t*)    __malloc_heap_psram(sizeof(MP3Decoder_t)   );}
     if(!m_SideInfo)         {m_SideInfo      = (SideInfo_t*)      __malloc_heap_psram(sizeof(SideInfo_t)     );}
     if(!m_ScaleFactorJS)    {m_ScaleFactorJS = (ScaleFactorJS_t*) __malloc_heap_psram(sizeof(ScaleFactorJS_t));}
     if(!m_HuffmanInfo)      {m_HuffmanInfo   = (HuffmanInfo_t*)   __malloc_heap_psram(sizeof(HuffmanInfo_t)  );}
@@ -183,7 +179,7 @@ bool MP3Decoder_AllocateBuffers(void) {
     if(!m_SubbandInfo)      {m_SubbandInfo   = (SubbandInfo_t*)   __malloc_heap_psram(sizeof(SubbandInfo_t)  );}
     if(!m_MP3FrameInfo)     {m_MP3FrameInfo  = (MP3FrameInfo_t*)  __malloc_heap_psram(sizeof(MP3FrameInfo_t) );}
 
-    if(!m_MP3DecInfo || !m_FrameHeader || !m_SideInfo || !m_ScaleFactorJS || !m_HuffmanInfo ||
+    if(!m_MP3Decoder || !m_SideInfo || !m_ScaleFactorJS || !m_HuffmanInfo ||
        !m_DequantInfo || !m_IMDCTInfo || !m_SubbandInfo || !m_MP3FrameInfo) {
         MP3Decoder_FreeBuffers();
         log_e("not enough memory to allocate mp3decoder buffers");
@@ -209,8 +205,7 @@ void MP3Decoder_FreeBuffers()
 {
 //    uint32_t i = ESP.getFreeHeap();
 
-    if(m_MP3DecInfo)        {free(m_MP3DecInfo);      m_MP3DecInfo=NULL;}
-    if(m_FrameHeader)       {free(m_FrameHeader);     m_FrameHeader=NULL;}
+    if(m_MP3Decoder)        {free(m_MP3Decoder);      m_MP3Decoder=NULL;}
     if(m_SideInfo)          {free(m_SideInfo);        m_SideInfo=NULL;}
     if(m_ScaleFactorJS )    {free(m_ScaleFactorJS);   m_ScaleFactorJS=NULL;}
     if(m_HuffmanInfo)       {free(m_HuffmanInfo);     m_HuffmanInfo=NULL;}

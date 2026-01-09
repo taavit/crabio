@@ -248,15 +248,6 @@ int CLIP_2N(int y, uint32_t n);
 
 int MP3FindSyncWord(unsigned char *buf, int nBytes);
 int MP3FindFreeSync(unsigned char *buf, unsigned char firstFH[4], int nBytes);
-int UnpackFrameHeader(
-    unsigned char *buf,
-    size_t inbuf_len,
-    FrameHeader_t *m_FrameHeader,
-    MP3DecInfo *m_MP3DecInfo,
-    MPEGVersion_t *m_MPEGVersion,
-    StereoMode_t *m_sMode,
-    SFBandTable *m_SFBandTable
-);
 
 typedef struct SideInfoSub {
     int part23Length;       /* number of bits in main data */
@@ -281,6 +272,11 @@ typedef struct SideInfo {
     int scfsi[m_MAX_NCHAN][m_MAX_SCFBD];                /* 4 scalefactor bands per channel */
 } SideInfo_t;
 
+
+typedef struct MP3Decoder {
+    MP3DecInfo_t m_MP3DecInfo;
+    FrameHeader_t m_FrameHeader;
+} MP3Decoder_t;
 
 void RefillBitstreamCache(BitStreamInfo_t *bsi);
 unsigned int GetBits(BitStreamInfo_t *bsi, int nBits);
@@ -403,9 +399,8 @@ int MP3DecodeHelper(
     int *bytesLeft,
     short *outbuf,
     int useSize,
-    // Przekazujemy wskaźniki do składowych "klasy" dekodera
-    FrameHeader_t *m_FrameHeader,
-    MP3DecInfo_t *m_MP3DecInfo,
+
+    MP3Decoder_t *m_MP3Decoder,
     MPEGVersion_t *m_MPEGVersion,
     StereoMode_t *m_sMode,
     SFBandTable_t *m_SFBandTable,
@@ -420,6 +415,7 @@ int MP3DecodeHelper(
     SubbandInfo_t *m_SubbandInfo,
     MP3FrameInfo_t *m_MP3FrameInfo
 );
+
 #ifdef __cplusplus
 }
 #endif

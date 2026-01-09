@@ -3,7 +3,7 @@
 use core::{panic::PanicInfo, ptr::null};
 
 use crabio::mp3_decoder::{
-    BLOCK_SIZE, BitStreamInfo, DequantInfo, FrameHeader, HUFF_PAIRTABS, HuffTabLookup, HuffTabType, HuffmanInfo, IMDCT_SCALE, IMDCTInfo, MAX_NCHAN, MAX_NGRAN, MAX_NSAMP, MAX_SCFBD, MP3DecInfo, MP3FrameInfo, MPEGVersion, NBANDS, POLY_COEF, SFBandTable, SIBYTES_MPEG1_MONO, SIBYTES_MPEG1_STEREO, SIBYTES_MPEG2_MONO, SIBYTES_MPEG2_STEREO, SQRTHALF, ScaleFactorInfoSub, ScaleFactorJS, SideInfoSub, StereoMode, SubbandInfo, VBUF_LENGTH, clip_2n, clip_to_short, fdct_32, freq_invert_rescale, get_bits, idct_9, imdct_12, madd_64, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, polyphase_mono, polyphase_stereo, refill_bitstream_cache, samplesPerFrameTab, sar_64, unpack_frame_header, win_previous
+    BLOCK_SIZE, BitStreamInfo, DequantInfo, FrameHeader, HUFF_PAIRTABS, HuffTabLookup, HuffTabType, HuffmanInfo, IMDCT_SCALE, IMDCTInfo, MAX_NCHAN, MAX_NGRAN, MAX_NSAMP, MAX_SCFBD, MP3DecInfo, MP3Decoder, MP3FrameInfo, MPEGVersion, NBANDS, POLY_COEF, SFBandTable, SIBYTES_MPEG1_MONO, SIBYTES_MPEG1_STEREO, SIBYTES_MPEG2_MONO, SIBYTES_MPEG2_STEREO, SQRTHALF, ScaleFactorInfoSub, ScaleFactorJS, SideInfoSub, StereoMode, SubbandInfo, VBUF_LENGTH, clip_2n, clip_to_short, fdct_32, freq_invert_rescale, get_bits, idct_9, imdct_12, madd_64, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, polyphase_mono, polyphase_stereo, refill_bitstream_cache, samplesPerFrameTab, sar_64, win_previous
 };
 
 #[repr(C)]
@@ -269,26 +269,6 @@ pub fn WinPrevious(xPrev: *mut i32, xPrevWin: *mut i32, bt_prev: i32) {
     let x_prev_win: &mut [i32; 18] = unsafe { &mut *xPrevWin.cast::<[i32; 18]>() };
     
     win_previous(x_prev, x_prev_win, bt_prev);
-}
-
-#[unsafe(no_mangle)]
-pub unsafe fn UnpackFrameHeader(
-    buf: *const u8,
-    inbuf_len: usize,
-    m_FrameHeader: *mut FrameHeader,
-    m_MP3DecInfo: *mut MP3DecInfo,
-    m_MPEGVersion: *mut i32,
-    m_sMode: *mut i32,
-    m_SFBandTable: *mut SFBandTable,
-) -> i32 {
-    let buf = core::slice::from_raw_parts(buf, inbuf_len);
-    let m_FrameHeader = unsafe { &mut *m_FrameHeader};
-    let m_MP3DecInfo = unsafe { &mut *m_MP3DecInfo};
-    let m_MPEGVersion = unsafe { &mut *m_MPEGVersion};
-    let m_sMode = unsafe { &mut *m_sMode};
-    let m_SFBandTable = unsafe { &mut *m_SFBandTable};
-    
-    unpack_frame_header(buf, m_FrameHeader, m_MP3DecInfo, m_MPEGVersion, m_sMode, m_SFBandTable)
 }
 
 /***********************************************************************************************************************
@@ -3189,8 +3169,7 @@ pub unsafe fn MP3DecodeHelper(
     outbuf: *mut i16,
     useSize: i32,
     // Przekazujemy wskaźniki do składowych "klasy" dekodera
-    m_FrameHeader: *mut FrameHeader,
-    m_MP3DecInfo: *mut MP3DecInfo,
+    m_MP3Decoder: *mut MP3Decoder,
     m_MPEGVersion: *mut i32,
     m_sMode: *mut i32,
     m_SFBandTable: *mut SFBandTable,
@@ -3218,8 +3197,12 @@ pub unsafe fn MP3DecodeHelper(
     let mut huffBlockBits: i32;
     let mut mainPtr: *mut u8;
 
+    let m_MP3Decoder = &mut *m_MP3Decoder;
+    let buf = core::slice::from_raw_parts(inbuf, inbuf_len);
     /* unpack frame header */
-    fhBytes = UnpackFrameHeader(inbuf, inbuf_len, m_FrameHeader, m_MP3DecInfo, m_MPEGVersion, m_sMode, m_SFBandTable);
+    fhBytes = m_MP3Decoder.unpack_frame_header(
+        buf,
+        &mut *m_MPEGVersion, &mut *m_sMode, &mut *m_SFBandTable);
     if fhBytes < 0 {
         return -1; // ERR_MP3_INVALID_FRAMEHEADER
     }
@@ -3230,17 +3213,19 @@ pub unsafe fn MP3DecodeHelper(
         inbuf,
         m_SideInfo,
         m_SideInfoSub,
-        m_MP3DecInfo,
+        &mut m_MP3Decoder.m_MP3DecInfo,
         *m_MPEGVersion,
         *m_sMode,
     );
     if siBytes < 0 {
-        MP3ClearBadFrame(m_MP3DecInfo, outbuf);
+        MP3ClearBadFrame(&mut m_MP3Decoder.m_MP3DecInfo, outbuf);
         return -2; // ERR_MP3_INVALID_SIDEINFO
     }
     inbuf = inbuf.add(siBytes as usize);
     *bytesLeft -= fhBytes + siBytes;
 
+    let m_FrameHeader = &mut m_MP3Decoder.m_FrameHeader;
+    let m_MP3DecInfo = &mut m_MP3Decoder.m_MP3DecInfo;
     /* if free mode... */
     if (*m_MP3DecInfo).bitrate == 0 || (*m_MP3DecInfo).freeBitrateFlag != 0 {
         if (*m_MP3DecInfo).freeBitrateFlag == 0 {
