@@ -3133,31 +3133,28 @@ pub unsafe extern "C" fn MP3Dequantize(
  * Notes:       call this right after calling MP3Decode
  **********************************************************************************************************************/
 #[unsafe(no_mangle)]
- pub unsafe fn MP3GetLastFrameInfo(
-    m_MP3DecInfo: *const MP3DecInfo,
-    m_MP3FrameInfo: *mut MP3FrameInfo,
+ pub fn MP3GetLastFrameInfo(
+    m_MP3Decoder: &mut MP3Decoder,
     m_MPEGVersion: i32
 ) {
-    let m_MP3DecInfo = &*m_MP3DecInfo;
-    let m_MP3FrameInfo = &mut *m_MP3FrameInfo;
-    if (m_MP3DecInfo.layer != 3){
-        m_MP3FrameInfo.bitrate=0;
-        m_MP3FrameInfo.nChans=0;
-        m_MP3FrameInfo.samprate=0;
-        m_MP3FrameInfo.bitsPerSample=0;
-        m_MP3FrameInfo.outputSamps=0;
-        m_MP3FrameInfo.layer=0;
-        m_MP3FrameInfo.version=0;
+    if (m_MP3Decoder.m_MP3DecInfo.layer != 3){
+        m_MP3Decoder.m_MP3FrameInfo.bitrate=0;
+        m_MP3Decoder.m_MP3FrameInfo.nChans=0;
+        m_MP3Decoder.m_MP3FrameInfo.samprate=0;
+        m_MP3Decoder.m_MP3FrameInfo.bitsPerSample=0;
+        m_MP3Decoder.m_MP3FrameInfo.outputSamps=0;
+        m_MP3Decoder.m_MP3FrameInfo.layer=0;
+        m_MP3Decoder.m_MP3FrameInfo.version=0;
     }
     else{
-        m_MP3FrameInfo.bitrate=m_MP3DecInfo.bitrate;
-        m_MP3FrameInfo.nChans = m_MP3DecInfo.nChans;
-        m_MP3FrameInfo.samprate=m_MP3DecInfo.samprate;
-        m_MP3FrameInfo.bitsPerSample=16;
-        m_MP3FrameInfo.outputSamps=m_MP3DecInfo.nChans
-                * samplesPerFrameTab[m_MPEGVersion as usize][m_MP3DecInfo.layer as usize-1] as i32;
-        m_MP3FrameInfo.layer=m_MP3DecInfo.layer;
-        m_MP3FrameInfo.version=m_MPEGVersion;
+        m_MP3Decoder.m_MP3FrameInfo.bitrate=m_MP3Decoder.m_MP3DecInfo.bitrate;
+        m_MP3Decoder.m_MP3FrameInfo.nChans = m_MP3Decoder.m_MP3DecInfo.nChans;
+        m_MP3Decoder.m_MP3FrameInfo.samprate=m_MP3Decoder.m_MP3DecInfo.samprate;
+        m_MP3Decoder.m_MP3FrameInfo.bitsPerSample=16;
+        m_MP3Decoder.m_MP3FrameInfo.outputSamps=m_MP3Decoder.m_MP3DecInfo.nChans
+                * samplesPerFrameTab[m_MPEGVersion as usize][m_MP3Decoder.m_MP3DecInfo.layer as usize-1] as i32;
+        m_MP3Decoder.m_MP3FrameInfo.layer=m_MP3Decoder.m_MP3DecInfo.layer;
+        m_MP3Decoder.m_MP3FrameInfo.version=m_MPEGVersion;
     }
 }
 
@@ -3182,7 +3179,6 @@ pub unsafe fn MP3DecodeHelper(
     m_ScaleFactorJS: *mut ScaleFactorJS,
     m_IMDCTInfo: *mut IMDCTInfo,
     m_SubbandInfo: *mut SubbandInfo,
-    m_MP3FrameInfo: *mut MP3FrameInfo,
 ) -> i32 {
     let mut offset: i32;
     let mut bitOffset: i32;
@@ -3360,7 +3356,7 @@ pub unsafe fn MP3DecodeHelper(
         }
     }
 
-    MP3GetLastFrameInfo(m_MP3DecInfo, m_MP3FrameInfo, *m_MPEGVersion);
+    MP3GetLastFrameInfo(m_MP3Decoder, *m_MPEGVersion);
     
     return 0; // ERR_MP3_NONE
 }

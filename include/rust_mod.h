@@ -276,6 +276,7 @@ typedef struct SideInfo {
 typedef struct MP3Decoder {
     MP3DecInfo_t m_MP3DecInfo;
     FrameHeader_t m_FrameHeader;
+    MP3FrameInfo_t m_MP3FrameInfo;
 } MP3Decoder_t;
 
 void RefillBitstreamCache(BitStreamInfo_t *bsi);
@@ -412,8 +413,7 @@ int MP3DecodeHelper(
     CriticalBandInfo_t (*m_CriticalBandInfo)[2],
     ScaleFactorJS_t *m_ScaleFactorJS,
     IMDCTInfo_t *m_IMDCTInfo,
-    SubbandInfo_t *m_SubbandInfo,
-    MP3FrameInfo_t *m_MP3FrameInfo
+    SubbandInfo_t *m_SubbandInfo
 );
 
 #ifdef __cplusplus

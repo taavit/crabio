@@ -23,7 +23,6 @@ const uint32_t m_SQRTHALF               =0x5a82799a;  // sqrt(0.5) in Q31 format
 
 MP3Decoder_t *m_MP3Decoder;
 
-MP3FrameInfo_t *m_MP3FrameInfo;
 SFBandTable_t m_SFBandTable;
 StereoMode_t m_sMode;  /* mono/stereo mode */
 MPEGVersion_t m_MPEGVersion;  /* version ID */
@@ -61,11 +60,11 @@ const int coef32[31] PROGMEM = {
  **********************************************************************************************************************/
 
 
-int MP3GetSampRate(){return m_MP3FrameInfo->samprate;}
-int MP3GetChannels(){return m_MP3FrameInfo->nChans;}
-int MP3GetBitsPerSample(){return m_MP3FrameInfo->bitsPerSample;}
-int MP3GetBitrate(){return m_MP3FrameInfo->bitrate;}
-int MP3GetOutputSamps(){return m_MP3FrameInfo->outputSamps;}
+int MP3GetSampRate(){return m_MP3Decoder->m_MP3FrameInfo.samprate;}
+int MP3GetChannels(){return m_MP3Decoder->m_MP3FrameInfo.nChans;}
+int MP3GetBitsPerSample(){return m_MP3Decoder->m_MP3FrameInfo.bitsPerSample;}
+int MP3GetBitrate(){return m_MP3Decoder->m_MP3FrameInfo.bitrate;}
+int MP3GetOutputSamps(){return m_MP3Decoder->m_MP3FrameInfo.outputSamps;}
 
 /***********************************************************************************************************************
  * Function:    MP3Decode
@@ -106,8 +105,7 @@ int MP3Decode( unsigned char *inbuf, size_t inbuf_len, int *bytesLeft, short *ou
         &m_CriticalBandInfo,
         m_ScaleFactorJS,
         m_IMDCTInfo,
-        m_SubbandInfo,
-        m_MP3FrameInfo
+        m_SubbandInfo
     );
 }
 
@@ -137,7 +135,6 @@ void MP3Decoder_ClearBuffer(void) {
     memset( m_ScaleFactorJS,      0, sizeof(ScaleFactorJS_t));                                 //Clear ScaleFactorJS
     memset(&m_SideInfoSub,        0, sizeof(SideInfoSub_t)*(m_MAX_NGRAN *m_MAX_NCHAN));        //Clear SideInfoSub
     memset(&m_SFBandTable,        0, sizeof(SFBandTable_t));                                   //Clear SFBandTable
-    memset( m_MP3FrameInfo,       0, sizeof(MP3FrameInfo_t));                                  //Clear MP3FrameInfo
 
     return;
 
@@ -177,10 +174,9 @@ bool MP3Decoder_AllocateBuffers(void) {
     if(!m_DequantInfo)      {m_DequantInfo   = (DequantInfo_t*)   __malloc_heap_psram(sizeof(DequantInfo_t)  );}
     if(!m_IMDCTInfo)        {m_IMDCTInfo     = (IMDCTInfo_t*)     __malloc_heap_psram(sizeof(IMDCTInfo_t)    );}
     if(!m_SubbandInfo)      {m_SubbandInfo   = (SubbandInfo_t*)   __malloc_heap_psram(sizeof(SubbandInfo_t)  );}
-    if(!m_MP3FrameInfo)     {m_MP3FrameInfo  = (MP3FrameInfo_t*)  __malloc_heap_psram(sizeof(MP3FrameInfo_t) );}
 
     if(!m_MP3Decoder || !m_SideInfo || !m_ScaleFactorJS || !m_HuffmanInfo ||
-       !m_DequantInfo || !m_IMDCTInfo || !m_SubbandInfo || !m_MP3FrameInfo) {
+       !m_DequantInfo || !m_IMDCTInfo || !m_SubbandInfo) {
         MP3Decoder_FreeBuffers();
         log_e("not enough memory to allocate mp3decoder buffers");
         return false;
@@ -212,7 +208,6 @@ void MP3Decoder_FreeBuffers()
     if(m_DequantInfo)       {free(m_DequantInfo);     m_DequantInfo=0;}
     if(m_IMDCTInfo)         {free(m_IMDCTInfo);       m_IMDCTInfo=0;}
     if(m_SubbandInfo)       {free(m_SubbandInfo);     m_SubbandInfo=0;}
-    if(m_MP3FrameInfo)      {free(m_MP3FrameInfo);    m_MP3FrameInfo=0;}
 
 //    log_i("MP3Decoder: %lu bytes memory was freed", ESP.getFreeHeap() - i);
 }

@@ -391,6 +391,7 @@ pub struct SubbandInfo {
 pub struct MP3Decoder {
     pub m_MP3DecInfo: MP3DecInfo,
     pub m_FrameHeader:FrameHeader,
+    pub m_MP3FrameInfo: MP3FrameInfo,
 }
 
 
