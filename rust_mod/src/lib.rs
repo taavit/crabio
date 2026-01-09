@@ -2644,8 +2644,8 @@ const ISFIIP: [[i32; 2]; 2] = [
     [0x40000000, 0x40000000], /* mid-side on */
 ];
 
-pub unsafe fn IntensityProcMPEG1(
-    x: *mut [i32; 576], // x[2][576]
+pub fn IntensityProcMPEG1(
+    x: &mut [[i32; MAX_NSAMP]; MAX_NCHAN], // x[2][576]
     n_samps: i32,
     sfis: &ScaleFactorInfoSub,
     cbi: &[CriticalBandInfo; 2],
@@ -2675,9 +2675,6 @@ pub unsafe fn IntensityProcMPEG1(
     let mut m_out_l = 0;
     let mut m_out_r = 0;
 
-    let x_left = &mut *x.add(0);
-    let x_right = &mut *x.add(1);
-
     // Bloki długie
     for cb in cb_start_l..cb_end_l {
         if samps_left <= 0 {
@@ -2698,14 +2695,14 @@ pub unsafe fn IntensityProcMPEG1(
             if samps_left <= 0 {
                 break;
             }
-            let common = x_left[i];
+            let common = x[0][i];
 
             let xr = mulshift_32(fr, common) << 2;
-            x_right[i] = xr;
+            x[1][i] = xr;
             m_out_r |= xr.abs();
 
             let xl = mulshift_32(fl, common) << 2;
-            x_left[i] = xl;
+            x[0][i] = xl;
             m_out_l |= xl.abs();
 
             i += 1;
@@ -2737,12 +2734,12 @@ pub unsafe fn IntensityProcMPEG1(
                 break;
             }
             for w in 0..3 {
-                let common = x_left[i + w];
+                let common = x[0][i + w];
                 let xr = mulshift_32(frs[w], common) << 2;
-                x_right[i + w] = xr;
+                x[1][i + w] = xr;
                 m_out_r |= xr.abs();
                 let xl = mulshift_32(fls[w], common) << 2;
-                x_left[i + w] = xl;
+                x[0][i + w] = xl;
                 m_out_l |= xl.abs();
             }
             i += 3;
@@ -2754,23 +2751,17 @@ pub unsafe fn IntensityProcMPEG1(
     m_out[1] = m_out_r;
 }
 
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn IntensityProcMPEG2(
-    x: *mut [i32; 576], // x[2][576]
+pub fn IntensityProcMPEG2(
+    x: &mut [[i32; MAX_NSAMP]; MAX_NCHAN], // x[2][576]
     n_samps: i32,
-    sfis: *const ScaleFactorInfoSub,
-    cbi: *const CriticalBandInfo,
-    sfjs: *const ScaleFactorJS,
+    sfis: &ScaleFactorInfoSub,
+    cbi: &[CriticalBandInfo; 2],
+    sfjs: &ScaleFactorJS,
     mid_side_flag: i32,
     _mix_flag: i32,
-    m_out: *mut i32, // mOut[2]
-    sfbt: *const SFBandTable,
+    m_out: &mut[i32; 2], // mOut[2]
+    sfbt: &SFBandTable,
 ) {
-    let sfis = &*sfis;
-    let cbi = core::slice::from_raw_parts(cbi, 2);
-    let sfjs = &*sfjs;
-    let sfbt = &*sfbt;
-
     let mut m_out_l = 0i32;
     let mut m_out_r = 0i32;
     let mut il = [0i32; 23];
@@ -2791,9 +2782,6 @@ pub unsafe extern "C" fn IntensityProcMPEG2(
             }
         }
     }
-
-    let x_left = &mut *x.add(0);
-    let x_right = &mut *x.add(1);
 
     if cbi[1].cbType == 0 {
         /* BLOKI DŁUGIE */
@@ -2834,12 +2822,12 @@ pub unsafe extern "C" fn IntensityProcMPEG2(
             };
 
             for _ in 0..n {
-                let common = x_left[i];
+                let common = x[0][i];
                 let xr = mulshift_32(fr, common) << 2;
                 let xl = mulshift_32(fl, common) << 2;
 
-                x_right[i] = xr;
-                x_left[i] = xl;
+                x[1][i] = xr;
+                x[0][i] = xl;
 
                 m_out_r |= xr.abs();
                 m_out_l |= xl.abs();
@@ -2877,12 +2865,12 @@ pub unsafe extern "C" fn IntensityProcMPEG2(
                 let n = (sfbt.s[cb + 1] - sfbt.s[cb]) as usize;
                 for _ in 0..n {
                     if i < 576 {
-                        let common = x_left[i];
+                        let common = x[0][i];
                         let xr = mulshift_32(fr, common) << 2;
                         let xl = mulshift_32(fl, common) << 2;
 
-                        x_right[i] = xr;
-                        x_left[i] = xl;
+                        x[1][i] = xr;
+                        x[0][i] = xl;
 
                         m_out_r |= xr.abs();
                         m_out_l |= xl.abs();
@@ -2893,8 +2881,8 @@ pub unsafe extern "C" fn IntensityProcMPEG2(
         }
     }
 
-    *m_out.add(0) = m_out_l;
-    *m_out.add(1) = m_out_r;
+    m_out[0] = m_out_l;
+    m_out[1] = m_out_r;
 }
 
 pub fn MidSideProc(
@@ -3159,9 +3147,9 @@ pub unsafe extern "C" fn MP3Dequantize(
         if m_mp3_decoder.m_MPEGVersion == MPEGVersion::MPEG1 {
             // MPEG1
             IntensityProcMPEG1(
-                hi.huff_dec_buf.as_mut_ptr(),
+                &mut hi.huff_dec_buf,
                 n_samps,
-                &mut (*sf_info_sub)[gr_idx][1],
+                &mut sf_info_sub[gr_idx][1],
                 cbi,
                 (*side_info_sub)[gr_idx][1].mixedBlock,
                 &mut m_out,
@@ -3170,14 +3158,14 @@ pub unsafe extern "C" fn MP3Dequantize(
         } else {
             // MPEG2
             IntensityProcMPEG2(
-                hi.huff_dec_buf.as_mut_ptr(),
+                &mut hi.huff_dec_buf,
                 n_samps,
                 &mut (*sf_info_sub)[gr_idx][1],
-                cbi.as_mut_ptr(),
+                cbi,
                 sf_js,
                 fh.modeExt >> 1,
-                (*side_info_sub)[gr_idx][1].mixedBlock,
-                m_out.as_mut_ptr(),
+                side_info_sub[gr_idx][1].mixedBlock,
+                &mut m_out,
                 sfbt,
             );
         }
