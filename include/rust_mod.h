@@ -347,8 +347,6 @@ int DequantChannel(
     int mpegVersion
 );
 
-void IntensityProcMPEG1(int x[m_MAX_NCHAN][m_MAX_NSAMP], int nSamps, ScaleFactorInfoSub_t *sfis,	CriticalBandInfo_t *cbi, int midSideFlag, int mixFlag, int mOut[2]);
-void IntensityProcMPEG2(int x[m_MAX_NCHAN][m_MAX_NSAMP], int nSamps, ScaleFactorInfoSub_t *sfis, CriticalBandInfo_t *cbi, ScaleFactorJS_t *sfjs, int midSideFlag, int mixFlag, int mOut[2]);
 int UnpackScaleFactors(
     unsigned char *buf, int *bitOffset, int bitsAvail, int gr, int ch,
     SideInfoSub_t (*m_SideInfoSub)[2][2],

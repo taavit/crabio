@@ -2644,21 +2644,16 @@ const ISFIIP: [[i32; 2]; 2] = [
     [0x40000000, 0x40000000], /* mid-side on */
 ];
 
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn IntensityProcMPEG1(
+pub unsafe fn IntensityProcMPEG1(
     x: *mut [i32; 576], // x[2][576]
     n_samps: i32,
-    sfis: *const ScaleFactorInfoSub,
-    cbi: *const CriticalBandInfo,
+    sfis: &ScaleFactorInfoSub,
+    cbi: &[CriticalBandInfo; 2],
     mid_side_flag: i32,
-    _mix_flag: i32,
-    m_out: *mut i32, // mOut[2]
-    sfbt: *const SFBandTable,
+    m_out: &mut [i32; 2], // mOut[2]
+    sfbt: &SFBandTable,
 ) {
-    let cbi = core::slice::from_raw_parts(cbi, 2);
-    let sfbt = &*sfbt;
-    let sfis = &*sfis;
-    let mut i: usize = 0;
+    let mut i: usize;
     let (cb_start_l, cb_end_l, cb_start_s, cb_end_s);
 
     if cbi[1].cbType == 0 {
@@ -2755,8 +2750,8 @@ pub unsafe extern "C" fn IntensityProcMPEG1(
         }
     }
 
-    *m_out.add(0) = m_out_l;
-    *m_out.add(1) = m_out_r;
+    m_out[0] = m_out_l;
+    m_out[1] = m_out_r;
 }
 
 #[unsafe(no_mangle)]
@@ -3167,10 +3162,9 @@ pub unsafe extern "C" fn MP3Dequantize(
                 hi.huff_dec_buf.as_mut_ptr(),
                 n_samps,
                 &mut (*sf_info_sub)[gr_idx][1],
-                cbi.as_mut_ptr(),
-                fh.modeExt >> 1,
+                cbi,
                 (*side_info_sub)[gr_idx][1].mixedBlock,
-                m_out.as_mut_ptr(),
+                &mut m_out,
                 sfbt,
             );
         } else {
