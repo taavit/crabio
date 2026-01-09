@@ -287,6 +287,9 @@ typedef struct MP3Decoder {
     HuffmanInfo_t m_HuffmanInfo;
     DequantInfo_t m_DequantInfo;
     IMDCTInfo_t m_IMDCTInfo;
+    StereoMode_t m_sMode;  /* mono/stereo mode */
+    MPEGVersion_t m_MPEGVersion;  /* version ID */
+
 } MP3Decoder_t;
 
 void RefillBitstreamCache(BitStreamInfo_t *bsi);
@@ -396,9 +399,7 @@ int MP3DecodeHelper(
     short *outbuf,
     int useSize,
 
-    MP3Decoder_t *m_MP3Decoder,
-    MPEGVersion_t *m_MPEGVersion,
-    StereoMode_t *m_sMode
+    MP3Decoder_t *m_MP3Decoder
 );
 
 #ifdef __cplusplus
