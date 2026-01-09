@@ -1409,11 +1409,6 @@ pub unsafe fn DecodeHuffmanPairs(
     -1
 }
 
-#[inline(always)]
-unsafe fn pgm_read_byte(ptr: *const u8) -> u8 {
-    *ptr
-}
-
 /* tables for quadruples
  * format 0xAB
  *  A = length of codeword
@@ -1527,7 +1522,7 @@ pub unsafe fn DecodeHuffmanQuads(
         /* Dekodowanie kwadratów */
         while i < (nVals - 3) && cachedBits >= 10 {
             // cw = pgm_read_byte(&tBase[cache >> (32 - maxBits)]);
-            cw = pgm_read_byte(t_base.add((cache >> (32 - maxBits)) as usize));
+            cw = *(t_base.add((cache >> (32 - maxBits)) as usize));
 
             len = ((cw >> 4) & 0x0f) as i32;
             cachedBits -= len;
@@ -2907,24 +2902,17 @@ pub unsafe extern "C" fn IntensityProcMPEG2(
     *m_out.add(1) = m_out_r;
 }
 
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn MidSideProc(
-    x: *mut [i32; 576], // x[2][576]
-    n_samps: i32,
-    m_out: *mut i32, // mOut[2]
+pub fn MidSideProc(
+    x: &mut [[i32; MAX_NSAMP]; MAX_NCHAN], // x[2][576]
+    n_samps: usize,
+    m_out: &mut [i32; 2], // mOut[2]
 ) {
     let mut m_out_l = 0i32;
     let mut m_out_r = 0i32;
 
-    // Uzyskujemy dostęp do buforów kanałów
-    // x.add(0) to kanał Mid (stanie się Lewym)
-    // x.add(1) to kanał Side (stanie się Prawym)
-    let x_left = &mut *x.add(0);
-    let x_right = &mut *x.add(1);
-
-    for i in 0..(n_samps as usize) {
-        let mid = x_left[i];
-        let side = x_right[i];
+    for i in 0..n_samps {
+        let mid = x[0][i];
+        let side = x[1][i];
 
         // Wykonujemy operację sumy i różnicy
         // Używamy wrapping_add/sub, aby zachować zachowanie C w razie przepełnienia,
@@ -2932,8 +2920,8 @@ pub unsafe extern "C" fn MidSideProc(
         let l = mid.wrapping_add(side);
         let r = mid.wrapping_sub(side);
 
-        x_left[i] = l;
-        x_right[i] = r;
+        x[0][i] = l;
+        x[1][i] = r;
 
         // Aktualizacja maski dla bitów strażniczych
         m_out_l |= l.abs();
@@ -2941,8 +2929,8 @@ pub unsafe extern "C" fn MidSideProc(
     }
 
     // Łączymy nową maskę z istniejącą (operator |= w C)
-    *m_out.add(0) |= m_out_l;
-    *m_out.add(1) |= m_out_r;
+    m_out[0] |= m_out_l;
+    m_out[1] |= m_out_r;
 }
 
 /***********************************************************************************************************************
@@ -3167,7 +3155,7 @@ pub unsafe extern "C" fn MP3Dequantize(
             /* Intensity stereo wyłączone - Mid-Side na całym widmie */
             n_samps = hi.non_zero_bound[0].max(hi.non_zero_bound[1]);
         }
-        MidSideProc(hi.huff_dec_buf.as_mut_ptr(), n_samps, m_out.as_mut_ptr());
+        MidSideProc(&mut hi.huff_dec_buf, n_samps as usize, &mut m_out);
     }
 
     // 4. Proces Intensity Stereo
