@@ -3159,7 +3159,6 @@ pub unsafe fn MP3DecodeHelper(
     m_MP3Decoder: *mut MP3Decoder,
     m_MPEGVersion: *mut i32,
     m_sMode: *mut i32,
-    m_SFBandTable: *mut SFBandTable,
     m_HuffmanInfo: *mut HuffmanInfo,
     m_DequantInfo: *mut DequantInfo,
     m_ScaleFactorInfoSub: *mut [[ScaleFactorInfoSub; 2]; 2],
@@ -3186,7 +3185,7 @@ pub unsafe fn MP3DecodeHelper(
     /* unpack frame header */
     fhBytes = m_MP3Decoder.unpack_frame_header(
         buf,
-        &mut *m_MPEGVersion, &mut *m_sMode, &mut *m_SFBandTable);
+        &mut *m_MPEGVersion, &mut *m_sMode);
     if fhBytes < 0 {
         return -1; // ERR_MP3_INVALID_FRAMEHEADER
     }
@@ -3278,7 +3277,7 @@ pub unsafe fn MP3DecodeHelper(
 
     bitOffset = 0;
     mainBits = (*m_MP3DecInfo).mainDataBytes * 8;
-
+    let m_SFBandTable = &mut m_MP3Decoder.m_SFBandTable;
     /* decode one complete frame */
     for gr in 0..(*m_MP3DecInfo).nGrans {
         for ch in 0..(*m_MP3DecInfo).nChans {

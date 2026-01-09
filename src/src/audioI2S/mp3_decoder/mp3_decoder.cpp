@@ -23,7 +23,6 @@ const uint32_t m_SQRTHALF               =0x5a82799a;  // sqrt(0.5) in Q31 format
 
 MP3Decoder_t *m_MP3Decoder;
 
-SFBandTable_t m_SFBandTable;
 StereoMode_t m_sMode;  /* mono/stereo mode */
 MPEGVersion_t m_MPEGVersion;  /* version ID */
 CriticalBandInfo_t m_CriticalBandInfo[m_MAX_NCHAN];  /* filled in dequantizer, used in joint stereo reconstruction */
@@ -94,7 +93,6 @@ int MP3Decode( unsigned char *inbuf, size_t inbuf_len, int *bytesLeft, short *ou
         m_MP3Decoder,
         &m_MPEGVersion,
         &m_sMode,
-        &m_SFBandTable,
         m_HuffmanInfo,
         m_DequantInfo,
         &m_ScaleFactorInfoSub,
@@ -128,7 +126,6 @@ void MP3Decoder_ClearBuffer(void) {
     memset( m_SubbandInfo,        0, sizeof(SubbandInfo_t));                                   //Clear SubbandInfo
     memset(&m_CriticalBandInfo,   0, sizeof(CriticalBandInfo_t)*m_MAX_NCHAN);                  //Clear CriticalBandInfo
     memset( m_ScaleFactorJS,      0, sizeof(ScaleFactorJS_t));                                 //Clear ScaleFactorJS
-    memset(&m_SFBandTable,        0, sizeof(SFBandTable_t));                                   //Clear SFBandTable
 
     return;
 

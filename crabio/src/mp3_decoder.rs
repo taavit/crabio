@@ -282,6 +282,7 @@ pub struct FrameHeader {
 }
 
 #[repr(C)]
+#[derive(Debug, Default)]
 pub struct SideInfoSub {
     pub part23_length: i32,       /* number of bits in main data */
     pub n_bigvals: i32,           /* 2x this = first set of Huffman cw's (maximum amplitude can be > 1) */
@@ -395,6 +396,7 @@ pub struct MP3Decoder {
     pub m_MP3FrameInfo: MP3FrameInfo,
     pub m_SideInfo: SideInfo,
     pub m_SideInfoSub: [[SideInfoSub; MAX_NCHAN]; MAX_NGRAN],
+    pub m_SFBandTable: SFBandTable,
 }
 
 
@@ -1332,7 +1334,6 @@ impl MP3Decoder {
         buf: &[u8],
         m_MPEGVersion: &mut i32,
         m_sMode: &mut i32,
-        m_SFBandTable: &mut SFBandTable,
     ) -> i32 {
     /* validate pointers and sync word */
         if (buf[0] & SYNCWORDH) != SYNCWORDH || (buf[1] & SYNCWORDL) != SYNCWORDL {
@@ -1371,7 +1372,7 @@ impl MP3Decoder {
             return -1;
         }
         /* for readability (we reference sfBandTable many times in decoder) */
-        *m_SFBandTable = sfBandTable[*m_MPEGVersion as usize][m_FrameHeader.srIdx as usize];
+        self.m_SFBandTable = sfBandTable[*m_MPEGVersion as usize][m_FrameHeader.srIdx as usize];
         if *m_sMode != StereoMode::Joint as i32 { /* just to be safe (dequant, stproc check fh->modeExt) */
             m_FrameHeader.modeExt = 0;
         }
@@ -1408,7 +1409,7 @@ impl MP3Decoder {
 
 #[cfg(test)]
 mod unpack_frame_header_test {
-    use crate::mp3_decoder::{MAINBUF_SIZE, MAX_NCHAN, MAX_NGRAN, MAX_SCFBD, MP3Decoder, MP3FrameInfo, SideInfo, unpack_frame_header};
+    use crate::mp3_decoder::{MAINBUF_SIZE, MAX_NCHAN, MAX_NGRAN, MAX_SCFBD, MP3Decoder, MP3FrameInfo, SFBandTable, SideInfo, SideInfoSub, unpack_frame_header};
     #[test]
     fn test_unpack_frame() {
         let buf: [u8; 4] = [0xFF,0xFB,0x92, 0x64];
@@ -1442,18 +1443,21 @@ mod unpack_frame_header_test {
             privateBits: 0,
             scfsi: [[0; MAX_SCFBD]; MAX_NCHAN],
         };
+        let m_SFBandTable = SFBandTable {
+            l: [0; 23],
+            s: [0; 14],
+        };
+        let m_SideInfoSub = [[SideInfoSub::default(); MAX_NCHAN]; MAX_NGRAN];
         let m_MP3Decoder = MP3Decoder {
             m_FrameHeader,
             m_MP3DecInfo,
             m_MP3FrameInfo,
             m_SideInfo,
+            m_SFBandTable,
+            m_SideInfoSub
         };
         let mut  m_MPEGVersion = super::MPEGVersion::MPEG1 as i32;
         let mut  m_sMode = super::StereoMode::Stereo as i32;
-        let mut  m_SFBandTable = super::SFBandTable {
-                l: [0; 23],
-                s: [0; 14],
-        };
         let res = m_m_MP3Decoder.unpack_frame_header(
             &buf,
             &mut m_MPEGVersion,
