@@ -263,7 +263,7 @@ impl FrameHeader {
 }
 
 #[repr(C)]
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct SideInfoSub {
     pub part23_length: i32,       /* number of bits in main data */
     pub n_bigvals: i32,           /* 2x this = first set of Huffman cw's (maximum amplitude can be > 1) */
@@ -289,6 +289,7 @@ pub struct SideInfo {
 }
 
 #[repr(C)]
+#[derive(Debug, Clone, Copy)]
 pub struct CriticalBandInfo {
     pub cbType: i32,             /* pure long = 0, pure short = 1, mixed = 2 */
     pub cbEndS: [i32; 3],          /* number nonzero short cb's, per subbblock */
@@ -350,6 +351,7 @@ struct BlockCount {
 }
 
 #[repr(C)]
+#[derive(Debug, Clone, Copy)]
 pub struct ScaleFactorInfoSub {    /* max bits in scalefactors = 5, so use char's to save space */
     pub l: [u8; 23],            /* [band] */
     pub s: [[u8; 3]; 13],         /* [band][window] */
@@ -1463,66 +1465,108 @@ impl MP3Decoder {
 
 #[cfg(test)]
 mod unpack_frame_header_test {
-    // use crate::mp3_decoder::{MAINBUF_SIZE, MAX_NCHAN, MAX_NGRAN, MAX_SCFBD, MP3Decoder, MP3FrameInfo, MPEGVersion, SFBandTable, SideInfo, SideInfoSub};
-    // #[test]
-    // fn test_unpack_frame() {
-    //     let buf: [u8; 4] = [0xFF,0xFB,0x92, 0x64];
-    //     let mut m_FrameHeader = super::FrameHeader::default();
-    //     let mut m_MP3DecInfo = super::MP3DecInfo {
-    //         bitrate: 0,
-    //         freeBitrateFlag: 0,
-    //         freeBitrateSlots: 0,
-    //         layer: 0,
-    //         mainBuf: [0; MAINBUF_SIZE],
-    //         mainDataBegin: 0,
-    //         mainDataBytes: 0,
-    //         nChans: 0,
-    //         nGranSamps: 0,
-    //         nGrans: 0,
-    //         nSlots: 0,
-    //         part23Length: [[0; MAX_NCHAN]; MAX_NGRAN],
-    //         samprate: 0,
-    //     };
-    //     let m_MP3FrameInfo = MP3FrameInfo {
-    //         bitrate: 0,
-    //         bitsPerSample: 0,
-    //         layer: 0,
-    //         nChans: 0,
-    //         outputSamps: 0,
-    //         samprate: 0,
-    //         version: MPEGVersion::MPEG1,
-    //     };
-    //     let m_SideInfo = SideInfo {
-    //         mainDataBegin: 0,
-    //         privateBits: 0,
-    //         scfsi: [[0; MAX_SCFBD]; MAX_NCHAN],
-    //     };
-    //     let m_SFBandTable = SFBandTable {
-    //         l: [0; 23],
-    //         s: [0; 14],
-    //     };
-    //     let m_SideInfoSub = [[SideInfoSub::default(); MAX_NCHAN]; MAX_NGRAN];
-    //     let m_MP3Decoder = MP3Decoder {
-    //         m_FrameHeader,
-    //         m_MP3DecInfo,
-    //         m_MP3FrameInfo,
-    //         m_SideInfo,
-    //         m_SFBandTable,
-    //         m_SideInfoSub,
+    use crate::mp3_decoder::{BLOCK_SIZE, CriticalBandInfo, DequantInfo, FrameHeader, HuffmanInfo, IMDCTInfo, MAINBUF_SIZE, MAX_NCHAN, MAX_NGRAN, MAX_NSAMP, MAX_REORDER_SAMPS, MAX_SCFBD, MP3Decoder, MP3FrameInfo, MPEGVersion, NBANDS, SFBandTable, ScaleFactorInfoSub, ScaleFactorJS, SideInfo, SideInfoSub, StereoMode, SubbandInfo, VBUF_LENGTH};
 
-    //     };
-    //     let mut  m_MPEGVersion = super::MPEGVersion::MPEG1 as i32;
-    //     let mut  m_sMode = super::StereoMode::Stereo as i32;
-    //     let res = m_m_MP3Decoder.unpack_frame_header(
-    //         &buf,
-    //         &mut m_MPEGVersion,
-    //         &mut m_sMode,
-    //         &mut m_SFBandTable
-    //     );
+    fn make_decoder() -> MP3Decoder {
+        let m_FrameHeader = FrameHeader::default();
+        let m_MP3DecInfo = super::MP3DecInfo {
+            bitrate: 0,
+            freeBitrateFlag: 0,
+            freeBitrateSlots: 0,
+            layer: 0,
+            mainBuf: [0; MAINBUF_SIZE],
+            mainDataBegin: 0,
+            mainDataBytes: 0,
+            nChans: 0,
+            nGranSamps: 0,
+            nGrans: 0,
+            nSlots: 0,
+            part23Length: [[0; MAX_NCHAN]; MAX_NGRAN],
+            samprate: 0,
+        };
+        let m_MP3FrameInfo = MP3FrameInfo {
+            bitrate: 0,
+            bitsPerSample: 0,
+            layer: 0,
+            nChans: 0,
+            outputSamps: 0,
+            samprate: 0,
+            version: MPEGVersion::MPEG1,
+        };
+        let m_SideInfo = SideInfo {
+            mainDataBegin: 0,
+            privateBits: 0,
+            scfsi: [[0; MAX_SCFBD]; MAX_NCHAN],
+        };
+        let m_SFBandTable = SFBandTable {
+            l: [0; 23],
+            s: [0; 14],
+        };
+        let m_SideInfoSub = [[SideInfoSub::default(); MAX_NCHAN]; MAX_NGRAN];
+        MP3Decoder {
+            m_FrameHeader,
+            m_MP3DecInfo,
+            m_MP3FrameInfo,
+            m_SideInfo,
+            m_SFBandTable,
+            m_SideInfoSub,
+            m_ScaleFactorJS: ScaleFactorJS {
+                intensity_scale: 0,
+                nr: [0; 4],
+                slen: [0; 4],
+            },
+            m_SubbandInfo: SubbandInfo {
+                vbuf:[0; MAX_NCHAN * VBUF_LENGTH],
+                vindex: 0,
+            },
+            m_ScaleFactorInfoSub: [[ScaleFactorInfoSub {
+                l: [0; 23],
+                s: [[0; 3]; 13],
+            }; MAX_NCHAN]; MAX_NGRAN],
+            m_CriticalBandInfo: [CriticalBandInfo { cbEndL: 0, cbEndS: [0; 3], cbEndSMax: 0, cbType: 0 }; MAX_NCHAN],
+            m_HuffmanInfo: HuffmanInfo {
+                gb: [0; MAX_NCHAN],
+                huff_dec_buf: [[0; MAX_NSAMP]; MAX_NCHAN],
+                non_zero_bound: [0; MAX_NCHAN]
+            },
+            m_DequantInfo: DequantInfo {
+                work_buf: [0; MAX_REORDER_SAMPS]
+            },
+            m_IMDCTInfo: IMDCTInfo {
+                gb: [0; MAX_NCHAN],
+                outBuf: [[[0; NBANDS]; BLOCK_SIZE]; MAX_NCHAN],
+                overBuf: [[0; MAX_NSAMP / 2]; MAX_NCHAN],
+                numPrevIMDCT: [0; MAX_NCHAN],
+                prevType: [0; MAX_NCHAN],
+                prevWinSwitch: [0; MAX_NCHAN],
+                
+            },
+            m_sMode: StereoMode::Stereo,
+            m_MPEGVersion: MPEGVersion::MPEG1,
+        }
+    }
+    #[test]
+    fn test_unpack_frame() {
+        let buf: [u8; 4] = [0xFF,0xFB,0x92, 0x64];
+        let mut m_MP3Decoder = make_decoder();
+        let res = m_MP3Decoder.unpack_frame_header(
+            &buf);
 
-    //     assert_eq!(m_MP3DecInfo.bitrate, 128000);
-    //     assert_eq!(res, 4);
-    // }
+        assert_eq!(m_MP3Decoder.m_MP3DecInfo.bitrate, 128000);
+        assert_eq!(res, Ok(4));
+    }
+
+    #[test]
+    fn test_unpack_frame_mpeg2() {
+        let buf: [u8; 6] = [0xFF,0xF2,0x20, 0xC4, 0x8E, 0xF6];
+        let mut m_MP3Decoder = make_decoder();
+        let res = m_MP3Decoder.unpack_frame_header(
+            &buf);
+        assert_eq!(m_MP3Decoder.m_MP3DecInfo.bitrate, 16000);
+        assert_eq!(m_MP3Decoder.m_MP3DecInfo.samprate, 22050);
+        assert_eq!(m_MP3Decoder.m_MPEGVersion, MPEGVersion::MPEG2);
+        assert_eq!(res, Ok(6));
+    }
 }
 
 #[cfg(test)]
