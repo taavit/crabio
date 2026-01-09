@@ -1352,10 +1352,10 @@ impl MP3Decoder {
     pub fn unpack_frame_header(
         &mut self,
         buf: &[u8],
-    ) -> i32 {
+    ) -> Result<usize, i8> {
     /* validate pointers and sync word */
         if (buf[0] & SYNCWORDH) != SYNCWORDH || (buf[1] & SYNCWORDL) != SYNCWORDL {
-            return -1;
+            return Err(ERR_MP3_INVALID_FRAMEHEADER);
         }
         let m_frame_header = &mut self.m_FrameHeader;
         let m_mp3_dec_info = &mut self.m_MP3DecInfo;
@@ -1379,7 +1379,7 @@ impl MP3Decoder {
             0x01 => StereoMode::Joint as i32,
             0x02 => StereoMode::Dual as i32,
             0x03 => StereoMode::Mono as i32,
-            _ => { return -1 }
+            _ => { return Err(ERR_MP3_INVALID_FRAMEHEADER) }
         }; /* maps to correct enum (see definition) */
         m_frame_header.modeExt = (buf[3] as i32>> 4) & 0x03;
         m_frame_header.copyFlag = (buf[3] as i32 >> 3) & 0x01;
@@ -1387,7 +1387,7 @@ impl MP3Decoder {
         m_frame_header.emphasis = (buf[3] as i32 >> 0) & 0x03;
         /* check parameters to avoid indexing tables with bad values */
         if m_frame_header.srIdx == 3 || m_frame_header.layer == 4 || m_frame_header.brIdx == 15 {
-            return -1;
+            return Err(ERR_MP3_INVALID_FRAMEHEADER);
         }
         /* for readability (we reference sfBandTable many times in decoder) */
         self.m_SFBandTable = SF_BAND_TABLE[self.m_MPEGVersion as usize][m_frame_header.srIdx as usize];
@@ -1417,10 +1417,10 @@ impl MP3Decoder {
         /* load crc word, if enabled, and return length of frame header (in bytes) */
         if m_frame_header.crc != 0 {
             m_frame_header.CRCWord = (buf[4] as i32) << 8 | (buf[5] as i32) << 0;
-            return 6;
+            return Ok(6);
         } else {
             m_frame_header.CRCWord = 0;
-            return 4;
+            return Ok(4);
         }
     }
 

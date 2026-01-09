@@ -3083,8 +3083,6 @@ pub unsafe fn MP3DecodeHelper(
     let mut offset: i32;
     let mut bitOffset: i32;
     let mut mainBits: i32;
-    let mut gr: i32;
-    let mut ch: i32;
     let fhBytes: i32;
     let siBytes: i32;
     let freeFrameBytes: i32;
@@ -3093,15 +3091,15 @@ pub unsafe fn MP3DecodeHelper(
     let mut huffBlockBits: i32;
     let mut mainPtr: *mut u8;
 
-    let m_MP3Decoder = &mut *m_MP3Decoder;
-    let buf = core::slice::from_raw_parts(inbuf, inbuf_len);
+    let m_MP3Decoder = unsafe { &mut *m_MP3Decoder };
+    let buf = unsafe { core::slice::from_raw_parts(inbuf, inbuf_len) };
     /* unpack frame header */
-    fhBytes = m_MP3Decoder.unpack_frame_header(
-        buf
-    );
-    if fhBytes < 0 {
-        return -1; // ERR_MP3_INVALID_FRAMEHEADER
-    }
+    let fhBytes = match m_MP3Decoder.unpack_frame_header(buf) {
+        Ok(v) => v,
+        Err(e) => {
+            return e as i32;
+        }
+    } as i32;
     inbuf = inbuf.add(fhBytes as usize);
 
     /* unpack side info */
