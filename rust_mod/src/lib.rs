@@ -1608,28 +1608,23 @@ pub unsafe fn DecodeHuffmanQuads(
  *                out of bits prematurely (invalid bitstream)
  **********************************************************************************************************************/
 
-#[unsafe(no_mangle)]
 pub unsafe extern "C" fn DecodeHuffman(
     mut buf: *mut u8,
     bitOffset: *mut i32,
     huffBlockBits: i32,
     gr: i32,
     ch: i32,
-    m_HuffmanInfo: *mut HuffmanInfo,
-    m_SFBandTable: *const SFBandTable, // SFBandTable_t*
-    m_SideInfoSub: *mut [[SideInfoSub; MAX_NCHAN]; MAX_NGRAN],
-    m_MPEGVersion: MPEGVersion, // MPEGVersion_t*
+    m_HuffmanInfo: &mut HuffmanInfo,
+    m_SFBandTable: &SFBandTable, // SFBandTable_t*
+    m_SideInfoSub: &mut [[SideInfoSub; MAX_NCHAN]; MAX_NGRAN],
+    m_MPEGVersion: MPEGVersion,
 ) -> i32 {
-    let m_HuffmanInfo = &mut *m_HuffmanInfo;
-    let sf = &*m_SFBandTable; // &SFBandTable
-    let version = m_MPEGVersion;
     let mut rEnd = [0; 4];
     let mut r1Start;
     let mut r2Start;
     let mut w;
     let mut bitsLeft;
     let startBuf = buf;
-    let m_SideInfoSub = unsafe { &mut *m_SideInfoSub };
 
     let sis = &m_SideInfoSub[gr as usize][ch as usize];
 
@@ -1641,22 +1636,22 @@ pub unsafe extern "C" fn DecodeHuffman(
         // Short blocks lub mixed blocks
         if sis.mixedBlock == 0 {
             // Czyste short blocks
-            r1Start = sf.s[((sis.region0Count + 1) / 3) as usize] as i32 * 3;
+            r1Start = m_SFBandTable.s[((sis.region0Count + 1) / 3) as usize] as i32 * 3;
         } else {
             // Mixed block
-            if version == MPEGVersion::MPEG1 {
-                r1Start = sf.l[(sis.region0Count + 1) as usize] as i32;
+            if m_MPEGVersion == MPEGVersion::MPEG1 {
+                r1Start = m_SFBandTable.l[(sis.region0Count + 1) as usize] as i32;
             } else {
                 // MPEG2 / MPEG2.5 – spec wymaga specjalnego obliczenia
-                w = sf.s[4] as i32 - sf.s[3] as i32;
-                r1Start = sf.l[6] as i32 + 2 * w;
+                w = m_SFBandTable.s[4] as i32 - m_SFBandTable.s[3] as i32;
+                r1Start = m_SFBandTable.l[6] as i32 + 2 * w;
             }
         }
         r2Start = MAX_NSAMP as i32; // short blocks nie mają regionu 2
     } else {
         // Long blocks
-        r1Start = sf.l[(sis.region0Count + 1) as usize] as i32;
-        r2Start = sf.l[(sis.region0Count + 1 + sis.region1Count + 1) as usize] as i32;
+        r1Start = m_SFBandTable.l[(sis.region0Count + 1) as usize] as i32;
+        r2Start = m_SFBandTable.l[(sis.region0Count + 1 + sis.region1Count + 1) as usize] as i32;
     }
 
     /* offset rEnd index by 1 so first region = rEnd[1] - rEnd[0], etc. */
@@ -1761,7 +1756,7 @@ const c18: [u32; 9] = [
     0x7f834ed0, 0x7ba3751d, 0x7401e4c1, 0x68d9f964, 0x5a82799a, 0x496af3e2, 0x36185aee, 0x2120fb83,
     0x0b27eb5c,
 ];
-const fastWin36: [u32; 18] = [
+const FAST_WIN36: [u32; 18] = [
     0x42aace8b, 0xc2e92724, 0x47311c28, 0xc95f619a, 0x4a868feb, 0xd0859d8c, 0x4c913b51, 0xd8243ea0,
     0x4d413ccc, 0xe0000000, 0x4c913b51, 0xe7dbc161, 0x4a868feb, 0xef7a6275, 0x47311c28, 0xf6a09e67,
     0x42aace8b, 0xfd16d8dd,
@@ -1818,7 +1813,6 @@ pub unsafe fn IMDCT36(
     let mut xPrevWin: [i32; 18] = [0; 18];
     let mut xp;
     let mut cp;
-    let mut wp;
     let mut c;
     let mut xo;
     let mut xe;
@@ -1868,8 +1862,7 @@ pub unsafe fn IMDCT36(
     let mut mOut = 0;
     if (btPrev == 0 && btCurr == 0) {
         /* fast path - use symmetry of sin window to reduce windowing multiplies to 18 (N/2) */
-        wp = fastWin36.as_ptr();
-        for i in 0..9 {
+        for (i, e) in FAST_WIN36.chunks_exact(2).enumerate() {
             /* do ARM-style pointer arithmetic (i still needed for y[] indexing - compiler spills if 2 y pointers) */
             c = *cp;
             cp = cp.sub(1);
@@ -1886,10 +1879,8 @@ pub unsafe fn IMDCT36(
             xPrev = xPrev.add(1);
             t = s - d;
 
-            yLo = (d + (mulshift_32(t, *wp as i32) << 2));
-            wp = wp.add(1);
-            yHi = (s + (mulshift_32(t, *wp as i32) << 2));
-            wp = wp.add(1);
+            yLo = (d + (mulshift_32(t, e[0] as i32) << 2));
+            yHi = (s + (mulshift_32(t, e[1] as i32) << 2));
             *y.add((i) * NBANDS as usize) = yLo;
             *y.add((17 - i) * NBANDS as usize) = yHi;
             mOut |= yLo.abs();
