@@ -30,7 +30,6 @@ DequantInfo_t *m_DequantInfo;
 HuffmanInfo_t *m_HuffmanInfo;
 IMDCTInfo_t *m_IMDCTInfo;
 ScaleFactorInfoSub_t m_ScaleFactorInfoSub[m_MAX_NGRAN][m_MAX_NCHAN];
-SubbandInfo_t *m_SubbandInfo;
 
 /* format = Q30, range = [0.0981, 1.9976]
  *
@@ -96,8 +95,7 @@ int MP3Decode( unsigned char *inbuf, size_t inbuf_len, int *bytesLeft, short *ou
         m_DequantInfo,
         &m_ScaleFactorInfoSub,
         &m_CriticalBandInfo,
-        m_IMDCTInfo,
-        m_SubbandInfo
+        m_IMDCTInfo
     );
 }
 
@@ -121,7 +119,6 @@ void MP3Decoder_ClearBuffer(void) {
     memset( m_HuffmanInfo,        0, sizeof(HuffmanInfo_t));                                   //Clear HuffmanInfo
     memset( m_DequantInfo,        0, sizeof(DequantInfo_t));                                   //Clear DequantInfo
     memset( m_IMDCTInfo,          0, sizeof(IMDCTInfo_t));                                     //Clear IMDCTInfo
-    memset( m_SubbandInfo,        0, sizeof(SubbandInfo_t));                                   //Clear SubbandInfo
     memset(&m_CriticalBandInfo,   0, sizeof(CriticalBandInfo_t)*m_MAX_NCHAN);                  //Clear CriticalBandInfo
 
     return;
@@ -159,10 +156,9 @@ bool MP3Decoder_AllocateBuffers(void) {
     if(!m_HuffmanInfo)      {m_HuffmanInfo   = (HuffmanInfo_t*)   __malloc_heap_psram(sizeof(HuffmanInfo_t)  );}
     if(!m_DequantInfo)      {m_DequantInfo   = (DequantInfo_t*)   __malloc_heap_psram(sizeof(DequantInfo_t)  );}
     if(!m_IMDCTInfo)        {m_IMDCTInfo     = (IMDCTInfo_t*)     __malloc_heap_psram(sizeof(IMDCTInfo_t)    );}
-    if(!m_SubbandInfo)      {m_SubbandInfo   = (SubbandInfo_t*)   __malloc_heap_psram(sizeof(SubbandInfo_t)  );}
 
     if(!m_MP3Decoder || !m_HuffmanInfo ||
-       !m_DequantInfo || !m_IMDCTInfo || !m_SubbandInfo) {
+       !m_DequantInfo || !m_IMDCTInfo) {
         MP3Decoder_FreeBuffers();
         log_e("not enough memory to allocate mp3decoder buffers");
         return false;
@@ -191,7 +187,6 @@ void MP3Decoder_FreeBuffers()
     if(m_HuffmanInfo)       {free(m_HuffmanInfo);     m_HuffmanInfo=NULL;}
     if(m_DequantInfo)       {free(m_DequantInfo);     m_DequantInfo=0;}
     if(m_IMDCTInfo)         {free(m_IMDCTInfo);       m_IMDCTInfo=0;}
-    if(m_SubbandInfo)       {free(m_SubbandInfo);     m_SubbandInfo=0;}
 
 //    log_i("MP3Decoder: %lu bytes memory was freed", ESP.getFreeHeap() - i);
 }

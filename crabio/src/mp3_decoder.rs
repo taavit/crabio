@@ -398,6 +398,7 @@ pub struct MP3Decoder {
     pub m_SideInfoSub: [[SideInfoSub; MAX_NCHAN]; MAX_NGRAN],
     pub m_SFBandTable: SFBandTable,
     pub m_ScaleFactorJS: ScaleFactorJS,
+    pub m_SubbandInfo: SubbandInfo,
 }
 
 
