@@ -205,11 +205,6 @@ const uint32_t csa[8][2] PROGMEM = {
 bool MP3Decoder_AllocateBuffers(void);
 void MP3Decoder_FreeBuffers();
 int  MP3Decode( unsigned char *inbuf, size_t inbuf_len, int *bytesLeft, short *outbuf, int useSize);
-void MP3GetLastFrameInfo(
-    MP3DecInfo *m_MP3DecInfo,
-    MP3FrameInfo *m_MP3FrameInfo,
-    int m_MPEGVersion
-);
 int  MP3FindSyncWord(unsigned char *buf, int nBytes);
 int  MP3GetSampRate();
 int  MP3GetChannels();

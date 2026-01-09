@@ -388,12 +388,6 @@ int MP3Dequantize(
     int m_MPEGVersion
 );
 
-void MP3GetLastFrameInfo(
-    MP3DecInfo *m_MP3DecInfo,
-    MP3FrameInfo *m_MP3FrameInfo,
-    int m_MPEGVersion
-);
-
 int MP3DecodeHelper(
     unsigned char *inbuf,
     size_t inbuf_len,

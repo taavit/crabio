@@ -3132,12 +3132,12 @@ pub unsafe extern "C" fn MP3Dequantize(
  *
  * Notes:       call this right after calling MP3Decode
  **********************************************************************************************************************/
-#[unsafe(no_mangle)]
- pub fn MP3GetLastFrameInfo(
+
+pub fn MP3GetLastFrameInfo(
     m_MP3Decoder: &mut MP3Decoder,
     m_MPEGVersion: i32
 ) {
-    if (m_MP3Decoder.m_MP3DecInfo.layer != 3){
+    if m_MP3Decoder.m_MP3DecInfo.layer != 3 {
         m_MP3Decoder.m_MP3FrameInfo.bitrate=0;
         m_MP3Decoder.m_MP3FrameInfo.nChans=0;
         m_MP3Decoder.m_MP3FrameInfo.samprate=0;
@@ -3145,8 +3145,7 @@ pub unsafe extern "C" fn MP3Dequantize(
         m_MP3Decoder.m_MP3FrameInfo.outputSamps=0;
         m_MP3Decoder.m_MP3FrameInfo.layer=0;
         m_MP3Decoder.m_MP3FrameInfo.version=0;
-    }
-    else{
+    } else{
         m_MP3Decoder.m_MP3FrameInfo.bitrate=m_MP3Decoder.m_MP3DecInfo.bitrate;
         m_MP3Decoder.m_MP3FrameInfo.nChans = m_MP3Decoder.m_MP3DecInfo.nChans;
         m_MP3Decoder.m_MP3FrameInfo.samprate=m_MP3Decoder.m_MP3DecInfo.samprate;
