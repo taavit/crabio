@@ -3099,7 +3099,7 @@ pub unsafe fn MP3DecodeHelper(
     bytesLeft: *mut i32,
     outbuf: *mut i16,
     useSize: i32,
-    // Przekazujemy wskaźniki do składowych "klasy" dekodera
+    // SELF
     m_MP3Decoder: *mut MP3Decoder,
 ) -> i32 {
     let mut offset: i32;
