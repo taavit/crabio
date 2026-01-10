@@ -70,6 +70,17 @@ impl<'a> BitStreamInfo<'a> {
             self.bytes = &[];
         }
     }
+
+    pub fn calc_bits_used(
+        &self,
+        start: &[u8],
+        start_offset: usize,
+    ) -> i32 {
+        let mut bits_used = (start.len() as i32 - self.bytes.len() as i32) * 8;
+        bits_used -= self.cached_bits;
+        bits_used -= start_offset as i32;
+        bits_used
+    }
 }
 
 #[cfg(test)]
