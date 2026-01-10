@@ -285,26 +285,24 @@ const M_SFLEN_TAB: [[u8; 2]; 16] = [
  *                (make sure dequantizer follows same convention)
  *              Illegal Intensity Position = 7 (always) for MPEG1 scale factors
  **********************************************************************************************************************/
-pub unsafe fn UnpackSFMPEG1(
+pub fn unpack_sfmpeg1(
     bsi: &mut BitStreamInfo,
     sis: &SideInfoSub,
     m_scale_factor_info_sub: &mut [[ScaleFactorInfoSub; 2]; 2],
-    scfsi: *const i32,
+    scfsi: &[i32; MAX_SCFBD],
     gr: usize,
     ch: usize,
 ) {
-    let sfb: i32;
+    let sfb: usize;
     let slen0: i32;
     let slen1: i32;
 
-    let bsi = unsafe { &mut *bsi };
-    let scfsi = unsafe { core::slice::from_raw_parts(scfsi, 4) };
     /* these can be 0, so make sure GetBits(bsi, 0) returns 0 (no >> 32 or anything) */
     slen0 = M_SFLEN_TAB[sis.sfCompress as usize][0] as i32;
     slen1 = M_SFLEN_TAB[sis.sfCompress as usize][1] as i32;
-    if (sis.blockType == 2) {
+    if sis.blockType == 2 {
         /* short block, type 2 (implies winSwitchFlag == 1) */
-        if (sis.mixedBlock != 0) {
+        if sis.mixedBlock != 0 {
             /* do long block portion */
             for sfb in 0..8 {
                 m_scale_factor_info_sub[gr][ch].l[sfb] = bsi.get_bits(slen0 as u32) as u8;
@@ -315,9 +313,9 @@ pub unsafe fn UnpackSFMPEG1(
             sfb = 0;
         }
         for sfb in sfb..6 {
-            m_scale_factor_info_sub[gr][ch].s[sfb as usize][0] = bsi.get_bits(slen0 as u32) as u8;
-            m_scale_factor_info_sub[gr][ch].s[sfb as usize][1] = bsi.get_bits(slen0 as u32) as u8;
-            m_scale_factor_info_sub[gr][ch].s[sfb as usize][2] = bsi.get_bits(slen0 as u32) as u8;
+            m_scale_factor_info_sub[gr][ch].s[sfb][0] = bsi.get_bits(slen0 as u32) as u8;
+            m_scale_factor_info_sub[gr][ch].s[sfb][1] = bsi.get_bits(slen0 as u32) as u8;
+            m_scale_factor_info_sub[gr][ch].s[sfb][2] = bsi.get_bits(slen0 as u32) as u8;
         }
         for sfb in 6..12 {
             m_scale_factor_info_sub[gr][ch].s[sfb][0] = bsi.get_bits(slen1 as u32) as u8;
@@ -330,7 +328,7 @@ pub unsafe fn UnpackSFMPEG1(
         m_scale_factor_info_sub[gr][ch].s[12][2] = 0;
     } else {
         /* long blocks, type 0, 1, or 3 */
-        if (gr == 0) {
+        if gr == 0 {
             /* first granule */
             for sfb in 0..11 {
                 m_scale_factor_info_sub[gr][ch].l[sfb] = bsi.get_bits(slen0 as u32) as u8;
@@ -345,7 +343,7 @@ pub unsafe fn UnpackSFMPEG1(
              *        1 = copy sf's from granule 0 into granule 1
              * for block type == 2, scfsi is always 0
              */
-            if (scfsi[0] != 0) {
+            if scfsi[0] != 0 {
                 for sfb in 0..6 {
                     m_scale_factor_info_sub[gr][ch].l[sfb] = m_scale_factor_info_sub[0][ch].l[sfb];
                 }
@@ -355,7 +353,7 @@ pub unsafe fn UnpackSFMPEG1(
                 }
             }
 
-            if (scfsi[1] != 0) {
+            if scfsi[1] != 0 {
                 for sfb in 6..11 {
                     m_scale_factor_info_sub[gr][ch].l[sfb] = m_scale_factor_info_sub[0][ch].l[sfb];
                 }
@@ -364,7 +362,7 @@ pub unsafe fn UnpackSFMPEG1(
                     m_scale_factor_info_sub[gr][ch].l[sfb] = bsi.get_bits(slen0 as u32) as u8;
                 }
             }
-            if (scfsi[2] != 0) {
+            if scfsi[2] != 0 {
                 for sfb in 11..16 {
                     m_scale_factor_info_sub[gr][ch].l[sfb] = m_scale_factor_info_sub[0][ch].l[sfb];
                 }
@@ -409,9 +407,9 @@ const NRTAB: [[[u8; 4]; 3]; 6] = [
     [[8, 8, 5, 0], [5, 4, 3, 0], [6, 6, 3, 0]],
 ];
 
-pub unsafe extern "C" fn UnpackSFMPEG2(
+pub fn unpack_sfmpeg2(
     bsi: &mut BitStreamInfo,
-    sis: *mut SideInfoSub,
+    sis: &mut SideInfoSub,
     sfis: &mut ScaleFactorInfoSub,
     _gr: i32, // nieużywane, zachowane dla sygnatury
     ch: i32,
@@ -424,8 +422,6 @@ pub unsafe extern "C" fn UnpackSFMPEG2(
     let mut nrIdx: i32;
     let mut slen = [0i32; 4];
     let mut nr = [0i32; 4];
-
-    let sis = &mut *sis;
 
     let mut sfCompress = sis.sfCompress;
     let mut preFlag = 0;
@@ -2911,20 +2907,15 @@ pub unsafe fn UnpackScaleFactors(
     bitsAvail: i32,
     gr: i32,
     ch: i32,
-    m_SideInfoSub: *mut [[SideInfoSub; 2]; 2],
-    m_ScaleFactorInfoSub: *mut [[ScaleFactorInfoSub; 2]; 2],
-    m_MP3DecInfo: *mut MP3DecInfo,
-    m_SideInfo: *mut SideInfo,
-    m_FrameHeader: *mut FrameHeader,
+    m_SideInfoSub: &mut [[SideInfoSub; 2]; 2],
+    m_ScaleFactorInfoSub: &mut [[ScaleFactorInfoSub; 2]; 2],
+    m_MP3DecInfo: &mut MP3DecInfo,
+    m_SideInfo: &mut SideInfo,
+    m_FrameHeader: &mut FrameHeader,
     m_ScaleFactorJS: &mut ScaleFactorJS,
     m_MPEGVersion: MPEGVersion,
 ) -> i32 {
     /* init GetBits reader */
-    let m_SideInfoSub = &mut *m_SideInfoSub;
-    let m_SideInfo = &*m_SideInfo;
-    let m_MP3DecInfo = &mut *m_MP3DecInfo;
-    let m_FrameHeader = &*m_FrameHeader;
-    let mut m_ScaleFactorInfoSub = &mut *m_ScaleFactorInfoSub;
     let startBuf = unsafe { core::slice::from_raw_parts(buf, (bitsAvail as usize+ *bitOffset as usize + 7) / 8) };
     let mut bsi = BitStreamInfo::from_slice(unsafe { core::slice::from_raw_parts(buf, (bitsAvail as usize+ *bitOffset as usize + 7) / 8) });
 
@@ -2932,17 +2923,17 @@ pub unsafe fn UnpackScaleFactors(
         bsi.get_bits(*bitOffset as u32);
     }
 
-    if (m_MPEGVersion == MPEGVersion::MPEG1) {
-        UnpackSFMPEG1(
+    if m_MPEGVersion == MPEGVersion::MPEG1 {
+        unpack_sfmpeg1(
             &mut bsi,
             &mut m_SideInfoSub[gr as usize][ch as usize],
-            &mut m_ScaleFactorInfoSub,
-            m_SideInfo.scfsi[ch as usize].as_ptr(),
+            m_ScaleFactorInfoSub,
+            &m_SideInfo.scfsi[ch as usize],
             gr as usize,
             ch as usize,
         );
     } else {
-        UnpackSFMPEG2(
+        unpack_sfmpeg2(
             &mut bsi,
             &mut m_SideInfoSub[gr as usize][ch as usize],
             &mut m_ScaleFactorInfoSub[gr as usize][ch as usize],
@@ -2957,7 +2948,7 @@ pub unsafe fn UnpackScaleFactors(
         m_SideInfoSub[gr as usize][ch as usize].part23_length;
 
         
-    let mut bitsUsed = bsi.calc_bits_used(startBuf, *bitOffset as usize);
+    let bitsUsed = bsi.calc_bits_used(startBuf, *bitOffset as usize);
     buf = buf.add((bitsUsed + *bitOffset) as usize >> 3);
     *bitOffset = (bitsUsed + *bitOffset) & 0x07;
 
