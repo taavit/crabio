@@ -288,7 +288,7 @@ const M_SFLEN_TAB: [[u8; 2]; 16] = [
 pub fn unpack_sfmpeg1(
     bsi: &mut BitStreamInfo,
     sis: &SideInfoSub,
-    m_scale_factor_info_sub: &mut [[ScaleFactorInfoSub; 2]; 2],
+    m_scale_factor_info_sub: &mut [[ScaleFactorInfoSub; MAX_NCHAN]; MAX_NGRAN],
     scfsi: &[i32; MAX_SCFBD],
     gr: usize,
     ch: usize,
@@ -413,95 +413,95 @@ pub fn unpack_sfmpeg2(
     sfis: &mut ScaleFactorInfoSub,
     _gr: i32, // nieużywane, zachowane dla sygnatury
     ch: i32,
-    modeExt: i32,
+    mode_ext: i32,
     sfjs: &mut ScaleFactorJS,
 ) {
-    let mut sfb: i32;
-    let mut sfcIdx: i32 = 0;
-    let mut btIdx: i32;
-    let mut nrIdx: i32;
+    let mut sfb: usize;
+    let sfc_idx: usize;
+    let mut bt_idx: usize;
+    let mut nr_idx: usize;
     let mut slen = [0i32; 4];
     let mut nr = [0i32; 4];
 
-    let mut sfCompress = sis.sfCompress;
-    let mut preFlag = 0;
-    let mut intensityScale = 0;
+    let mut sf_compress = sis.sfCompress;
+    let mut pre_flag = 0;
+    let mut intensity_scale = 0;
 
     /* stereo mode bits (1 = on): bit 1 = mid-side on/off, bit 0 = intensity on/off */
-    if !((modeExt & 0x01 != 0) && (ch == 1)) {
-        if sfCompress < 400 {
-            slen[0] = (sfCompress >> 4) / 5;
-            slen[1] = (sfCompress >> 4) % 5;
-            slen[2] = (sfCompress & 0x0f) >> 2;
-            slen[3] = sfCompress & 0x03;
-            sfcIdx = 0;
-        } else if sfCompress < 500 {
-            sfCompress -= 400;
-            slen[0] = (sfCompress >> 2) / 5;
-            slen[1] = (sfCompress >> 2) % 5;
-            slen[2] = (sfCompress & 0x03);
+    if !((mode_ext & 0x01 != 0) && (ch == 1)) {
+        if sf_compress < 400 {
+            slen[0] = (sf_compress >> 4) / 5;
+            slen[1] = (sf_compress >> 4) % 5;
+            slen[2] = (sf_compress & 0x0f) >> 2;
+            slen[3] = sf_compress & 0x03;
+            sfc_idx = 0;
+        } else if sf_compress < 500 {
+            sf_compress -= 400;
+            slen[0] = (sf_compress >> 2) / 5;
+            slen[1] = (sf_compress >> 2) % 5;
+            slen[2] = sf_compress & 0x03;
             slen[3] = 0;
-            sfcIdx = 1;
+            sfc_idx = 1;
         } else {
-            sfCompress -= 500;
-            slen[0] = sfCompress / 3;
-            slen[1] = sfCompress % 3;
+            sf_compress -= 500;
+            slen[0] = sf_compress / 3;
+            slen[1] = sf_compress % 3;
             slen[2] = 0;
             slen[3] = 0;
             if sis.mixedBlock != 0 {
                 slen[2] = slen[1];
                 slen[1] = slen[0];
             }
-            preFlag = 1;
-            sfcIdx = 2;
+            pre_flag = 1;
+            sfc_idx = 2;
         }
     } else {
         /* intensity stereo ch = 1 (right) */
-        intensityScale = sfCompress & 0x01;
-        sfCompress >>= 1;
-        if sfCompress < 180 {
-            slen[0] = sfCompress / 36;
-            slen[1] = (sfCompress % 36) / 6;
-            slen[2] = (sfCompress % 36) % 6;
+        intensity_scale = sf_compress & 0x01;
+        sf_compress >>= 1;
+        if sf_compress < 180 {
+            slen[0] = sf_compress / 36;
+            slen[1] = (sf_compress % 36) / 6;
+            slen[2] = (sf_compress % 36) % 6;
             slen[3] = 0;
-            sfcIdx = 3;
-        } else if sfCompress < 244 {
-            sfCompress -= 180;
-            slen[0] = (sfCompress & 0x3f) >> 4;
-            slen[1] = (sfCompress & 0x0f) >> 2;
-            slen[2] = (sfCompress & 0x03);
+            sfc_idx = 3;
+        } else if sf_compress < 244 {
+            sf_compress -= 180;
+            slen[0] = (sf_compress & 0x3f) >> 4;
+            slen[1] = (sf_compress & 0x0f) >> 2;
+            slen[2] = sf_compress & 0x03;
             slen[3] = 0;
-            sfcIdx = 4;
+            sfc_idx = 4;
         } else {
-            sfCompress -= 244;
-            slen[0] = sfCompress / 3;
-            slen[1] = sfCompress % 3;
+            sf_compress -= 244;
+            slen[0] = sf_compress / 3;
+            slen[1] = sf_compress % 3;
             slen[2] = 0;
             slen[3] = 0;
-            sfcIdx = 5;
+            sfc_idx = 5;
         }
     }
 
     /* btIdx: (0,1,3) --> 0, (2 non-mixed) --> 1, (2 mixed) ---> 2 */
-    btIdx = 0;
+    bt_idx = 0;
     if sis.blockType == 2 {
-        btIdx = if sis.mixedBlock != 0 { 2 } else { 1 };
+        bt_idx = if sis.mixedBlock != 0 { 2 } else { 1 };
     }
 
     for i in 0..4 {
         // Zakładamy, że NRTab jest dostępny jako static/extern
-        nr[i] = NRTAB[sfcIdx as usize][btIdx as usize][i] as i32;
+        nr[i] = NRTAB[sfc_idx][bt_idx][i] as i32;
     }
 
     /* save intensity stereo scale factor info */
-    if (modeExt & 0x01 != 0) && (ch == 1) {
+    if (mode_ext & 0x01 != 0) && (ch == 1) {
         for i in 0..4 {
             sfjs.slen[i] = slen[i];
             sfjs.nr[i] = nr[i];
         }
-        sfjs.intensity_scale = intensityScale;
+        sfjs.intensity_scale = intensity_scale;
     }
-    sis.preFlag = preFlag;
+    sis.preFlag = pre_flag;
 
     /* Rozpakowywanie skal */
     if sis.blockType == 2 {
@@ -511,21 +511,21 @@ pub fn unpack_sfmpeg2(
                 sfis.l[sfb] = bsi.get_bits(slen[0] as u32) as u8;
             }
             sfb = 3; /* Startowy indeks sfb dla krótkich */
-            nrIdx = 1;
+            nr_idx = 1;
         } else {
             sfb = 0;
-            nrIdx = 0;
+            nr_idx = 0;
         }
 
         /* Pozostałe bloki krótkie */
-        while nrIdx <= 3 {
-            for _ in 0..nr[nrIdx as usize] {
-                sfis.s[sfb as usize][0] = bsi.get_bits(slen[nrIdx as usize] as u32) as u8;
-                sfis.s[sfb as usize][1] = bsi.get_bits(slen[nrIdx as usize] as u32) as u8;
-                sfis.s[sfb as usize][2] = bsi.get_bits(slen[nrIdx as usize] as u32) as u8;
+        while nr_idx <= 3 {
+            for _ in 0..nr[nr_idx] {
+                sfis.s[sfb][0] = bsi.get_bits(slen[nr_idx] as u32) as u8;
+                sfis.s[sfb][1] = bsi.get_bits(slen[nr_idx] as u32) as u8;
+                sfis.s[sfb][2] = bsi.get_bits(slen[nr_idx] as u32) as u8;
                 sfb += 1;
             }
-            nrIdx += 1;
+            nr_idx += 1;
         }
         /* Ostatnie pasmo nie jest przesyłane */
         sfis.s[12][0] = 0;
@@ -534,9 +534,9 @@ pub fn unpack_sfmpeg2(
     } else {
         /* Bloki długie (long) */
         sfb = 0;
-        for nrIdx in 0..=3 {
-            for _ in 0..nr[nrIdx as usize] {
-                sfis.l[sfb as usize] = bsi.get_bits(slen[nrIdx as usize] as u32) as u8;
+        for nr_idx in 0..=3 {
+            for _ in 0..nr[nr_idx] {
+                sfis.l[sfb] = bsi.get_bits(slen[nr_idx] as u32) as u8;
                 sfb += 1;
             }
         }
@@ -569,7 +569,7 @@ pub fn unpack_sfmpeg2(
  **********************************************************************************************************************/
 // no improvement with section=data
 
-const huffTable: [u16; 4242] = [
+const HUFF_TABLE: [u16; 4242] = [
     /* huffTable01[9] */
     0xf003, 0x3112, 0x3101, 0x2011, 0x2011, 0x1000, 0x1000, 0x1000, 0x1000,
     /* huffTable02[65] */
@@ -1157,7 +1157,7 @@ pub unsafe fn DecodeHuffmanPairs(
     startBits = bitsLeft;
 
     // Uzyskiwanie dostępu do tablic huffmana (zakładam nazwy z Twojego kodu)
-    tBase = (huffTable.as_ptr() as *const u16).add(huffTabOffset[tabIdx as usize] as usize);
+    tBase = (HUFF_TABLE.as_ptr() as *const u16).add(huffTabOffset[tabIdx as usize] as usize);
     linBits = huffTabLookup[tabIdx as usize].lin_bits as i32;
     tabType = huffTabLookup[tabIdx as usize].tab_type as i32;
 
