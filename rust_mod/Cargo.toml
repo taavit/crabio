@@ -8,4 +8,3 @@ crate-type = ["staticlib"]
 
 [dependencies]
 crabio = { path="../crabio" }
-esp-println = { version = "0.16.1", features = ["esp32s3"] }
