@@ -212,7 +212,7 @@ pub fn idct_9(x: &mut [i32; 9]) {
 ///  P O L Y P H A S E
 ///
 
-pub const HUFF_PAIRTABS: u8          = 32;
+pub const HUFF_PAIRTABS: usize       = 32;
 pub const BLOCK_SIZE: usize          = 18;
 pub const NBANDS: usize              = 32;
 pub const MAX_REORDER_SAMPS: usize   = (192-126)*3;      // largest critical band for short blocks (see sfBandTable)
@@ -311,7 +311,7 @@ pub struct HuffmanInfo {
 }
 
 #[repr(C)]
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum HuffTabType {
     NoBits,
     OneShot,
@@ -325,7 +325,7 @@ pub enum HuffTabType {
 #[repr(C)]
 pub struct HuffTabLookup {
     pub lin_bits: i32,
-    pub tab_type: i32, /*HuffTabType*/
+    pub tab_type: HuffTabType, /*HuffTabType*/
 }
 
 #[repr(C)]

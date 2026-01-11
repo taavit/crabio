@@ -974,147 +974,147 @@ const huffTabOffset: [u16; HUFF_PAIRTABS as usize] = [
     m_HUFF_OFFSET_24,
 ];
 
-const huffTabLookup: [HuffTabLookup; HUFF_PAIRTABS as usize] = [
+const HUFF_TAB_LOOKUP: [HuffTabLookup; HUFF_PAIRTABS] = [
     HuffTabLookup {
         lin_bits: 0,
-        tab_type: HuffTabType::NoBits as i32,
+        tab_type: HuffTabType::NoBits,
     },
     HuffTabLookup {
         lin_bits: 0,
-        tab_type: HuffTabType::OneShot as i32,
+        tab_type: HuffTabType::OneShot,
     },
     HuffTabLookup {
         lin_bits: 0,
-        tab_type: HuffTabType::OneShot as i32,
+        tab_type: HuffTabType::OneShot,
     },
     HuffTabLookup {
         lin_bits: 0,
-        tab_type: HuffTabType::OneShot as i32,
+        tab_type: HuffTabType::OneShot,
     },
     HuffTabLookup {
         lin_bits: 0,
-        tab_type: HuffTabType::InvalidTab as i32,
+        tab_type: HuffTabType::InvalidTab,
     },
     HuffTabLookup {
         lin_bits: 0,
-        tab_type: HuffTabType::OneShot as i32,
+        tab_type: HuffTabType::OneShot,
     },
     HuffTabLookup {
         lin_bits: 0,
-        tab_type: HuffTabType::OneShot as i32,
+        tab_type: HuffTabType::OneShot,
     },
     HuffTabLookup {
         lin_bits: 0,
-        tab_type: HuffTabType::LoopNoLinbits as i32,
+        tab_type: HuffTabType::LoopNoLinbits,
     },
     HuffTabLookup {
         lin_bits: 0,
-        tab_type: HuffTabType::LoopNoLinbits as i32,
+        tab_type: HuffTabType::LoopNoLinbits,
     },
     HuffTabLookup {
         lin_bits: 0,
-        tab_type: HuffTabType::LoopNoLinbits as i32,
+        tab_type: HuffTabType::LoopNoLinbits,
     },
     HuffTabLookup {
         lin_bits: 0,
-        tab_type: HuffTabType::LoopNoLinbits as i32,
+        tab_type: HuffTabType::LoopNoLinbits,
     },
     HuffTabLookup {
         lin_bits: 0,
-        tab_type: HuffTabType::LoopNoLinbits as i32,
+        tab_type: HuffTabType::LoopNoLinbits,
     },
     HuffTabLookup {
         lin_bits: 0,
-        tab_type: HuffTabType::LoopNoLinbits as i32,
+        tab_type: HuffTabType::LoopNoLinbits,
     },
     HuffTabLookup {
         lin_bits: 0,
-        tab_type: HuffTabType::LoopNoLinbits as i32,
+        tab_type: HuffTabType::LoopNoLinbits,
     },
     HuffTabLookup {
         lin_bits: 0,
-        tab_type: HuffTabType::InvalidTab as i32,
+        tab_type: HuffTabType::InvalidTab,
     },
     HuffTabLookup {
         lin_bits: 0,
-        tab_type: HuffTabType::LoopNoLinbits as i32,
+        tab_type: HuffTabType::LoopNoLinbits,
     },
     HuffTabLookup {
         lin_bits: 1,
-        tab_type: HuffTabType::LoopLinbits as i32,
+        tab_type: HuffTabType::LoopLinbits,
     },
     HuffTabLookup {
         lin_bits: 2,
-        tab_type: HuffTabType::LoopLinbits as i32,
+        tab_type: HuffTabType::LoopLinbits,
     },
     HuffTabLookup {
         lin_bits: 3,
-        tab_type: HuffTabType::LoopLinbits as i32,
+        tab_type: HuffTabType::LoopLinbits,
     },
     HuffTabLookup {
         lin_bits: 4,
-        tab_type: HuffTabType::LoopLinbits as i32,
+        tab_type: HuffTabType::LoopLinbits,
     },
     HuffTabLookup {
         lin_bits: 6,
-        tab_type: HuffTabType::LoopLinbits as i32,
+        tab_type: HuffTabType::LoopLinbits,
     },
     HuffTabLookup {
         lin_bits: 8,
-        tab_type: HuffTabType::LoopLinbits as i32,
+        tab_type: HuffTabType::LoopLinbits,
     },
     HuffTabLookup {
         lin_bits: 10,
-        tab_type: HuffTabType::LoopLinbits as i32,
+        tab_type: HuffTabType::LoopLinbits,
     },
     HuffTabLookup {
         lin_bits: 13,
-        tab_type: HuffTabType::LoopLinbits as i32,
+        tab_type: HuffTabType::LoopLinbits,
     },
     HuffTabLookup {
         lin_bits: 4,
-        tab_type: HuffTabType::LoopLinbits as i32,
+        tab_type: HuffTabType::LoopLinbits,
     },
     HuffTabLookup {
         lin_bits: 5,
-        tab_type: HuffTabType::LoopLinbits as i32,
+        tab_type: HuffTabType::LoopLinbits,
     },
     HuffTabLookup {
         lin_bits: 6,
-        tab_type: HuffTabType::LoopLinbits as i32,
+        tab_type: HuffTabType::LoopLinbits,
     },
     HuffTabLookup {
         lin_bits: 7,
-        tab_type: HuffTabType::LoopLinbits as i32,
+        tab_type: HuffTabType::LoopLinbits,
     },
     HuffTabLookup {
         lin_bits: 8,
-        tab_type: HuffTabType::LoopLinbits as i32,
+        tab_type: HuffTabType::LoopLinbits,
     },
     HuffTabLookup {
         lin_bits: 9,
-        tab_type: HuffTabType::LoopLinbits as i32,
+        tab_type: HuffTabType::LoopLinbits,
     },
     HuffTabLookup {
         lin_bits: 11,
-        tab_type: HuffTabType::LoopLinbits as i32,
+        tab_type: HuffTabType::LoopLinbits,
     },
     HuffTabLookup {
         lin_bits: 13,
-        tab_type: HuffTabType::LoopLinbits as i32,
+        tab_type: HuffTabType::LoopLinbits,
     },
 ];
 
-const quadTabOffset: [i32; 2] = [0, 64];
-const quadTabMaxBits: [i32; 2] = [6, 4];
+const QUAD_TAB_OFFSET: [i32; 2] = [0, 64];
+const QUAD_TAB_MAX_BITS: [i32; 2] = [6, 4];
 
 pub unsafe fn DecodeHuffmanPairs(
     mut xy: *mut i32,
-    mut nVals: i32,
-    tabIdx: i32,
-    mut bitsLeft: i32,
+    mut n_vals: i32,
+    tab_idx: i32,
+    mut bits_left: i32,
     mut buf: *const u8,
-    bitOffset: i32,
+    bit_offset: i32,
 ) -> i32 {
     let mut x: i32;
     let mut y: i32;
@@ -1125,89 +1125,89 @@ pub unsafe fn DecodeHuffmanPairs(
     let linBits: i32;
     let mut maxBits: i32;
     let mut minBits: i32;
-    let tabType: i32; // HuffTabType_t
+    let tabType: HuffTabType; // HuffTabType_t
     let mut cw: u16;
     let tBase: *const u16;
     let mut tCurr: *const u16;
     let mut cache: u32;
 
-    if nVals <= 0 {
+    if n_vals <= 0 {
         return 0;
     }
 
-    if bitsLeft < 0 {
+    if bits_left < 0 {
         return -1;
     }
-    startBits = bitsLeft;
+    startBits = bits_left;
 
     // Uzyskiwanie dostępu do tablic huffmana (zakładam nazwy z Twojego kodu)
-    tBase = (HUFF_TABLE.as_ptr() as *const u16).add(huffTabOffset[tabIdx as usize] as usize);
-    linBits = huffTabLookup[tabIdx as usize].lin_bits as i32;
-    tabType = huffTabLookup[tabIdx as usize].tab_type as i32;
+    tBase = (HUFF_TABLE.as_ptr() as *const u16).add(huffTabOffset[tab_idx as usize] as usize);
+    linBits = HUFF_TAB_LOOKUP[tab_idx as usize].lin_bits as i32;
+    tabType = HUFF_TAB_LOOKUP[tab_idx as usize].tab_type;
 
     /* Walidacja - zachowanie logiki z log_i */
-    if (nVals & 0x01) != 0 {
+    if (n_vals & 0x01) != 0 {
         return -1;
     }
-    if tabIdx >= HUFF_PAIRTABS as i32 {
+    if tab_idx >= HUFF_PAIRTABS as i32 {
         return -1;
     }
-    if tabIdx < 0 {
+    if tab_idx < 0 {
         return -1;
     }
-    if tabType == HuffTabType::InvalidTab as i32 {
+    if tabType == HuffTabType::InvalidTab {
         return -1;
     }
 
     /* initially fill cache with any partial byte */
     cache = 0;
-    cachedBits = (8 - bitOffset) & 0x07;
+    cachedBits = (8 - bit_offset) & 0x07;
     if cachedBits != 0 {
         cache = (*buf as u32) << (32 - cachedBits);
         buf = buf.add(1);
     }
-    bitsLeft -= cachedBits;
+    bits_left -= cachedBits;
 
-    if tabType == HuffTabType::NoBits as i32 {
-        for i in (0..nVals).step_by(2) {
+    if tabType == HuffTabType::NoBits {
+        for i in (0..n_vals).step_by(2) {
             *xy.add(i as usize) = 0;
             *xy.add((i + 1) as usize) = 0;
         }
         return 0;
-    } else if tabType == HuffTabType::OneShot as i32 {
+    } else if tabType == HuffTabType::OneShot {
         maxBits = ((*(tBase) >> 0) & 0x000f) as i32;
         let tBase_one_shot = tBase.add(1);
         padBits = 0;
 
-        while nVals > 0 {
-            if bitsLeft >= 16 {
+        while n_vals > 0 {
+            if bits_left >= 16 {
                 cache |= (*buf as u32) << (24 - cachedBits);
                 buf = buf.add(1);
                 cache |= (*buf as u32) << (16 - cachedBits);
                 buf = buf.add(1);
                 cachedBits += 16;
-                bitsLeft -= 16;
+                bits_left -= 16;
             } else {
-                if cachedBits + bitsLeft <= 0 {
+                if cachedBits + bits_left <= 0 {
                     return -1;
                 }
-                if bitsLeft > 0 {
+                if bits_left > 0 {
                     cache |= (*buf as u32) << (24 - cachedBits);
                     buf = buf.add(1);
                 }
-                if bitsLeft > 8 {
+                if bits_left > 8 {
                     cache |= (*buf as u32) << (16 - cachedBits);
                     buf = buf.add(1);
                 }
-                cachedBits += bitsLeft;
-                bitsLeft = 0;
+                cachedBits += bits_left;
+                bits_left = 0;
 
                 cache &= (0x80000000u32 as i32 >> (cachedBits - 1)) as u32;
                 padBits = 11;
                 cachedBits += padBits;
             }
 
-            while nVals > 0 && cachedBits >= 11 {
+            while n_vals > 0 && cachedBits >= 11 {
                 cw = (*tBase_one_shot.add((cache >> (32 - maxBits)) as usize));
 
                 len = ((cw >> 12) & 0x000f) as i32;
@@ -1236,44 +1236,44 @@ pub unsafe fn DecodeHuffmanPairs(
                 xy = xy.add(1);
                 *xy = y;
                 xy = xy.add(1);
-                nVals -= 2;
+                n_vals -= 2;
             }
         }
-        bitsLeft += cachedBits - padBits;
-        return startBits - bitsLeft;
-    } else if tabType == HuffTabType::LoopLinbits as i32
-        || tabType == HuffTabType::LoopNoLinbits as i32
+        bits_left += cachedBits - padBits;
+        return startBits - bits_left;
+    } else if tabType == HuffTabType::LoopLinbits
+        || tabType == HuffTabType::LoopNoLinbits
     {
         tCurr = tBase;
         padBits = 0;
-        while nVals > 0 {
-            if bitsLeft >= 16 {
+        while n_vals > 0 {
+            if bits_left >= 16 {
                 cache |= (*buf as u32) << (24 - cachedBits);
                 buf = buf.add(1);
                 cache |= (*buf as u32) << (16 - cachedBits);
                 buf = buf.add(1);
                 cachedBits += 16;
-                bitsLeft -= 16;
+                bits_left -= 16;
             } else {
-                if cachedBits + bitsLeft <= 0 {
+                if cachedBits + bits_left <= 0 {
                     return -1;
                 }
-                if bitsLeft > 0 {
+                if bits_left > 0 {
                     cache |= (*buf as u32) << (24 - cachedBits);
                     buf = buf.add(1);
                 }
-                if bitsLeft > 8 {
+                if bits_left > 8 {
                     cache |= (*buf as u32) << (16 - cachedBits);
                     buf = buf.add(1);
                 }
-                cachedBits += bitsLeft;
-                bitsLeft = 0;
+                cachedBits += bits_left;
+                bits_left = 0;
                 cache &= (0x80000000u32 as i32 >> (cachedBits - 1)) as u32;
                 padBits = 11;
                 cachedBits += padBits;
             }
 
-            while nVals > 0 && cachedBits >= 11 {
+            while n_vals > 0 && cachedBits >= 11 {
                 maxBits = (*tCurr & 0x000f) as i32;
                 cw = *(tCurr.add(((cache >> (32 - maxBits)) + 1) as usize));
                 len = ((cw >> 12) & 0x000f) as i32;
@@ -1290,20 +1290,20 @@ pub unsafe fn DecodeHuffmanPairs(
                 x = ((cw >> 4) & 0x000f) as i32;
                 y = ((cw >> 8) & 0x000f) as i32;
 
-                if x == 15 && tabType == HuffTabType::LoopLinbits as i32 {
+                if x == 15 && tabType == HuffTabType::LoopLinbits {
                     minBits = linBits + 1 + (if y != 0 { 1 } else { 0 });
-                    if cachedBits + bitsLeft < minBits {
+                    if cachedBits + bits_left < minBits {
                         return -1;
                     }
                     while cachedBits < minBits {
                         cache |= (*buf as u32) << (24 - cachedBits);
                         buf = buf.add(1);
                         cachedBits += 8;
-                        bitsLeft -= 8;
+                        bits_left -= 8;
                     }
-                    if bitsLeft < 0 {
-                        cachedBits += bitsLeft;
-                        bitsLeft = 0;
+                    if bits_left < 0 {
+                        cachedBits += bits_left;
+                        bits_left = 0;
                         cache &= (0x80000000u32 as i32 >> (cachedBits - 1)) as u32;
                     }
                     x += (cache >> (32 - linBits as u32)) as i32;
@@ -1316,20 +1316,20 @@ pub unsafe fn DecodeHuffmanPairs(
                     cachedBits -= 1;
                 }
 
-                if y == 15 && tabType == HuffTabType::LoopLinbits as i32 {
+                if y == 15 && tabType == HuffTabType::LoopLinbits {
                     minBits = linBits + 1;
-                    if cachedBits + bitsLeft < minBits {
+                    if cachedBits + bits_left < minBits {
                         return -1;
                     }
                     while cachedBits < minBits {
                         cache |= (*buf as u32) << (24 - cachedBits);
                         buf = buf.add(1);
                         cachedBits += 8;
-                        bitsLeft -= 8;
+                        bits_left -= 8;
                     }
-                    if bitsLeft < 0 {
-                        cachedBits += bitsLeft;
-                        bitsLeft = 0;
+                    if bits_left < 0 {
+                        cachedBits += bits_left;
+                        bits_left = 0;
                         cache &= (0x80000000u32 as i32 >> (cachedBits - 1)) as u32;
                     }
                     y += (cache >> (32 - linBits as u32)) as i32;
@@ -1350,12 +1350,12 @@ pub unsafe fn DecodeHuffmanPairs(
                 xy = xy.add(1);
                 *xy = y;
                 xy = xy.add(1);
-                nVals -= 2;
+                n_vals -= 2;
                 tCurr = tBase;
             }
         }
-        bitsLeft += cachedBits - padBits;
-        return startBits - bitsLeft;
+        bits_left += cachedBits - padBits;
+        return startBits - bits_left;
     }
 
     -1
@@ -1422,8 +1422,8 @@ pub unsafe fn DecodeHuffmanQuads(
 
     // Pobieranie bazy tabeli i parametrów (zakładamy dostęp do globalnych tablic)
     // tBase = (unsigned char *) quadTable + quadTabOffset[tabIdx];
-    let t_base = (quadTable.as_ptr() as *const u8).add(quadTabOffset[tabIdx as usize] as usize);
-    maxBits = quadTabMaxBits[tabIdx as usize] as i32;
+    let t_base = (quadTable.as_ptr() as *const u8).add(QUAD_TAB_OFFSET[tabIdx as usize] as usize);
+    maxBits = QUAD_TAB_MAX_BITS[tabIdx as usize] as i32;
 
     /* Inicjalizacja cache partial byte */
     cache = 0;
