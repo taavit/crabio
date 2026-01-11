@@ -1080,8 +1080,7 @@ const QUAD_TAB_OFFSET: [i32; 2] = [0, 64];
 const QUAD_TAB_MAX_BITS: [i32; 2] = [6, 4];
 
 pub unsafe fn DecodeHuffmanPairs(
-    mut xy: *mut i32,
-    mut n_vals: i32,
+    mut xy: &mut [i32],
     tab_idx: i32,
     mut bits_left: i32,
     mut buf: *const u8,
@@ -1102,7 +1101,9 @@ pub unsafe fn DecodeHuffmanPairs(
     let mut tCurr: *const u16;
     let mut cache: u32;
 
-    if n_vals <= 0 {
+    let n_vals = xy.len();
+
+    if xy.is_empty() {
         return 0;
     }
 
@@ -1142,8 +1143,8 @@ pub unsafe fn DecodeHuffmanPairs(
     match tabType {
         HuffTabType::NoBits => {
             for i in (0..n_vals).step_by(2) {
-                *xy.add(i as usize) = 0;
-                *xy.add((i + 1) as usize) = 0;
+                xy[i as usize] = 0;
+                xy[(i + 1) as usize] = 0;
             }
             return 0;
         }
@@ -1152,7 +1153,7 @@ pub unsafe fn DecodeHuffmanPairs(
             let tBase_one_shot = tBase.add(1);
             padBits = 0;
 
-            while n_vals > 0 {
+            while xy.len() > 0 {
                 if bits_left >= 16 {
                     cache |= (*buf as u32) << (24 - cachedBits);
                     buf = buf.add(1);
@@ -1180,7 +1181,7 @@ pub unsafe fn DecodeHuffmanPairs(
                     cachedBits += padBits;
                 }
 
-                while n_vals > 0 && cachedBits >= 11 {
+                while xy.len() > 0 && cachedBits >= 11 {
                     cw = (*tBase_one_shot.add((cache >> (32 - maxBits)) as usize));
 
                     len = ((cw >> 12) & 0x000f) as i32;
@@ -1205,11 +1206,9 @@ pub unsafe fn DecodeHuffmanPairs(
                         return -1;
                     }
 
-                    *xy = x;
-                    xy = xy.add(1);
-                    *xy = y;
-                    xy = xy.add(1);
-                    n_vals -= 2;
+                    xy[0] = x;
+                    xy[1] = y;
+                    xy = &mut xy[2..];
                 }
             }
             bits_left += cachedBits - padBits;
@@ -1218,7 +1217,7 @@ pub unsafe fn DecodeHuffmanPairs(
         HuffTabType::LoopLinbits | HuffTabType::LoopNoLinbits => {
             tCurr = tBase;
             padBits = 0;
-            while n_vals > 0 {
+            while xy.len() > 0 {
                 if bits_left >= 16 {
                     cache |= (*buf as u32) << (24 - cachedBits);
                     buf = buf.add(1);
@@ -1245,7 +1244,7 @@ pub unsafe fn DecodeHuffmanPairs(
                     cachedBits += padBits;
                 }
 
-                while n_vals > 0 && cachedBits >= 11 {
+                while xy.len() > 0 && cachedBits >= 11 {
                     maxBits = (*tCurr & 0x000f) as i32;
                     cw = *(tCurr.add(((cache >> (32 - maxBits)) + 1) as usize));
                     len = ((cw >> 12) & 0x000f) as i32;
@@ -1318,11 +1317,9 @@ pub unsafe fn DecodeHuffmanPairs(
                         return -1;
                     }
 
-                    *xy = x;
-                    xy = xy.add(1);
-                    *xy = y;
-                    xy = xy.add(1);
-                    n_vals -= 2;
+                    xy[0] = x;
+                    xy[1] = y;
+                    xy = &mut xy[2..];
                     tCurr = tBase;
                 }
             }
@@ -1591,10 +1588,7 @@ pub unsafe extern "C" fn DecodeHuffman(
     let mut bitsUsed;
     for i in 0..3 {
         bitsUsed = DecodeHuffmanPairs(
-            m_HuffmanInfo.huff_dec_buf[ch as usize]
-                .as_mut_ptr()
-                .add(rEnd[i] as usize),
-            rEnd[i + 1] - rEnd[i],
+            &mut m_HuffmanInfo.huff_dec_buf[ch as usize][rEnd[i] as usize..rEnd[i] as usize + (rEnd[i + 1] - rEnd[i]) as usize],
             sis.tableSelect[i],
             bitsLeft,
             buf,
