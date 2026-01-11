@@ -8,10 +8,9 @@ use crabio::{
         ERR_MP3_INVALID_HUFFCODES, ERR_MP3_INVALID_SIDEINFO, ERR_MP3_INVALID_SUBBAND,
         ERR_MP3_MAINDATA_UNDERFLOW, ERR_MP3_NONE, FrameHeader, HUFF_PAIRTABS, HuffTabLookup,
         HuffTabType, HuffmanInfo, IMDCT_SCALE, IMDCTInfo, MAX_NCHAN, MAX_NGRAN, MAX_NSAMP,
-        MAX_SCFBD, MP3DecInfo, MP3Decoder, MP3FrameInfo, MPEGVersion, NBANDS, POLY_COEF,
-        SFBandTable, SIBYTES_MPEG1_MONO, SIBYTES_MPEG1_STEREO, SIBYTES_MPEG2_MONO,
-        SIBYTES_MPEG2_STEREO, SQRTHALF, ScaleFactorInfoSub, ScaleFactorJS, SideInfo, SideInfoSub,
-        StereoMode, SubbandInfo, VBUF_LENGTH, clip_2n, fdct_32, freq_invert_rescale, idct_9,
+        MAX_SCFBD, MP3DecInfo, MP3Decoder, MPEGVersion, NBANDS, POLY_COEF,
+        SFBandTable, SQRTHALF, ScaleFactorInfoSub, ScaleFactorJS, SideInfo, SideInfoSub,
+        SubbandInfo, VBUF_LENGTH, clip_2n, fdct_32, freq_invert_rescale, idct_9,
         imdct_12, madd_64, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, polyphase_mono,
         polyphase_stereo, win_previous,
     },
@@ -58,8 +57,7 @@ pub unsafe fn imdct12(x: *const i32, out: *mut i32) {
     imdct_12(x_arr, out_arr);
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn idct9(x: *mut i32) {
+pub fn idct9(x: *mut i32) {
     let x_arr: &mut [i32; 9] = unsafe {
         core::slice::from_raw_parts_mut(x, 9)
             .try_into()
@@ -68,34 +66,9 @@ pub extern "C" fn idct9(x: *mut i32) {
     idct_9(x_arr);
 }
 
-#[unsafe(no_mangle)]
-#[allow(non_snake_case)]
-pub fn MADD64(sum64: u64, x: i32, y: i32) -> u64 {
-    madd_64(sum64, x, y)
-}
-
 #[panic_handler]
 fn panic_handler(_: &PanicInfo) -> ! {
     loop {}
-}
-
-pub fn GetBits(bsi_c: *mut BitStreamInfoC, n_bits: u32) -> u32 {
-    let bsi_c: &mut BitStreamInfoC = unsafe { &mut *bsi_c };
-    let data_slice = unsafe { core::slice::from_raw_parts(bsi_c.byte_ptr, bsi_c.n_bytes as usize) };
-    let mut bsi_rs = BitStreamInfo {
-        bytes: data_slice,
-        cache: bsi_c.i_cache,
-        cached_bits: bsi_c.cached_bits,
-    };
-
-    let res = bsi_rs.get_bits(n_bits);
-    bsi_c.i_cache = bsi_rs.cache;
-    let consumed = data_slice.len() - bsi_rs.bytes.len();
-    bsi_c.byte_ptr = unsafe { bsi_c.byte_ptr.add(consumed) };
-    bsi_c.n_bytes -= consumed as i32;
-    bsi_c.cached_bits = bsi_rs.cached_bits;
-
-    res
 }
 
 #[unsafe(no_mangle)]
@@ -201,7 +174,6 @@ pub unsafe fn PolyphaseMono(pcm: *mut i16, vbuf: *const i32, coef_base: *const u
  *
  * Return:      updated mOut (from new outputs y)
  **********************************************************************************************************************/
-#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub unsafe fn FreqInvertRescale(y: *mut i32, x_prev: *mut i32, block_idx: i32, es: i32) -> i32 {
     let y_slice = unsafe { core::slice::from_raw_parts_mut(y, 9 * NBANDS * 2 + NBANDS) };
@@ -210,7 +182,6 @@ pub unsafe fn FreqInvertRescale(y: *mut i32, x_prev: *mut i32, block_idx: i32, e
     freq_invert_rescale(y_slice, x_prev, block_idx, es)
 }
 
-#[unsafe(no_mangle)]
 #[allow(non_snake_case)]
 pub fn WinPrevious(xPrev: *mut i32, xPrevWin: *mut i32, bt_prev: i32) {
     let x_prev: &mut [i32; 9] = unsafe { &mut *xPrev.cast::<[i32; 9]>() };
@@ -948,7 +919,7 @@ const HUFF_OFFSET_15: u16 = 497 + HUFF_OFFSET_13;
 const HUFF_OFFSET_16: u16 = 580 + HUFF_OFFSET_15;
 const HUFF_OFFSET_24: u16 = 651 + HUFF_OFFSET_16;
 
-const huffTabOffset: [u16; HUFF_PAIRTABS as usize] = [
+const HUFF_TAB_OFFSET: [u16; HUFF_PAIRTABS] = [
     0,
     HUFF_OFFSET_01,
     HUFF_OFFSET_02,
@@ -1150,7 +1121,7 @@ pub unsafe fn DecodeHuffmanPairs(
     startBits = bits_left;
 
     // Uzyskiwanie dostępu do tablic huffmana (zakładam nazwy z Twojego kodu)
-    tBase = (HUFF_TABLE.as_ptr() as *const u16).add(huffTabOffset[tab_idx as usize] as usize);
+    tBase = (HUFF_TABLE.as_ptr() as *const u16).add(HUFF_TAB_OFFSET[tab_idx as usize] as usize);
     linBits = HUFF_TAB_LOOKUP[tab_idx as usize].lin_bits as i32;
     tabType = HUFF_TAB_LOOKUP[tab_idx as usize].tab_type;
 
@@ -1376,7 +1347,7 @@ pub unsafe fn DecodeHuffmanPairs(
  *  A = length of codeword
  *  B = codeword
  */
-const quadTable: [u8; 64 + 16] = [
+const QUAD_TABLE: [u8; 64 + 16] = [
     /* table A */
     0x6b, 0x6f, 0x6d, 0x6e, 0x67, 0x65, 0x59, 0x59, 0x56, 0x56, 0x53, 0x53, 0x5a, 0x5a, 0x5c, 0x5c,
     0x42, 0x42, 0x42, 0x42, 0x41, 0x41, 0x41, 0x41, 0x44, 0x44, 0x44, 0x44, 0x48, 0x48, 0x48, 0x48,
@@ -1406,7 +1377,6 @@ const quadTable: [u8; 64 + 16] = [
  * Notes:        si_huff.bit tests every vwxy output in both quad tables
  **********************************************************************************************************************/
 // no improvement with section=data
-#[unsafe(no_mangle)]
 pub unsafe fn DecodeHuffmanQuads(
     mut vwxy: *mut i32,
     nVals: i32,
@@ -1432,7 +1402,7 @@ pub unsafe fn DecodeHuffmanQuads(
 
     // Pobieranie bazy tabeli i parametrów (zakładamy dostęp do globalnych tablic)
     // tBase = (unsigned char *) quadTable + quadTabOffset[tabIdx];
-    let t_base = (quadTable.as_ptr() as *const u8).add(QUAD_TAB_OFFSET[tabIdx as usize] as usize);
+    let t_base = (QUAD_TABLE.as_ptr() as *const u8).add(QUAD_TAB_OFFSET[tabIdx as usize] as usize);
     maxBits = QUAD_TAB_MAX_BITS[tabIdx as usize] as i32;
 
     /* Inicjalizacja cache partial byte */
@@ -1709,7 +1679,7 @@ pub unsafe extern "C" fn DecodeHuffman(
  * Return:      mOut (OR of abs(y) for all y calculated here)
  **********************************************************************************************************************/
 // barely faster in RAM
-const c18: [u32; 9] = [
+const C18: [u32; 9] = [
     0x7f834ed0, 0x7ba3751d, 0x7401e4c1, 0x68d9f964, 0x5a82799a, 0x496af3e2, 0x36185aee, 0x2120fb83,
     0x0b27eb5c,
 ];
@@ -1718,7 +1688,7 @@ const FAST_WIN36: [u32; 18] = [
     0x4d413ccc, 0xe0000000, 0x4c913b51, 0xe7dbc161, 0x4a868feb, 0xef7a6275, 0x47311c28, 0xf6a09e67,
     0x42aace8b, 0xfd16d8dd,
 ];
-pub const imdctWin: [[u32; 36]; 4] = [
+pub const IMDCT_WIN: [[u32; 36]; 4] = [
     [
         0x02aace8b, 0x07311c28, 0x0a868fec, 0x0c913b52, 0x0d413ccd, 0x0c913b52, 0x0a868fec,
         0x07311c28, 0x02aace8b, 0xfd16d8dd, 0xf6a09e66, 0xef7a6275, 0xe7dbc161, 0xe0000000,
@@ -1814,7 +1784,7 @@ pub unsafe fn IMDCT36(
     idct9(xBuf.as_mut_ptr().add(9)); /* odd */
 
     xp = xBuf.as_mut_ptr().add(8);
-    cp = c18.as_ptr().add(8);
+    cp = C18.as_ptr().add(8);
     let mut mOut = 0;
     if (btPrev == 0 && btCurr == 0) {
         /* fast path - use symmetry of sin window to reduce windowing multiplies to 18 (N/2) */
@@ -1848,7 +1818,7 @@ pub unsafe fn IMDCT36(
          */
         WinPrevious(xPrev, xPrevWin.as_mut_ptr(), btPrev);
 
-        let wp = imdctWin[btCurr as usize];
+        let wp = IMDCT_WIN[btCurr as usize];
         for i in 0..9 {
             c = *cp;
             cp = cp.sub(1);
@@ -2105,7 +2075,7 @@ pub unsafe fn IMDCT12x3(
     WinPrevious(x_prev, x_prev_win.as_mut_ptr(), bt_prev);
 
     // Pobranie wskaźnika do okna krótkiego (index 2)
-    let wp = imdctWin[2];
+    let wp = IMDCT_WIN[2];
     let mut m_out = 0i32;
 
     // 4. Nakładanie i dodawanie (Overlap-Add) dla krótkich bloków
@@ -2383,7 +2353,6 @@ pub unsafe extern "C" fn DequantBlock(
                 };
 
                 /* Aproksymacja wielomianowa */
-                let x_i = x_norm as i32;
                 y = coef[0] as i32;
                 y = mulshift_32(y, x_norm as i32) + (coef[1] as i32);
                 y = mulshift_32(y, x_norm as i32) + (coef[2] as i32);
@@ -2426,8 +2395,7 @@ const PRE_TAB: [u8; 22] = [
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 3, 3, 3, 2, 0,
 ];
 
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn DequantChannel(
+pub unsafe fn DequantChannel(
     sample_buf: &mut [i32; MAX_NSAMP],
     work_buf: *mut i32,
     non_zero_bound: *mut i32,
@@ -2572,7 +2540,7 @@ pub unsafe extern "C" fn DequantChannel(
     (gb_mask.leading_zeros() as i32) - 1
 }
 
-const ISFMpeg1: [[i32; 7]; 2] = [
+const ISFMPEG1: [[i32; 7]; 2] = [
     [
         0x00000000, 0x0d8658ba, 0x176cf5d0, 0x20000000, 0x28930a2f, 0x3279a745, 0x40000000,
     ],
@@ -2581,7 +2549,7 @@ const ISFMpeg1: [[i32; 7]; 2] = [
     ],
 ];
 
-const ISFMpeg2: [[[i32; 16]; 2]; 2] = [
+const ISFMPEG2: [[[i32; 16]; 2]; 2] = [
     [
         [
             /* intensityScale off, mid-side off */
@@ -2622,7 +2590,7 @@ const ISFIIP: [[i32; 2]; 2] = [
     [0x40000000, 0x40000000], /* mid-side on */
 ];
 
-pub fn IntensityProcMPEG1(
+pub fn intensity_proc_mpeg1(
     x: &mut [[i32; MAX_NSAMP]; MAX_NCHAN], // x[2][576]
     n_samps: i32,
     sfis: &ScaleFactorInfoSub,
@@ -2649,7 +2617,7 @@ pub fn IntensityProcMPEG1(
     }
 
     let mut samps_left = n_samps - i as i32;
-    let isf_tab = ISFMpeg1[mid_side_flag as usize];
+    let isf_tab = ISFMPEG1[mid_side_flag as usize];
     let mut m_out_l = 0;
     let mut m_out_r = 0;
 
@@ -2729,7 +2697,7 @@ pub fn IntensityProcMPEG1(
     m_out[1] = m_out_r;
 }
 
-pub fn IntensityProcMPEG2(
+pub fn intensity_proc_mpeg2(
     x: &mut [[i32; MAX_NSAMP]; MAX_NCHAN], // x[2][576]
     n_samps: i32,
     sfis: &ScaleFactorInfoSub,
@@ -2746,7 +2714,7 @@ pub fn IntensityProcMPEG2(
 
     // Pobranie odpowiedniej tabeli współczynników dla MPEG2
     // ISFMpeg2[intensityScale][midSideFlag]
-    let isf_tab = ISFMpeg2[sfjs.intensity_scale as usize][mid_side_flag as usize];
+    let isf_tab = ISFMPEG2[sfjs.intensity_scale as usize][mid_side_flag as usize];
     // let isf_tab = core::slice::from_raw_parts(isf_tab_ptr, 16);
 
     // 1. Wypełnienie bufora il (illegal intensity positions)
@@ -3106,7 +3074,7 @@ pub unsafe fn MP3Dequantize(gr: i32, m_mp3_decoder: &mut MP3Decoder) -> i32 {
         let n_samps = hi.non_zero_bound[0];
         if m_mp3_decoder.m_MPEGVersion == MPEGVersion::MPEG1 {
             // MPEG1
-            IntensityProcMPEG1(
+            intensity_proc_mpeg1(
                 &mut hi.huff_dec_buf,
                 n_samps,
                 &mut sf_info_sub[gr_idx][1],
@@ -3117,7 +3085,7 @@ pub unsafe fn MP3Dequantize(gr: i32, m_mp3_decoder: &mut MP3Decoder) -> i32 {
             );
         } else {
             // MPEG2
-            IntensityProcMPEG2(
+            intensity_proc_mpeg2(
                 &mut hi.huff_dec_buf,
                 n_samps,
                 &mut (*sf_info_sub)[gr_idx][1],
