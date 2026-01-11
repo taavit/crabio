@@ -1,10 +1,10 @@
 #![no_std]
 #![feature(asm_experimental_arch)]
-use core::{panic::PanicInfo, ptr::null};
+use core::panic::PanicInfo;
 
 use crabio::{
     mp3_decoder::{
-        BLOCK_SIZE, CriticalBandInfo, DequantInfo, ERR_MP3_FREE_BITRATE_SYNC, ERR_MP3_INVALID_DEQUANTIZE, ERR_MP3_INVALID_HUFFCODES, ERR_MP3_INVALID_SIDEINFO, ERR_MP3_INVALID_SUBBAND, ERR_MP3_MAINDATA_UNDERFLOW, ERR_MP3_NONE, FrameHeader, HUFF_PAIRTABS, HuffTabLookup, HuffTabType, HuffmanInfo, IMDCT_SCALE, IMDCTInfo, MAX_NCHAN, MAX_NGRAN, MAX_NSAMP, MAX_SCFBD, MP3DecInfo, MP3Decoder, MP3FrameInfo, MPEGVersion, NBANDS, POLY_COEF, SFBandTable, SIBYTES_MPEG1_MONO, SIBYTES_MPEG1_STEREO, SIBYTES_MPEG2_MONO, SIBYTES_MPEG2_STEREO, SQRTHALF, ScaleFactorInfoSub, ScaleFactorJS, SideInfo, SideInfoSub, StereoMode, SubbandInfo, VBUF_LENGTH, clip_2n, fdct_32, freq_invert_rescale, idct_9, imdct_12, madd_64, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, polyphase_mono, polyphase_stereo, sar_64, win_previous
+        BLOCK_SIZE, CriticalBandInfo, ERR_MP3_FREE_BITRATE_SYNC, ERR_MP3_INVALID_DEQUANTIZE, ERR_MP3_INVALID_HUFFCODES, ERR_MP3_INVALID_SIDEINFO, ERR_MP3_INVALID_SUBBAND, ERR_MP3_MAINDATA_UNDERFLOW, ERR_MP3_NONE, FrameHeader, HUFF_PAIRTABS, HuffTabLookup, HuffTabType, HuffmanInfo, IMDCT_SCALE, IMDCTInfo, MAX_NCHAN, MAX_NGRAN, MAX_NSAMP, MAX_SCFBD, MP3DecInfo, MP3Decoder, MP3FrameInfo, MPEGVersion, NBANDS, POLY_COEF, SFBandTable, SIBYTES_MPEG1_MONO, SIBYTES_MPEG1_STEREO, SIBYTES_MPEG2_MONO, SIBYTES_MPEG2_STEREO, SQRTHALF, ScaleFactorInfoSub, ScaleFactorJS, SideInfo, SideInfoSub, StereoMode, SubbandInfo, VBUF_LENGTH, clip_2n, fdct_32, freq_invert_rescale, idct_9, imdct_12, madd_64, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, polyphase_mono, polyphase_stereo, win_previous
     },
     utils::bit_stream_cache::BitStreamInfo,
 };
@@ -34,23 +34,7 @@ pub fn CLIP_2N(y: i32, n: u32) -> i32 {
     clip_2n(y, n)
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_add(left: u64, right: u64) -> u64 {
-    left + right
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn SAR64(x: u64, n: i32) -> u64 {
-    sar_64(x, n)
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn xSAR64(x: u64, n: i32) -> u64 {
-    sar_64(x, n)
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn imdct12(x: *const i32, out: *mut i32) {
+pub unsafe fn imdct12(x: *const i32, out: *mut i32) {
     let x_arr: &[i32; 18] = unsafe {
         core::slice::from_raw_parts(x, 18)
             .try_into()
@@ -2977,14 +2961,11 @@ pub unsafe fn UnpackScaleFactors(
 #[unsafe(no_mangle)]
 pub unsafe fn Subband(
     mut pcmBuf: *mut i16,
-    m_MP3DecInfo: *mut MP3DecInfo,
-    m_IMDCTInfo: *mut IMDCTInfo,
-    m_SubbandInfo: *mut SubbandInfo,
+    m_MP3DecInfo: &mut MP3DecInfo,
+    m_IMDCTInfo: &mut IMDCTInfo,
+    m_SubbandInfo: &mut SubbandInfo,
 ) -> i32 {
-    let m_MP3DecInfo = &mut *m_MP3DecInfo;
-    let m_IMDCTInfo = &mut *m_IMDCTInfo;
-    let m_SubbandInfo = &mut *m_SubbandInfo;
-    if (m_MP3DecInfo.nChans == 2) {
+    if m_MP3DecInfo.nChans == 2 {
         /* stereo */
         for b in 0..BLOCK_SIZE {
             fdct_32(
@@ -3038,7 +3019,7 @@ pub unsafe fn Subband(
     return 0;
 }
 
-pub unsafe extern "C" fn MP3Dequantize(
+pub unsafe fn MP3Dequantize(
     gr: i32,
     m_mp3_decoder: &mut MP3Decoder,
 ) -> i32 {

@@ -295,8 +295,6 @@ typedef struct MP3Decoder {
 void SetBitstreamPointer(BitStreamInfo_t *bsi, int nBytes, unsigned char *buf);
 int CalcBitsUsed(BitStreamInfo_t *bsi, unsigned char *startBuf, int startOffset);
 
-uint64_t rust_add(uint64_t a, uint64_t b);
-
 void imdct12(int *x, int *out);
 void idct9(int *x);
 

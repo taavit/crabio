@@ -1055,7 +1055,6 @@ void Config::sleepForAfter(uint16_t sf, uint16_t sa){
 }
 
 void Config::bootInfo() {
-  BOOTLOG("Rust connection: %d", rust_add(40, 2));
   BOOTLOG("************************************************");
   BOOTLOG("*               ёPadio v%s                *", YOVERSION);
   BOOTLOG("************************************************");

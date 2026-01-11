@@ -188,7 +188,6 @@ void MyNetwork::raiseSoftAP() {
   BOOTLOG("Connect to AP %s with password %s", apSsid, apPassword);
   BOOTLOG("and go to http:/192.168.4.1/ to configure");
   BOOTLOG("************************************************");
-  BOOTLOG("NUMBERS FROM RUST = %i", rust_add(10, 32));
   status = SOFT_AP;
   if(config.store.softapdelay>0)
     timekeeper.waitAndDo(config.store.softapdelay*60, rebootTime);
