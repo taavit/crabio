@@ -1759,7 +1759,6 @@ pub const imdctWin: [[u32; 36]; 4] = [
     ],
 ];
 
-#[unsafe(no_mangle)]
 pub unsafe fn IMDCT36(
     mut xCurr: *mut i32,
     mut xPrev: *mut i32,
@@ -1771,7 +1770,7 @@ pub unsafe fn IMDCT36(
 ) -> i32 {
     let mut acc1 = 0;
     let mut acc2 = 0;
-    let mut es;
+    let es;
     let mut xBuf: [i32; 18] = [0; 18];
     let mut xPrevWin: [i32; 18] = [0; 18];
     let mut xp;
@@ -1957,17 +1956,18 @@ pub fn AntiAlias(x: &mut [i32], n_bfly: usize) {
     }
 }
 
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn HybridTransform(
-    mut x_curr: *mut i32,
-    mut x_prev: *mut i32,
+pub unsafe fn HybridTransform(
+    x_curr: &mut [i32; MAX_NSAMP],
+    x_prev: &mut [i32; MAX_NSAMP / 2],
     y: *mut i32, // Tablica y[18][32] przekazana jako wskaźnik
     sis: &SideInfoSub,
     bc: &mut BlockCount,
 ) -> i32 {
     let mut x_prev_win = [0i32; 18];
     let mut m_out = 0i32;
-    let mut n_blocks_out = 0i32;
+    let mut n_blocks_out;
+    let mut x_curr = x_curr.as_mut_slice();
+    let mut x_prev = x_prev.as_mut_slice();
 
     let mut i = 0;
 
@@ -1986,8 +1986,8 @@ pub unsafe extern "C" fn HybridTransform(
         // Adresowanie y[0][i] w tablicy y[18][32] to po prostu y + i
         // ponieważ y[row][col] = y[row * 32 + col]
         m_out |= IMDCT36(
-            x_curr,
-            x_prev,
+            x_curr.as_mut_ptr(),
+            x_prev.as_mut_ptr(),
             y.add(i as usize),
             curr_win_idx,
             prev_win_idx,
@@ -1995,8 +1995,8 @@ pub unsafe extern "C" fn HybridTransform(
             bc.gbIn,
         );
 
-        x_curr = x_curr.add(18);
-        x_prev = x_prev.add(9);
+        x_curr = &mut x_curr[18..];
+        x_prev = &mut x_prev[9..];
         i += 1;
     }
 
@@ -2007,10 +2007,17 @@ pub unsafe extern "C" fn HybridTransform(
             prev_win_idx = 0;
         }
 
-        m_out |= IMDCT12x3(x_curr, x_prev, y.add(i as usize), prev_win_idx, i, bc.gbIn);
+        m_out |= IMDCT12x3(
+            x_curr.as_mut_ptr(),
+            x_prev.as_mut_ptr(),
+            y.add(i as usize),
+            prev_win_idx,
+            i,
+            bc.gbIn,
+        );
 
-        x_curr = x_curr.add(18);
-        x_prev = x_prev.add(9);
+        x_curr = &mut x_curr[18..];
+        x_prev = &mut x_prev[9..];
         i += 1;
     }
     n_blocks_out = i;
@@ -2022,7 +2029,7 @@ pub unsafe extern "C" fn HybridTransform(
             prev_win_idx = 0;
         }
 
-        WinPrevious(x_prev, x_prev_win.as_mut_ptr(), prev_win_idx);
+        WinPrevious(x_prev.as_mut_ptr(), x_prev_win.as_mut_ptr(), prev_win_idx);
 
         let mut non_zero = 0i32;
         let fi_bit = (i as i32) << 31;
@@ -2044,10 +2051,10 @@ pub unsafe extern "C" fn HybridTransform(
             *y.add((2 * j + 1) * 32 + i as usize) = xp;
             m_out |= xp.abs();
 
-            *x_prev.add(j) = 0;
+            x_prev[j] = 0;
         }
 
-        x_prev = x_prev.add(9);
+        x_prev = &mut x_prev[9..];
         if non_zero != 0 {
             n_blocks_out = i;
         }
@@ -2069,8 +2076,7 @@ pub unsafe extern "C" fn HybridTransform(
     n_blocks_out
 }
 
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn IMDCT12x3(
+pub unsafe fn IMDCT12x3(
     x_curr: *mut i32,
     x_prev: *mut i32,
     y: *mut i32,
@@ -2225,8 +2231,8 @@ pub unsafe extern "C" fn IMDCT(
 
     // Wywołanie HybridTransform
     m_IMDCTInfo.numPrevIMDCT[ch as usize] = HybridTransform(
-        m_HuffmanInfo.huff_dec_buf[ch as usize].as_mut_ptr(),
-        m_IMDCTInfo.overBuf[ch as usize].as_mut_ptr(),
+        &mut m_HuffmanInfo.huff_dec_buf[ch as usize],
+        &mut m_IMDCTInfo.overBuf[ch as usize],
         m_IMDCTInfo.outBuf[ch as usize].as_mut_ptr() as *mut i32,
         sis,
         &mut bc,
