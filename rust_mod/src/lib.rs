@@ -4,7 +4,16 @@ use core::panic::PanicInfo;
 
 use crabio::{
     mp3_decoder::{
-        BLOCK_SIZE, CriticalBandInfo, ERR_MP3_FREE_BITRATE_SYNC, ERR_MP3_INVALID_DEQUANTIZE, ERR_MP3_INVALID_HUFFCODES, ERR_MP3_INVALID_SIDEINFO, ERR_MP3_INVALID_SUBBAND, ERR_MP3_MAINDATA_UNDERFLOW, ERR_MP3_NONE, FrameHeader, HUFF_PAIRTABS, HuffTabLookup, HuffTabType, HuffmanInfo, IMDCT_SCALE, IMDCTInfo, MAX_NCHAN, MAX_NGRAN, MAX_NSAMP, MAX_SCFBD, MP3DecInfo, MP3Decoder, MP3FrameInfo, MPEGVersion, NBANDS, POLY_COEF, SFBandTable, SIBYTES_MPEG1_MONO, SIBYTES_MPEG1_STEREO, SIBYTES_MPEG2_MONO, SIBYTES_MPEG2_STEREO, SQRTHALF, ScaleFactorInfoSub, ScaleFactorJS, SideInfo, SideInfoSub, StereoMode, SubbandInfo, VBUF_LENGTH, clip_2n, fdct_32, freq_invert_rescale, idct_9, imdct_12, madd_64, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, polyphase_mono, polyphase_stereo, win_previous
+        BLOCK_SIZE, CriticalBandInfo, ERR_MP3_FREE_BITRATE_SYNC, ERR_MP3_INVALID_DEQUANTIZE,
+        ERR_MP3_INVALID_HUFFCODES, ERR_MP3_INVALID_SIDEINFO, ERR_MP3_INVALID_SUBBAND,
+        ERR_MP3_MAINDATA_UNDERFLOW, ERR_MP3_NONE, FrameHeader, HUFF_PAIRTABS, HuffTabLookup,
+        HuffTabType, HuffmanInfo, IMDCT_SCALE, IMDCTInfo, MAX_NCHAN, MAX_NGRAN, MAX_NSAMP,
+        MAX_SCFBD, MP3DecInfo, MP3Decoder, MP3FrameInfo, MPEGVersion, NBANDS, POLY_COEF,
+        SFBandTable, SIBYTES_MPEG1_MONO, SIBYTES_MPEG1_STEREO, SIBYTES_MPEG2_MONO,
+        SIBYTES_MPEG2_STEREO, SQRTHALF, ScaleFactorInfoSub, ScaleFactorJS, SideInfo, SideInfoSub,
+        StereoMode, SubbandInfo, VBUF_LENGTH, clip_2n, fdct_32, freq_invert_rescale, idct_9,
+        imdct_12, madd_64, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, polyphase_mono,
+        polyphase_stereo, win_previous,
     },
     utils::bit_stream_cache::BitStreamInfo,
 };
@@ -923,55 +932,55 @@ const HUFF_TABLE: [u16; 4242] = [
     0xf001, 0x1a42, 0x1872, 0xf001, 0x1801, 0x1081, 0xf001, 0x1701, 0x1071,
 ];
 
-const m_HUFF_OFFSET_01: u16 = 0;
-const m_HUFF_OFFSET_02: u16 = 9 + m_HUFF_OFFSET_01;
-const m_HUFF_OFFSET_03: u16 = 65 + m_HUFF_OFFSET_02;
-const m_HUFF_OFFSET_05: u16 = 65 + m_HUFF_OFFSET_03;
-const m_HUFF_OFFSET_06: u16 = 257 + m_HUFF_OFFSET_05;
-const m_HUFF_OFFSET_07: u16 = 129 + m_HUFF_OFFSET_06;
-const m_HUFF_OFFSET_08: u16 = 110 + m_HUFF_OFFSET_07;
-const m_HUFF_OFFSET_09: u16 = 280 + m_HUFF_OFFSET_08;
-const m_HUFF_OFFSET_10: u16 = 93 + m_HUFF_OFFSET_09;
-const m_HUFF_OFFSET_11: u16 = 320 + m_HUFF_OFFSET_10;
-const m_HUFF_OFFSET_12: u16 = 296 + m_HUFF_OFFSET_11;
-const m_HUFF_OFFSET_13: u16 = 185 + m_HUFF_OFFSET_12;
-const m_HUFF_OFFSET_15: u16 = 497 + m_HUFF_OFFSET_13;
-const m_HUFF_OFFSET_16: u16 = 580 + m_HUFF_OFFSET_15;
-const m_HUFF_OFFSET_24: u16 = 651 + m_HUFF_OFFSET_16;
+const HUFF_OFFSET_01: u16 = 0;
+const HUFF_OFFSET_02: u16 = 9 + HUFF_OFFSET_01;
+const HUFF_OFFSET_03: u16 = 65 + HUFF_OFFSET_02;
+const HUFF_OFFSET_05: u16 = 65 + HUFF_OFFSET_03;
+const HUFF_OFFSET_06: u16 = 257 + HUFF_OFFSET_05;
+const HUFF_OFFSET_07: u16 = 129 + HUFF_OFFSET_06;
+const HUFF_OFFSET_08: u16 = 110 + HUFF_OFFSET_07;
+const HUFF_OFFSET_09: u16 = 280 + HUFF_OFFSET_08;
+const HUFF_OFFSET_10: u16 = 93 + HUFF_OFFSET_09;
+const HUFF_OFFSET_11: u16 = 320 + HUFF_OFFSET_10;
+const HUFF_OFFSET_12: u16 = 296 + HUFF_OFFSET_11;
+const HUFF_OFFSET_13: u16 = 185 + HUFF_OFFSET_12;
+const HUFF_OFFSET_15: u16 = 497 + HUFF_OFFSET_13;
+const HUFF_OFFSET_16: u16 = 580 + HUFF_OFFSET_15;
+const HUFF_OFFSET_24: u16 = 651 + HUFF_OFFSET_16;
 
 const huffTabOffset: [u16; HUFF_PAIRTABS as usize] = [
     0,
-    m_HUFF_OFFSET_01,
-    m_HUFF_OFFSET_02,
-    m_HUFF_OFFSET_03,
+    HUFF_OFFSET_01,
+    HUFF_OFFSET_02,
+    HUFF_OFFSET_03,
     0,
-    m_HUFF_OFFSET_05,
-    m_HUFF_OFFSET_06,
-    m_HUFF_OFFSET_07,
-    m_HUFF_OFFSET_08,
-    m_HUFF_OFFSET_09,
-    m_HUFF_OFFSET_10,
-    m_HUFF_OFFSET_11,
-    m_HUFF_OFFSET_12,
-    m_HUFF_OFFSET_13,
+    HUFF_OFFSET_05,
+    HUFF_OFFSET_06,
+    HUFF_OFFSET_07,
+    HUFF_OFFSET_08,
+    HUFF_OFFSET_09,
+    HUFF_OFFSET_10,
+    HUFF_OFFSET_11,
+    HUFF_OFFSET_12,
+    HUFF_OFFSET_13,
     0,
-    m_HUFF_OFFSET_15,
-    m_HUFF_OFFSET_16,
-    m_HUFF_OFFSET_16,
-    m_HUFF_OFFSET_16,
-    m_HUFF_OFFSET_16,
-    m_HUFF_OFFSET_16,
-    m_HUFF_OFFSET_16,
-    m_HUFF_OFFSET_16,
-    m_HUFF_OFFSET_16,
-    m_HUFF_OFFSET_24,
-    m_HUFF_OFFSET_24,
-    m_HUFF_OFFSET_24,
-    m_HUFF_OFFSET_24,
-    m_HUFF_OFFSET_24,
-    m_HUFF_OFFSET_24,
-    m_HUFF_OFFSET_24,
-    m_HUFF_OFFSET_24,
+    HUFF_OFFSET_15,
+    HUFF_OFFSET_16,
+    HUFF_OFFSET_16,
+    HUFF_OFFSET_16,
+    HUFF_OFFSET_16,
+    HUFF_OFFSET_16,
+    HUFF_OFFSET_16,
+    HUFF_OFFSET_16,
+    HUFF_OFFSET_16,
+    HUFF_OFFSET_24,
+    HUFF_OFFSET_24,
+    HUFF_OFFSET_24,
+    HUFF_OFFSET_24,
+    HUFF_OFFSET_24,
+    HUFF_OFFSET_24,
+    HUFF_OFFSET_24,
+    HUFF_OFFSET_24,
 ];
 
 const HUFF_TAB_LOOKUP: [HuffTabLookup; HUFF_PAIRTABS] = [
@@ -1168,197 +1177,198 @@ pub unsafe fn DecodeHuffmanPairs(
     }
     bits_left -= cachedBits;
 
-    if tabType == HuffTabType::NoBits {
-        for i in (0..n_vals).step_by(2) {
-            *xy.add(i as usize) = 0;
-            *xy.add((i + 1) as usize) = 0;
+    match tabType {
+        HuffTabType::NoBits => {
+            for i in (0..n_vals).step_by(2) {
+                *xy.add(i as usize) = 0;
+                *xy.add((i + 1) as usize) = 0;
+            }
+            return 0;
         }
-        return 0;
-    } else if tabType == HuffTabType::OneShot {
-        maxBits = ((*(tBase) >> 0) & 0x000f) as i32;
-        let tBase_one_shot = tBase.add(1);
-        padBits = 0;
+        HuffTabType::OneShot => {
+            maxBits = ((*(tBase) >> 0) & 0x000f) as i32;
+            let tBase_one_shot = tBase.add(1);
+            padBits = 0;
 
-        while n_vals > 0 {
-            if bits_left >= 16 {
-                cache |= (*buf as u32) << (24 - cachedBits);
-                buf = buf.add(1);
-                cache |= (*buf as u32) << (16 - cachedBits);
-                buf = buf.add(1);
-                cachedBits += 16;
-                bits_left -= 16;
-            } else {
-                if cachedBits + bits_left <= 0 {
-                    return -1;
-                }
-                if bits_left > 0 {
+            while n_vals > 0 {
+                if bits_left >= 16 {
                     cache |= (*buf as u32) << (24 - cachedBits);
                     buf = buf.add(1);
-                }
-                if bits_left > 8 {
                     cache |= (*buf as u32) << (16 - cachedBits);
                     buf = buf.add(1);
-                }
-                cachedBits += bits_left;
-                bits_left = 0;
+                    cachedBits += 16;
+                    bits_left -= 16;
+                } else {
+                    if cachedBits + bits_left <= 0 {
+                        return -1;
+                    }
+                    if bits_left > 0 {
+                        cache |= (*buf as u32) << (24 - cachedBits);
+                        buf = buf.add(1);
+                    }
+                    if bits_left > 8 {
+                        cache |= (*buf as u32) << (16 - cachedBits);
+                        buf = buf.add(1);
+                    }
+                    cachedBits += bits_left;
+                    bits_left = 0;
 
-                cache &= (0x80000000u32 as i32 >> (cachedBits - 1)) as u32;
-                padBits = 11;
-                cachedBits += padBits;
+                    cache &= (0x80000000u32 as i32 >> (cachedBits - 1)) as u32;
+                    padBits = 11;
+                    cachedBits += padBits;
+                }
+
+                while n_vals > 0 && cachedBits >= 11 {
+                    cw = (*tBase_one_shot.add((cache >> (32 - maxBits)) as usize));
+
+                    len = ((cw >> 12) & 0x000f) as i32;
+                    cachedBits -= len;
+                    cache <<= len;
+
+                    x = ((cw >> 4) & 0x000f) as i32;
+                    if x != 0 {
+                        x |= (cache & 0x80000000) as i32;
+                        cache <<= 1;
+                        cachedBits -= 1;
+                    }
+
+                    y = ((cw >> 8) & 0x000f) as i32;
+                    if y != 0 {
+                        y |= (cache & 0x80000000) as i32;
+                        cache <<= 1;
+                        cachedBits -= 1;
+                    }
+
+                    if cachedBits < padBits {
+                        return -1;
+                    }
+
+                    *xy = x;
+                    xy = xy.add(1);
+                    *xy = y;
+                    xy = xy.add(1);
+                    n_vals -= 2;
+                }
             }
-
-            while n_vals > 0 && cachedBits >= 11 {
-                cw = (*tBase_one_shot.add((cache >> (32 - maxBits)) as usize));
-
-                len = ((cw >> 12) & 0x000f) as i32;
-                cachedBits -= len;
-                cache <<= len;
-
-                x = ((cw >> 4) & 0x000f) as i32;
-                if x != 0 {
-                    x |= (cache & 0x80000000) as i32;
-                    cache <<= 1;
-                    cachedBits -= 1;
-                }
-
-                y = ((cw >> 8) & 0x000f) as i32;
-                if y != 0 {
-                    y |= (cache & 0x80000000) as i32;
-                    cache <<= 1;
-                    cachedBits -= 1;
-                }
-
-                if cachedBits < padBits {
-                    return -1;
-                }
-
-                *xy = x;
-                xy = xy.add(1);
-                *xy = y;
-                xy = xy.add(1);
-                n_vals -= 2;
-            }
+            bits_left += cachedBits - padBits;
+            return startBits - bits_left;
         }
-        bits_left += cachedBits - padBits;
-        return startBits - bits_left;
-    } else if tabType == HuffTabType::LoopLinbits
-        || tabType == HuffTabType::LoopNoLinbits
-    {
-        tCurr = tBase;
-        padBits = 0;
-        while n_vals > 0 {
-            if bits_left >= 16 {
-                cache |= (*buf as u32) << (24 - cachedBits);
-                buf = buf.add(1);
-                cache |= (*buf as u32) << (16 - cachedBits);
-                buf = buf.add(1);
-                cachedBits += 16;
-                bits_left -= 16;
-            } else {
-                if cachedBits + bits_left <= 0 {
-                    return -1;
-                }
-                if bits_left > 0 {
+        HuffTabType::LoopLinbits | HuffTabType::LoopNoLinbits => {
+            tCurr = tBase;
+            padBits = 0;
+            while n_vals > 0 {
+                if bits_left >= 16 {
                     cache |= (*buf as u32) << (24 - cachedBits);
                     buf = buf.add(1);
-                }
-                if bits_left > 8 {
                     cache |= (*buf as u32) << (16 - cachedBits);
                     buf = buf.add(1);
-                }
-                cachedBits += bits_left;
-                bits_left = 0;
-                cache &= (0x80000000u32 as i32 >> (cachedBits - 1)) as u32;
-                padBits = 11;
-                cachedBits += padBits;
-            }
-
-            while n_vals > 0 && cachedBits >= 11 {
-                maxBits = (*tCurr & 0x000f) as i32;
-                cw = *(tCurr.add(((cache >> (32 - maxBits)) + 1) as usize));
-                len = ((cw >> 12) & 0x000f) as i32;
-
-                if len == 0 {
-                    cachedBits -= maxBits;
-                    cache <<= maxBits;
-                    tCurr = tCurr.add(cw as usize);
-                    continue;
-                }
-                cachedBits -= len;
-                cache <<= len;
-
-                x = ((cw >> 4) & 0x000f) as i32;
-                y = ((cw >> 8) & 0x000f) as i32;
-
-                if x == 15 && tabType == HuffTabType::LoopLinbits {
-                    minBits = linBits + 1 + (if y != 0 { 1 } else { 0 });
-                    if cachedBits + bits_left < minBits {
+                    cachedBits += 16;
+                    bits_left -= 16;
+                } else {
+                    if cachedBits + bits_left <= 0 {
                         return -1;
                     }
-                    while cachedBits < minBits {
+                    if bits_left > 0 {
                         cache |= (*buf as u32) << (24 - cachedBits);
                         buf = buf.add(1);
-                        cachedBits += 8;
-                        bits_left -= 8;
                     }
-                    if bits_left < 0 {
-                        cachedBits += bits_left;
-                        bits_left = 0;
-                        cache &= (0x80000000u32 as i32 >> (cachedBits - 1)) as u32;
+                    if bits_left > 8 {
+                        cache |= (*buf as u32) << (16 - cachedBits);
+                        buf = buf.add(1);
                     }
-                    x += (cache >> (32 - linBits as u32)) as i32;
-                    cachedBits -= linBits;
-                    cache <<= linBits;
-                }
-                if x != 0 {
-                    x |= (cache & 0x80000000) as i32;
-                    cache <<= 1;
-                    cachedBits -= 1;
+                    cachedBits += bits_left;
+                    bits_left = 0;
+                    cache &= (0x80000000u32 as i32 >> (cachedBits - 1)) as u32;
+                    padBits = 11;
+                    cachedBits += padBits;
                 }
 
-                if y == 15 && tabType == HuffTabType::LoopLinbits {
-                    minBits = linBits + 1;
-                    if cachedBits + bits_left < minBits {
+                while n_vals > 0 && cachedBits >= 11 {
+                    maxBits = (*tCurr & 0x000f) as i32;
+                    cw = *(tCurr.add(((cache >> (32 - maxBits)) + 1) as usize));
+                    len = ((cw >> 12) & 0x000f) as i32;
+
+                    if len == 0 {
+                        cachedBits -= maxBits;
+                        cache <<= maxBits;
+                        tCurr = tCurr.add(cw as usize);
+                        continue;
+                    }
+                    cachedBits -= len;
+                    cache <<= len;
+
+                    x = ((cw >> 4) & 0x000f) as i32;
+                    y = ((cw >> 8) & 0x000f) as i32;
+
+                    if x == 15 && tabType == HuffTabType::LoopLinbits {
+                        minBits = linBits + 1 + (if y != 0 { 1 } else { 0 });
+                        if cachedBits + bits_left < minBits {
+                            return -1;
+                        }
+                        while cachedBits < minBits {
+                            cache |= (*buf as u32) << (24 - cachedBits);
+                            buf = buf.add(1);
+                            cachedBits += 8;
+                            bits_left -= 8;
+                        }
+                        if bits_left < 0 {
+                            cachedBits += bits_left;
+                            bits_left = 0;
+                            cache &= (0x80000000u32 as i32 >> (cachedBits - 1)) as u32;
+                        }
+                        x += (cache >> (32 - linBits as u32)) as i32;
+                        cachedBits -= linBits;
+                        cache <<= linBits;
+                    }
+                    if x != 0 {
+                        x |= (cache & 0x80000000) as i32;
+                        cache <<= 1;
+                        cachedBits -= 1;
+                    }
+
+                    if y == 15 && tabType == HuffTabType::LoopLinbits {
+                        minBits = linBits + 1;
+                        if cachedBits + bits_left < minBits {
+                            return -1;
+                        }
+                        while cachedBits < minBits {
+                            cache |= (*buf as u32) << (24 - cachedBits);
+                            buf = buf.add(1);
+                            cachedBits += 8;
+                            bits_left -= 8;
+                        }
+                        if bits_left < 0 {
+                            cachedBits += bits_left;
+                            bits_left = 0;
+                            cache &= (0x80000000u32 as i32 >> (cachedBits - 1)) as u32;
+                        }
+                        y += (cache >> (32 - linBits as u32)) as i32;
+                        cachedBits -= linBits;
+                        cache <<= linBits;
+                    }
+                    if y != 0 {
+                        y |= (cache & 0x80000000) as i32;
+                        cache <<= 1;
+                        cachedBits -= 1;
+                    }
+
+                    if cachedBits < padBits {
                         return -1;
                     }
-                    while cachedBits < minBits {
-                        cache |= (*buf as u32) << (24 - cachedBits);
-                        buf = buf.add(1);
-                        cachedBits += 8;
-                        bits_left -= 8;
-                    }
-                    if bits_left < 0 {
-                        cachedBits += bits_left;
-                        bits_left = 0;
-                        cache &= (0x80000000u32 as i32 >> (cachedBits - 1)) as u32;
-                    }
-                    y += (cache >> (32 - linBits as u32)) as i32;
-                    cachedBits -= linBits;
-                    cache <<= linBits;
-                }
-                if y != 0 {
-                    y |= (cache & 0x80000000) as i32;
-                    cache <<= 1;
-                    cachedBits -= 1;
-                }
 
-                if cachedBits < padBits {
-                    return -1;
+                    *xy = x;
+                    xy = xy.add(1);
+                    *xy = y;
+                    xy = xy.add(1);
+                    n_vals -= 2;
+                    tCurr = tBase;
                 }
-
-                *xy = x;
-                xy = xy.add(1);
-                *xy = y;
-                xy = xy.add(1);
-                n_vals -= 2;
-                tCurr = tBase;
             }
+            bits_left += cachedBits - padBits;
+            return startBits - bits_left;
         }
-        bits_left += cachedBits - padBits;
-        return startBits - bits_left;
+        _ => return -1,
     }
-
-    -1
 }
 
 /* tables for quadruples
@@ -2158,7 +2168,6 @@ pub unsafe extern "C" fn IMDCT(
     m_HuffmanInfo: &mut HuffmanInfo,
     m_IMDCTInfo: &mut IMDCTInfo,
 ) -> i32 {
-
     let mut bc = BlockCount {
         nBlocksLong: 0,
         nBlocksTotal: 0,
@@ -2175,7 +2184,11 @@ pub unsafe extern "C" fn IMDCT(
 
     // blockCutoff logic
     // MPEG1 = 0, inne = MPEG2/2.5
-    let cutoff_idx = if m_MPEGVersion == MPEGVersion::MPEG1 { 8 } else { 6 };
+    let cutoff_idx = if m_MPEGVersion == MPEGVersion::MPEG1 {
+        8
+    } else {
+        6
+    };
     let block_cutoff = (sfb.l[cutoff_idx] as i32) / 18;
 
     if sis.blockType != 2 {
@@ -2480,7 +2493,12 @@ pub unsafe extern "C" fn DequantChannel(
         };
         let gain_i = 210 - global_gain + s_multiplier * (sfis.l[cb as usize] as i32 + pre_val);
 
-        let non_zero = DequantBlock(sample_buf.as_mut_ptr().add(i), sample_buf.as_mut_ptr().add(i), n_samps, gain_i);
+        let non_zero = DequantBlock(
+            sample_buf.as_mut_ptr().add(i),
+            sample_buf.as_mut_ptr().add(i),
+            n_samps,
+            gain_i,
+        );
 
         if non_zero != 0 {
             cb_max[0] = cb;
@@ -2515,7 +2533,9 @@ pub unsafe extern "C" fn DequantChannel(
 
             // Dekwantyzujemy do workBuf, aby móc potem bezpiecznie przełożyć dane do sampleBuf
             let non_zero = DequantBlock(
-                sample_buf.as_mut_ptr().add(i + (n_samps * w as i32) as usize),
+                sample_buf
+                    .as_mut_ptr()
+                    .add(i + (n_samps * w as i32) as usize),
                 work_buf.add((n_samps * w as i32) as usize),
                 n_samps,
                 gain_i,
@@ -2717,7 +2737,7 @@ pub fn IntensityProcMPEG2(
     sfjs: &ScaleFactorJS,
     mid_side_flag: i32,
     _mix_flag: i32,
-    m_out: &mut[i32; 2], // mOut[2]
+    m_out: &mut [i32; 2], // mOut[2]
     sfbt: &SFBandTable,
 ) {
     let mut m_out_l = 0i32;
@@ -2843,7 +2863,7 @@ pub fn IntensityProcMPEG2(
     m_out[1] = m_out_r;
 }
 
-pub fn MidSideProc(
+pub fn mid_side_proc(
     x: &mut [[i32; MAX_NSAMP]; MAX_NCHAN], // x[2][576]
     n_samps: usize,
     m_out: &mut [i32; 2], // mOut[2]
@@ -2890,7 +2910,7 @@ pub fn MidSideProc(
  *
  * Return:      length (in bytes) of scale factor data, -1 if null input pointers
  **********************************************************************************************************************/
-#[unsafe(no_mangle)]
+
 pub unsafe fn UnpackScaleFactors(
     mut buf: *mut u8,
     bitOffset: &mut i32,
@@ -2906,8 +2926,12 @@ pub unsafe fn UnpackScaleFactors(
     m_MPEGVersion: MPEGVersion,
 ) -> i32 {
     /* init GetBits reader */
-    let startBuf = unsafe { core::slice::from_raw_parts(buf, (bitsAvail as usize+ *bitOffset as usize + 7) / 8) };
-    let mut bsi = BitStreamInfo::from_slice(unsafe { core::slice::from_raw_parts(buf, (bitsAvail as usize+ *bitOffset as usize + 7) / 8) });
+    let startBuf = unsafe {
+        core::slice::from_raw_parts(buf, (bitsAvail as usize + *bitOffset as usize + 7) / 8)
+    };
+    let mut bsi = BitStreamInfo::from_slice(unsafe {
+        core::slice::from_raw_parts(buf, (bitsAvail as usize + *bitOffset as usize + 7) / 8)
+    });
 
     if *bitOffset != 0 {
         bsi.get_bits(*bitOffset as u32);
@@ -2937,7 +2961,6 @@ pub unsafe fn UnpackScaleFactors(
     m_MP3DecInfo.part23Length[gr as usize][ch as usize] =
         m_SideInfoSub[gr as usize][ch as usize].part23_length;
 
-        
     let bitsUsed = bsi.calc_bits_used(startBuf, *bitOffset as usize);
     buf = buf.add((bitsUsed + *bitOffset) as usize >> 3);
     *bitOffset = (bitsUsed + *bitOffset) & 0x07;
@@ -2958,7 +2981,6 @@ pub unsafe fn UnpackScaleFactors(
  * Return:      0 on success,  -1 if null input pointers
  **********************************************************************************************************************/
 
-#[unsafe(no_mangle)]
 pub unsafe fn Subband(
     mut pcmBuf: *mut i16,
     m_MP3DecInfo: &mut MP3DecInfo,
@@ -3019,10 +3041,7 @@ pub unsafe fn Subband(
     return 0;
 }
 
-pub unsafe fn MP3Dequantize(
-    gr: i32,
-    m_mp3_decoder: &mut MP3Decoder,
-) -> i32 {
+pub unsafe fn MP3Dequantize(gr: i32, m_mp3_decoder: &mut MP3Decoder) -> i32 {
     let di = &mut m_mp3_decoder.m_MP3DecInfo;
     let hi = &mut m_mp3_decoder.m_HuffmanInfo;
     let dqi = &mut m_mp3_decoder.m_DequantInfo;
@@ -3079,7 +3098,7 @@ pub unsafe fn MP3Dequantize(
             /* Intensity stereo wyłączone - Mid-Side na całym widmie */
             n_samps = hi.non_zero_bound[0].max(hi.non_zero_bound[1]);
         }
-        MidSideProc(&mut hi.huff_dec_buf, n_samps as usize, &mut m_out);
+        mid_side_proc(&mut hi.huff_dec_buf, n_samps as usize, &mut m_out);
     }
 
     // 4. Proces Intensity Stereo
@@ -3192,11 +3211,14 @@ pub unsafe fn MP3DecodeHelper(
                 m_mp3_decoder.m_MP3DecInfo.freeBitrateFlag = 0;
                 return ERR_MP3_FREE_BITRATE_SYNC;
             }
-            freeFrameBytes = m_mp3_decoder.m_MP3DecInfo.freeBitrateSlots + fh_bytes as i32 + siBytes;
-            m_mp3_decoder.m_MP3DecInfo.bitrate = (freeFrameBytes * m_mp3_decoder.m_MP3DecInfo.samprate * 8)
-                / (m_mp3_decoder.m_MP3DecInfo.nGrans * m_mp3_decoder.m_MP3DecInfo.nGranSamps);
+            freeFrameBytes =
+                m_mp3_decoder.m_MP3DecInfo.freeBitrateSlots + fh_bytes as i32 + siBytes;
+            m_mp3_decoder.m_MP3DecInfo.bitrate =
+                (freeFrameBytes * m_mp3_decoder.m_MP3DecInfo.samprate * 8)
+                    / (m_mp3_decoder.m_MP3DecInfo.nGrans * m_mp3_decoder.m_MP3DecInfo.nGranSamps);
         }
-        m_mp3_decoder.m_MP3DecInfo.nSlots = m_mp3_decoder.m_MP3DecInfo.freeBitrateSlots + m_mp3_decoder.m_FrameHeader.check_pad_bit();
+        m_mp3_decoder.m_MP3DecInfo.nSlots = m_mp3_decoder.m_MP3DecInfo.freeBitrateSlots
+            + m_mp3_decoder.m_FrameHeader.check_pad_bit();
     }
 
     /* Bit Reservoir Management */
@@ -3219,24 +3241,26 @@ pub unsafe fn MP3DecodeHelper(
         if m_mp3_decoder.m_MP3DecInfo.mainDataBytes >= m_mp3_decoder.m_MP3DecInfo.mainDataBegin {
             // memmove(mainBuf, mainBuf + mainDataBytes - mainDataBegin, mainDataBegin)
             core::ptr::copy(
-                m_mp3_decoder.m_MP3DecInfo
-                    .mainBuf
-                    .as_ptr()
-                    .add((m_mp3_decoder.m_MP3DecInfo.mainDataBytes - m_mp3_decoder.m_MP3DecInfo.mainDataBegin) as usize),
+                m_mp3_decoder.m_MP3DecInfo.mainBuf.as_ptr().add(
+                    (m_mp3_decoder.m_MP3DecInfo.mainDataBytes
+                        - m_mp3_decoder.m_MP3DecInfo.mainDataBegin) as usize,
+                ),
                 m_mp3_decoder.m_MP3DecInfo.mainBuf.as_mut_ptr(),
                 m_mp3_decoder.m_MP3DecInfo.mainDataBegin as usize,
             );
             // memcpy(mainBuf + mainDataBegin, inbuf, nSlots)
             core::ptr::copy_nonoverlapping(
                 inbuf,
-                m_mp3_decoder.m_MP3DecInfo
+                m_mp3_decoder
+                    .m_MP3DecInfo
                     .mainBuf
                     .as_mut_ptr()
                     .add(m_mp3_decoder.m_MP3DecInfo.mainDataBegin as usize),
                 m_mp3_decoder.m_MP3DecInfo.nSlots as usize,
             );
 
-            m_mp3_decoder.m_MP3DecInfo.mainDataBytes = m_mp3_decoder.m_MP3DecInfo.mainDataBegin + m_mp3_decoder.m_MP3DecInfo.nSlots;
+            m_mp3_decoder.m_MP3DecInfo.mainDataBytes =
+                m_mp3_decoder.m_MP3DecInfo.mainDataBegin + m_mp3_decoder.m_MP3DecInfo.nSlots;
             inbuf = inbuf.add(m_mp3_decoder.m_MP3DecInfo.nSlots as usize);
             *bytes_left -= m_mp3_decoder.m_MP3DecInfo.nSlots;
             mainPtr = m_mp3_decoder.m_MP3DecInfo.mainBuf.as_mut_ptr();
@@ -3244,7 +3268,8 @@ pub unsafe fn MP3DecodeHelper(
             // memcpy(mainBuf + mainDataBytes, inbuf, nSlots)
             core::ptr::copy_nonoverlapping(
                 inbuf,
-                m_mp3_decoder.m_MP3DecInfo
+                m_mp3_decoder
+                    .m_MP3DecInfo
                     .mainBuf
                     .as_mut_ptr()
                     .add(m_mp3_decoder.m_MP3DecInfo.mainDataBytes as usize),
@@ -3272,15 +3297,16 @@ pub unsafe fn MP3DecodeHelper(
                 ch,
                 &mut m_mp3_decoder.m_SideInfoSub, // 1. Oczekiwany: *mut [[SideInfoSub; 2]; 2]
                 &mut m_mp3_decoder.m_ScaleFactorInfoSub, // 2. Oczekiwany: *mut [[ScaleFactorInfoSub; 2]; 2]
-                &mut m_mp3_decoder.m_MP3DecInfo,                           // 3. Oczekiwany: *mut MP3DecInfo
+                &mut m_mp3_decoder.m_MP3DecInfo,         // 3. Oczekiwany: *mut MP3DecInfo
                 &mut m_mp3_decoder.m_SideInfo,
-                &mut m_mp3_decoder.m_FrameHeader,                     // 5. Oczekiwany: *mut FrameHeader
+                &mut m_mp3_decoder.m_FrameHeader, // 5. Oczekiwany: *mut FrameHeader
                 &mut m_mp3_decoder.m_ScaleFactorJS, // 6. Oczekiwany: *mut ScaleFactorJS
-                m_mp3_decoder.m_MPEGVersion,        // 7. Oczekiwany: i32
+                m_mp3_decoder.m_MPEGVersion,      // 7. Oczekiwany: i32
             );
 
             sfBlockBits = 8 * offset - prev_bit_offset + bitOffset;
-            huffBlockBits = m_mp3_decoder.m_MP3DecInfo.part23Length[gr as usize][ch as usize] - sfBlockBits;
+            huffBlockBits =
+                m_mp3_decoder.m_MP3DecInfo.part23Length[gr as usize][ch as usize] - sfBlockBits;
             mainPtr = mainPtr.add(offset as usize);
             mainBits -= sfBlockBits;
 
@@ -3309,11 +3335,7 @@ pub unsafe fn MP3DecodeHelper(
             mainBits -= (8 * offset - prev_bit_offset + bitOffset);
         }
 
-        if MP3Dequantize(
-            gr,
-            m_mp3_decoder,
-        ) < 0
-        {
+        if MP3Dequantize(gr, m_mp3_decoder) < 0 {
             MP3ClearBadFrame(outbuf);
             return ERR_MP3_INVALID_DEQUANTIZE;
         }
@@ -3334,7 +3356,9 @@ pub unsafe fn MP3DecodeHelper(
             }
         }
 
-        let pcm_offset = (gr * m_mp3_decoder.m_MP3DecInfo.nGranSamps * m_mp3_decoder.m_MP3DecInfo.nChans) as usize;
+        let pcm_offset = (gr
+            * m_mp3_decoder.m_MP3DecInfo.nGranSamps
+            * m_mp3_decoder.m_MP3DecInfo.nChans) as usize;
         if Subband(
             outbuf.as_mut_ptr().add(pcm_offset),
             &mut m_mp3_decoder.m_MP3DecInfo,
