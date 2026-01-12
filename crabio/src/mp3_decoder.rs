@@ -1263,6 +1263,60 @@ const slotTab: [[[i16; 15]; 3]; 3] = [
 ];
 
 impl MP3Decoder {
+    pub fn subband(
+        &mut self,
+        mut pcm_buf: &mut [i16],
+    ) -> i32 {
+        if self.m_MP3DecInfo.nChans == 2 {
+            /* stereo */
+            for b in 0..BLOCK_SIZE {
+                fdct_32(
+                    &mut self.m_IMDCTInfo.outBuf[0][b],
+                    &mut self.m_SubbandInfo.vbuf,
+                    self.m_SubbandInfo.vindex,
+                    b as i32 & 0x01,
+                    self.m_IMDCTInfo.gb[0],
+                );
+                fdct_32(
+                    &mut self.m_IMDCTInfo.outBuf[1][b],
+                    &mut self.m_SubbandInfo.vbuf[1 * 32..],
+                    self.m_SubbandInfo.vindex,
+                    b as i32 & 0x01,
+                    self.m_IMDCTInfo.gb[1],
+                );
+                polyphase_stereo(
+                    pcm_buf,
+                    &self.m_SubbandInfo
+                        .vbuf[self.m_SubbandInfo.vindex as usize + VBUF_LENGTH * (b as i32 & 0x01) as usize..],
+                    &POLY_COEF,
+                );
+                self.m_SubbandInfo.vindex = (self.m_SubbandInfo.vindex - (b as i32 & 0x01)) & 7;
+                pcm_buf = &mut pcm_buf[2 * NBANDS..];
+            }
+        } else {
+            /* mono */
+            for b in 0..BLOCK_SIZE {
+                fdct_32(
+                    &mut self.m_IMDCTInfo.outBuf[0][b],
+                    &mut self.m_SubbandInfo.vbuf,
+                    self.m_SubbandInfo.vindex,
+                    b as i32 & 0x01,
+                    self.m_IMDCTInfo.gb[0],
+                );
+                polyphase_mono(
+                    pcm_buf,
+                    &self.m_SubbandInfo
+                        .vbuf[self.m_SubbandInfo.vindex as usize + VBUF_LENGTH * (b & 0x01)..],
+                    &POLY_COEF,
+                );
+                self.m_SubbandInfo.vindex = (self.m_SubbandInfo.vindex - (b as i32 & 0x01)) & 7;
+                pcm_buf = &mut pcm_buf[NBANDS as usize..];
+            }
+        }
+
+        return 0;
+    }
+
     pub fn unpack_frame_header(
         &mut self,
         buf: &[u8],

@@ -95,60 +95,6 @@ pub unsafe extern "C" fn MP3FindFreeSync(buf: *const u8, first_fh: *const u8, n_
 /***********************************************************************************************************************
  * P O L Y P H A S E
  **********************************************************************************************************************/
-
-/***********************************************************************************************************************
- * Function:    PolyphaseStereo
- *
- * Description: filter one subband and produce 32 output PCM samples for each channel
- *
- * Inputs:      pointer to PCM output buffer
- *              number of "extra shifts" (vbuf format = Q(DQ_FRACBITS_OUT-2))
- *              pointer to start of vbuf (preserved from last call)
- *              start of filter coefficient table (in proper, shuffled order)
- *              no minimum number of guard bits is required for input vbuf
- *                (see additional scaling comments below)
- *
- * Outputs:     32 samples of two channels of decoded PCM data, (i.e. Q16.0)
- *
- * Return:      none
- *
- * Notes:       interleaves PCM samples LRLRLR...
- **********************************************************************************************************************/
-#[allow(non_snake_case)]
-pub fn PolyphaseStereo(pcm: *mut i16, vbuf: *const i32, coef_base: *const u32) {
-    let pcm = unsafe { core::slice::from_raw_parts_mut(pcm, NBANDS * MAX_NCHAN) }; // 32*2
-    let vbuf = unsafe { core::slice::from_raw_parts(vbuf, VBUF_LENGTH) };
-    let coef_base = unsafe { core::slice::from_raw_parts(coef_base, POLY_COEF.len()) };
-
-    polyphase_stereo(pcm, vbuf, coef_base);
-}
-
-/***********************************************************************************************************************
- * Function:    PolyphaseMono
- *
- * Description: filter one subband and produce 32 output PCM samples for one channel
- *
- * Inputs:      pointer to PCM output buffer
- *              number of "extra shifts" (vbuf format = Q(DQ_FRACBITS_OUT-2))
- *              pointer to start of vbuf (preserved from last call)
- *              start of filter coefficient table (in proper, shuffled order)
- *              no minimum number of guard bits is required for input vbuf
- *                (see additional scaling comments below)
- *
- * Outputs:     32 samples of one channel of decoded PCM data, (i.e. Q16.0)
- *
- * Return:      none
- **********************************************************************************************************************/
-#[unsafe(no_mangle)]
-#[allow(non_snake_case)]
-pub unsafe fn PolyphaseMono(pcm: *mut i16, vbuf: *const i32, coef_base: *const u32) {
-    let pcm = unsafe { core::slice::from_raw_parts_mut(pcm, NBANDS * MAX_NCHAN) }; // 32*2
-    let vbuf = unsafe { core::slice::from_raw_parts(vbuf, VBUF_LENGTH) };
-    let coef_base = unsafe { core::slice::from_raw_parts(coef_base, POLY_COEF.len()) };
-
-    polyphase_mono(pcm, vbuf, coef_base);
-}
-
 /***********************************************************************************************************************
  * Function:    FreqInvertRescale
  *
@@ -1523,7 +1469,7 @@ pub unsafe fn DecodeHuffmanQuads(
  *                out of bits prematurely (invalid bitstream)
  **********************************************************************************************************************/
 
-pub unsafe extern "C" fn DecodeHuffman(
+pub unsafe fn DecodeHuffman(
     mut buf: *mut u8,
     bitOffset: *mut i32,
     huffBlockBits: i32,
@@ -2932,66 +2878,6 @@ pub unsafe fn UnpackScaleFactors(
  * Return:      0 on success,  -1 if null input pointers
  **********************************************************************************************************************/
 
-pub unsafe fn Subband(
-    mut pcmBuf: *mut i16,
-    m_MP3DecInfo: &mut MP3DecInfo,
-    m_IMDCTInfo: &mut IMDCTInfo,
-    m_SubbandInfo: &mut SubbandInfo,
-) -> i32 {
-    if m_MP3DecInfo.nChans == 2 {
-        /* stereo */
-        for b in 0..BLOCK_SIZE {
-            fdct_32(
-                &mut m_IMDCTInfo.outBuf[0][b],
-                &mut m_SubbandInfo.vbuf,
-                m_SubbandInfo.vindex,
-                (b as i32 & 0x01),
-                m_IMDCTInfo.gb[0],
-            );
-            fdct_32(
-                &mut m_IMDCTInfo.outBuf[1][b],
-                &mut m_SubbandInfo.vbuf[1 * 32..],
-                m_SubbandInfo.vindex,
-                (b as i32 & 0x01),
-                m_IMDCTInfo.gb[1],
-            );
-            PolyphaseStereo(
-                pcmBuf,
-                m_SubbandInfo
-                    .vbuf
-                    .as_mut_ptr()
-                    .add(m_SubbandInfo.vindex as usize + VBUF_LENGTH * (b as i32 & 0x01) as usize),
-                POLY_COEF.as_ptr(),
-            );
-            m_SubbandInfo.vindex = (m_SubbandInfo.vindex - (b as i32 & 0x01)) & 7;
-            pcmBuf = pcmBuf.add(2 * NBANDS);
-        }
-    } else {
-        /* mono */
-        for b in 0..BLOCK_SIZE {
-            fdct_32(
-                &mut m_IMDCTInfo.outBuf[0][b],
-                &mut m_SubbandInfo.vbuf,
-                m_SubbandInfo.vindex,
-                (b as i32 & 0x01),
-                m_IMDCTInfo.gb[0],
-            );
-            PolyphaseMono(
-                pcmBuf,
-                m_SubbandInfo
-                    .vbuf
-                    .as_mut_ptr()
-                    .add(m_SubbandInfo.vindex as usize + VBUF_LENGTH * (b & 0x01)),
-                POLY_COEF.as_ptr(),
-            );
-            m_SubbandInfo.vindex = (m_SubbandInfo.vindex - (b as i32 & 0x01)) & 7;
-            pcmBuf = pcmBuf.add(NBANDS as usize);
-        }
-    }
-
-    return 0;
-}
-
 pub unsafe fn MP3Dequantize(gr: i32, m_mp3_decoder: &mut MP3Decoder) -> i32 {
     let di = &mut m_mp3_decoder.m_MP3DecInfo;
     let hi = &mut m_mp3_decoder.m_HuffmanInfo;
@@ -3310,13 +3196,7 @@ pub unsafe fn MP3DecodeHelper(
         let pcm_offset = (gr
             * m_mp3_decoder.m_MP3DecInfo.nGranSamps
             * m_mp3_decoder.m_MP3DecInfo.nChans) as usize;
-        if Subband(
-            outbuf.as_mut_ptr().add(pcm_offset),
-            &mut m_mp3_decoder.m_MP3DecInfo,
-            &mut m_mp3_decoder.m_IMDCTInfo,
-            &mut m_mp3_decoder.m_SubbandInfo,
-        ) < 0
-        {
+        if m_mp3_decoder.subband(&mut outbuf[pcm_offset..]) < 0 {
             MP3ClearBadFrame(outbuf);
             return ERR_MP3_INVALID_SUBBAND; // ERR_MP3_INVALID_SUBBAND
         }
