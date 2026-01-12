@@ -4,7 +4,16 @@ use core::panic::PanicInfo;
 
 use crabio::{
     mp3_decoder::{
-        BLOCK_SIZE, CriticalBandInfo, ERR_MP3_FREE_BITRATE_SYNC, ERR_MP3_INDATA_UNDERFLOW, ERR_MP3_INVALID_DEQUANTIZE, ERR_MP3_INVALID_FRAMEHEADER, ERR_MP3_INVALID_HUFFCODES, ERR_MP3_INVALID_IMDCT, ERR_MP3_INVALID_SCALEFACT, ERR_MP3_INVALID_SIDEINFO, ERR_MP3_INVALID_SUBBAND, ERR_MP3_MAINDATA_UNDERFLOW, ERR_MP3_NONE, FrameHeader, HUFF_PAIRTABS, HuffTabLookup, HuffTabType, HuffmanInfo, IMDCT_SCALE, IMDCTInfo, MAX_NCHAN, MAX_NGRAN, MAX_NSAMP, MAX_SCFBD, MP3DecInfo, MP3Decoder, MPEGVersion, NBANDS, POLY_COEF, SFBandTable, SQRTHALF, ScaleFactorInfoSub, ScaleFactorJS, SideInfo, SideInfoSub, SubbandInfo, VBUF_LENGTH, clip_2n, fdct_32, freq_invert_rescale, idct_9, imdct_12, madd_64, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, polyphase_mono, polyphase_stereo, win_previous
+        CriticalBandInfo, ERR_MP3_FREE_BITRATE_SYNC, ERR_MP3_INDATA_UNDERFLOW,
+        ERR_MP3_INVALID_DEQUANTIZE, ERR_MP3_INVALID_FRAMEHEADER, ERR_MP3_INVALID_HUFFCODES,
+        ERR_MP3_INVALID_IMDCT, ERR_MP3_INVALID_SCALEFACT, ERR_MP3_INVALID_SIDEINFO,
+        ERR_MP3_INVALID_SUBBAND, ERR_MP3_MAINDATA_UNDERFLOW, ERR_MP3_NONE, FrameHeader,
+        HUFF_PAIRTABS, HuffTabLookup, HuffTabType, HuffmanInfo, IMDCT_SCALE, IMDCTInfo, MAX_NCHAN,
+        MAX_NGRAN, MAX_NSAMP, MAX_SCFBD, MP3DecInfo, MP3Decoder, MPEGVersion, NBANDS,
+        SFBandTable, SQRTHALF, ScaleFactorInfoSub, ScaleFactorJS, SideInfo, SideInfoSub,
+        clip_2n, freq_invert_rescale, idct_9, imdct_12,
+        mp3_find_free_sync, mp3_find_sync_word, mulshift_32,
+        win_previous,
     },
     utils::bit_stream_cache::BitStreamInfo,
 };
@@ -1534,7 +1543,8 @@ pub unsafe fn DecodeHuffman(
     let mut bitsUsed;
     for i in 0..3 {
         bitsUsed = DecodeHuffmanPairs(
-            &mut m_HuffmanInfo.huff_dec_buf[ch as usize][rEnd[i] as usize..rEnd[i] as usize + (rEnd[i + 1] - rEnd[i]) as usize],
+            &mut m_HuffmanInfo.huff_dec_buf[ch as usize]
+                [rEnd[i] as usize..rEnd[i] as usize + (rEnd[i + 1] - rEnd[i]) as usize],
             sis.tableSelect[i],
             bitsLeft,
             buf,
