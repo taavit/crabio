@@ -2199,13 +2199,13 @@ const pow43: [i32; 48] = [
  * Relative error < 1E-7
  * Coefs are scaled by 4, 2, 1, 0.5, 0.25
  */
-const poly43lo: [u32; 5] = [0x29a0bda9, 0xb02e4828, 0x5957aa1b, 0x236c498d, 0xff581859];
-const poly43hi: [u32; 5] = [0x10852163, 0xd333f6a4, 0x46e9408b, 0x27c2cef0, 0xfef577b4];
+const POLY43LO: [u32; 5] = [0x29a0bda9, 0xb02e4828, 0x5957aa1b, 0x236c498d, 0xff581859];
+const POLY43HI: [u32; 5] = [0x10852163, 0xd333f6a4, 0x46e9408b, 0x27c2cef0, 0xfef577b4];
 
 /* pow(2, i*4/3) as exp and frac */
-const pow2exp: [i32; 8] = [14, 13, 11, 10, 9, 7, 6, 5];
+const POW2EXP: [i32; 8] = [14, 13, 11, 10, 9, 7, 6, 5];
 
-const pow2frac: [i32; 8] = [
+const POW2FRAC: [i32; 8] = [
     0x6597fa94, 0x50a28be6, 0x7fffffff, 0x6597fa94, 0x50a28be6, 0x7fffffff, 0x6597fa94, 0x50a28be6,
 ];
 
@@ -2288,9 +2288,9 @@ pub unsafe extern "C" fn DequantBlock(
                 }
 
                 let coef = if x_norm < SQRTHALF {
-                    &poly43lo
+                    &POLY43LO
                 } else {
-                    &poly43hi
+                    &POLY43HI
                 };
 
                 /* Aproksymacja wielomianowa */
@@ -2301,11 +2301,11 @@ pub unsafe extern "C" fn DequantBlock(
                 y = mulshift_32(y, x_norm as i32) + (coef[4] as i32);
 
                 // y = (y * pow2frac[shift]) << 3
-                y = mulshift_32(y, pow2frac[shift as usize]) << 3;
+                y = mulshift_32(y, POW2FRAC[shift as usize]) << 3;
 
                 /* Skala ułamkowa */
                 y = mulshift_32(y, scalef);
-                shift = scalei - pow2exp[shift as usize];
+                shift = scalei - POW2EXP[shift as usize];
             }
 
             /* Skala całkowita z clippingiem */
@@ -2339,13 +2339,13 @@ const PRE_TAB: [u8; 22] = [
 pub unsafe fn DequantChannel(
     sample_buf: &mut [i32; MAX_NSAMP],
     work_buf: *mut i32,
-    non_zero_bound: *mut i32,
+    non_zero_bound: &mut i32,
     sis: *const SideInfoSub,
     sfis: *const ScaleFactorInfoSub,
     cbi: *mut CriticalBandInfo,
     m_frame_header: *const FrameHeader,
     m_sf_band_table: *const SFBandTable,
-    m_MPEGVersion: MPEGVersion,
+    m_mpegversion: MPEGVersion,
 ) -> i32 {
     let sis = &*sis;
     let sfis = &*sfis;
@@ -2360,7 +2360,7 @@ pub unsafe fn DequantChannel(
     // 1. Ustalenie granic dla bloków długich i krótkich
     if sis.blockType == 2 {
         if sis.mixedBlock != 0 {
-            cb_end_l = if m_MPEGVersion == MPEGVersion::MPEG1 {
+            cb_end_l = if m_mpegversion == MPEGVersion::MPEG1 {
                 8
             } else {
                 6
@@ -2997,11 +2997,11 @@ pub unsafe fn MP3Dequantize(gr: i32, m_mp3_decoder: &mut MP3Decoder) -> i32 {
 pub unsafe fn MP3DecodeHelper(
     mut inbuf: *mut u8,
     inbuf_len: usize,
-    bytes_left: *mut i32,
+    bytes_left: &mut i32,
     outbuf: *mut i16,
     use_size: i32,
     // SELF
-    m_MP3Decoder: *mut MP3Decoder,
+    m_mp3_decoder: &mut MP3Decoder,
 ) -> i8 {
     let mut offset: i32;
     let mut bitOffset: i32;
@@ -3013,7 +3013,7 @@ pub unsafe fn MP3DecodeHelper(
     let mut huffBlockBits: i32;
     let mut mainPtr: *mut u8;
 
-    let m_mp3_decoder = unsafe { &mut *m_MP3Decoder };
+    // let m_mp3_decoder = unsafe { &mut *m_MP3Decoder };
     let mut buf = unsafe { core::slice::from_raw_parts(inbuf, inbuf_len) };
     /* unpack frame header */
     // esp_println::println!("{:?}", &buf[..5]);
