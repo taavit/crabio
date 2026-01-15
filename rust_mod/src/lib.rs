@@ -34,14 +34,9 @@ pub fn CLIP_2N(y: i32, n: u32) -> i32 {
     clip_2n(y, n)
 }
 
-pub unsafe fn imdct12(x: *const i32, out: *mut i32) {
+pub unsafe fn imdct12(x: *const i32, out_arr: &mut [i32; 6]) {
     let x_arr: &[i32; 18] = unsafe {
         core::slice::from_raw_parts(x, 18)
-            .try_into()
-            .unwrap_unchecked()
-    };
-    let out_arr: &mut [i32; 6] = unsafe {
-        core::slice::from_raw_parts_mut(out, 6)
             .try_into()
             .unwrap_unchecked()
     };
@@ -120,9 +115,8 @@ pub unsafe fn FreqInvertRescale(y: *mut i32, x_prev: *mut i32, block_idx: i32, e
 }
 
 #[allow(non_snake_case)]
-pub fn WinPrevious(xPrev: *mut i32, xPrevWin: *mut i32, bt_prev: i32) {
+pub fn WinPrevious(xPrev: *mut i32, x_prev_win: &mut [i32; 18], bt_prev: i32) {
     let x_prev: &mut [i32; 9] = unsafe { &mut *xPrev.cast::<[i32; 9]>() };
-    let x_prev_win: &mut [i32; 18] = unsafe { &mut *xPrevWin.cast::<[i32; 18]>() };
 
     win_previous(x_prev, x_prev_win, bt_prev);
 }
@@ -1667,8 +1661,8 @@ pub unsafe fn IMDCT36(
     let mut acc1 = 0;
     let mut acc2 = 0;
     let es;
-    let mut xBuf: [i32; 18] = [0; 18];
-    let mut xPrevWin: [i32; 18] = [0; 18];
+    let mut x_buf: [i32; 18] = [0; 18];
+    let mut x_prev_win: [i32; 18] = [0; 18];
     let mut xp;
     let mut cp;
     let mut c;
@@ -1677,8 +1671,8 @@ pub unsafe fn IMDCT36(
     let mut s;
     let mut d;
     let mut t;
-    let mut yLo;
-    let mut yHi;
+    let mut y_lo;
+    let mut y_hi;
     xCurr = xCurr.add(17);
     /* 7 gb is always adequate for antialias + accumulator loop + idct9 */
     if (gb < 7) {
@@ -1690,8 +1684,8 @@ pub unsafe fn IMDCT36(
             acc2 = acc1 - acc2;
             acc1 = ((*xCurr) >> es) - acc1;
             xCurr = xCurr.sub(1);
-            xBuf[i + 9] = acc2; /* odd */
-            xBuf[i + 0] = acc1; /* even */
+            x_buf[i + 9] = acc2; /* odd */
+            x_buf[i + 0] = acc1; /* even */
             *xPrev.add(i) >>= es;
         }
     } else {
@@ -1703,19 +1697,19 @@ pub unsafe fn IMDCT36(
             acc2 = acc1 - acc2;
             acc1 = (*xCurr) - acc1;
             xCurr = xCurr.sub(1);
-            xBuf[i + 9] = acc2; /* odd */
-            xBuf[i + 0] = acc1; /* even */
+            x_buf[i + 9] = acc2; /* odd */
+            x_buf[i + 0] = acc1; /* even */
         }
     }
     /* xEven[0] and xOdd[0] scaled by 0.5 */
-    xBuf[9] >>= 1;
-    xBuf[0] >>= 1;
+    x_buf[9] >>= 1;
+    x_buf[0] >>= 1;
 
     /* do 9-point IDCT on even and odd */
-    idct9(xBuf.as_mut_ptr()); /* even */
-    idct9(xBuf.as_mut_ptr().add(9)); /* odd */
+    idct9(x_buf.as_mut_ptr()); /* even */
+    idct9(x_buf.as_mut_ptr().add(9)); /* odd */
 
-    xp = xBuf.as_mut_ptr().add(8);
+    xp = x_buf.as_mut_ptr().add(8);
     cp = C18.as_ptr().add(8);
     let mut mOut = 0;
     if (btPrev == 0 && btCurr == 0) {
@@ -1737,18 +1731,18 @@ pub unsafe fn IMDCT36(
             xPrev = xPrev.add(1);
             t = s - d;
 
-            yLo = (d + (mulshift_32(t, e[0] as i32) << 2));
-            yHi = (s + (mulshift_32(t, e[1] as i32) << 2));
-            *y.add((i) * NBANDS as usize) = yLo;
-            *y.add((17 - i) * NBANDS as usize) = yHi;
-            mOut |= yLo.abs();
-            mOut |= yHi.abs();
+            y_lo = (d + (mulshift_32(t, e[0] as i32) << 2));
+            y_hi = (s + (mulshift_32(t, e[1] as i32) << 2));
+            *y.add((i) * NBANDS as usize) = y_lo;
+            *y.add((17 - i) * NBANDS as usize) = y_hi;
+            mOut |= y_lo.abs();
+            mOut |= y_hi.abs();
         }
     } else {
         /* slower method - either prev or curr is using window type != 0 so do full 36-point window
          * output xPrevWin has at least 3 guard bits (xPrev has 2, gain 1 in WinPrevious)
          */
-        WinPrevious(xPrev, xPrevWin.as_mut_ptr(), btPrev);
+        WinPrevious(xPrev, &mut x_prev_win, btPrev);
 
         let wp = IMDCT_WIN[btCurr as usize];
         for i in 0..9 {
@@ -1765,12 +1759,12 @@ pub unsafe fn IMDCT36(
             (*xPrev) = xe + xo; /* symmetry - xPrev[i] = xPrev[17-i] for long blocks */
             xPrev = xPrev.add(1);
 
-            yLo = (xPrevWin[i] + mulshift_32(d, wp[i] as i32)) << 2;
-            yHi = (xPrevWin[17 - i] + mulshift_32(d, wp[17 - i] as i32)) << 2;
-            *(y.add((i) * NBANDS)) = yLo;
-            *(y.add((17 - i) * NBANDS)) = yHi;
-            mOut |= yLo.abs();
-            mOut |= yHi.abs();
+            y_lo = (x_prev_win[i] + mulshift_32(d, wp[i] as i32)) << 2;
+            y_hi = (x_prev_win[17 - i] + mulshift_32(d, wp[17 - i] as i32)) << 2;
+            *(y.add((i) * NBANDS)) = y_lo;
+            *(y.add((17 - i) * NBANDS)) = y_hi;
+            mOut |= y_lo.abs();
+            mOut |= y_hi.abs();
         }
     }
 
@@ -1817,7 +1811,7 @@ const CSA: [[u32; 2]; 8] = [
     [0x7fffc694, 0xff86c25d],
 ];
 
-pub fn AntiAlias(x: &mut [i32], n_bfly: usize) {
+pub fn anti_alias(x: &mut [i32], n_bfly: usize) {
     if n_bfly <= 0 {
         return;
     }
@@ -1927,7 +1921,7 @@ pub unsafe fn HybridTransform(
             prev_win_idx = 0;
         }
 
-        WinPrevious(x_prev.as_mut_ptr(), x_prev_win.as_mut_ptr(), prev_win_idx);
+        WinPrevious(x_prev.as_mut_ptr(), &mut x_prev_win, prev_win_idx);
 
         let mut non_zero = 0i32;
         let fi_bit = (i as i32) << 31;
@@ -1982,10 +1976,10 @@ pub unsafe fn IMDCT12x3(
     block_idx: i32,
     gb: i32,
 ) -> i32 {
-    let mut x_buf = [0i32; 18];
-    let mut x_prev_win = [0i32; 18];
+    let mut x_buf: [i32; BLOCK_SIZE] = [0i32; BLOCK_SIZE];
+    let mut x_prev_win = [0i32; BLOCK_SIZE];
     let mut es = 0;
-    let n_bands = 32; // m_NBANDS
+    let n_bands = NBANDS; // m_NBANDS
 
     // 1. Skalowanie (Guard Bits)
     // Jeśli mamy za mało bitów strażniczych, przesuwamy dane w prawo
@@ -2001,12 +1995,13 @@ pub unsafe fn IMDCT12x3(
 
     // 2. Trzy transformaty IMDCT 12-punktowe
     // Dane wejściowe są przeplatane: b0[0], b1[0], b2[0], b0[1]...
-    imdct12(x_curr, x_buf.as_mut_ptr()); // Block 0
-    imdct12(x_curr.offset(1), x_buf.as_mut_ptr().add(6)); // Block 1
-    imdct12(x_curr.offset(2), x_buf.as_mut_ptr().add(12)); // Block 2
+    let (c1, _)=  x_buf.as_chunks_mut::<6>();
+    imdct12(x_curr, &mut c1[0]); // Block 0
+    imdct12(x_curr.offset(1), &mut c1[1]); // Block 1
+    imdct12(x_curr.offset(2), &mut c1[2]); // Block 2
 
     // 3. Okienkowanie poprzedniego bloku (Overlap z poprzedniej ramki)
-    WinPrevious(x_prev, x_prev_win.as_mut_ptr(), bt_prev);
+    WinPrevious(x_prev, &mut x_prev_win, bt_prev);
 
     // Pobranie wskaźnika do okna krótkiego (index 2)
     let wp = IMDCT_WIN[2];
@@ -2113,7 +2108,7 @@ pub unsafe extern "C" fn IMDCT(
     // Wywołanie AntiAlias na buforze konkretnego kanału
     // huffDecBuf[ch] to tablica 576 intów
     if let Ok(size) = n_bfly.try_into() {
-        AntiAlias(&mut m_HuffmanInfo.huff_dec_buf[ch as usize], size);
+        anti_alias(&mut m_HuffmanInfo.huff_dec_buf[ch as usize], size);
     }
 
     // Aktualizacja nonZeroBound
