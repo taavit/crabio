@@ -4,16 +4,7 @@ use core::panic::PanicInfo;
 
 use crabio::{
     mp3_decoder::{
-        CriticalBandInfo, ERR_MP3_FREE_BITRATE_SYNC, ERR_MP3_INDATA_UNDERFLOW,
-        ERR_MP3_INVALID_DEQUANTIZE, ERR_MP3_INVALID_FRAMEHEADER, ERR_MP3_INVALID_HUFFCODES,
-        ERR_MP3_INVALID_IMDCT, ERR_MP3_INVALID_SCALEFACT, ERR_MP3_INVALID_SIDEINFO,
-        ERR_MP3_INVALID_SUBBAND, ERR_MP3_MAINDATA_UNDERFLOW, ERR_MP3_NONE, FrameHeader,
-        HUFF_PAIRTABS, HuffTabLookup, HuffTabType, HuffmanInfo, IMDCT_SCALE, IMDCTInfo, MAX_NCHAN,
-        MAX_NGRAN, MAX_NSAMP, MAX_SCFBD, MP3DecInfo, MP3Decoder, MPEGVersion, NBANDS,
-        SFBandTable, SQRTHALF, ScaleFactorInfoSub, ScaleFactorJS, SideInfo, SideInfoSub,
-        clip_2n, freq_invert_rescale, idct_9, imdct_12,
-        mp3_find_free_sync, mp3_find_sync_word, mulshift_32,
-        win_previous,
+        BLOCK_SIZE, CriticalBandInfo, ERR_MP3_FREE_BITRATE_SYNC, ERR_MP3_INDATA_UNDERFLOW, ERR_MP3_INVALID_DEQUANTIZE, ERR_MP3_INVALID_FRAMEHEADER, ERR_MP3_INVALID_HUFFCODES, ERR_MP3_INVALID_IMDCT, ERR_MP3_INVALID_SCALEFACT, ERR_MP3_INVALID_SIDEINFO, ERR_MP3_INVALID_SUBBAND, ERR_MP3_MAINDATA_UNDERFLOW, ERR_MP3_NONE, FrameHeader, HUFF_PAIRTABS, HuffTabLookup, HuffTabType, HuffmanInfo, IMDCT_SCALE, IMDCTInfo, MAX_NCHAN, MAX_NGRAN, MAX_NSAMP, MAX_SCFBD, MP3DecInfo, MP3Decoder, MPEGVersion, NBANDS, SFBandTable, SQRTHALF, ScaleFactorInfoSub, ScaleFactorJS, SideInfo, SideInfoSub, clip_2n, freq_invert_rescale, idct_9, imdct_12, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, win_previous
     },
     utils::bit_stream_cache::BitStreamInfo,
 };
@@ -1864,7 +1855,7 @@ pub fn AntiAlias(x: &mut [i32], n_bfly: usize) {
 pub unsafe fn HybridTransform(
     x_curr: &mut [i32; MAX_NSAMP],
     x_prev: &mut [i32; MAX_NSAMP / 2],
-    y: *mut i32, // Tablica y[18][32] przekazana jako wskaźnik
+    y: &mut [[i32; NBANDS]; BLOCK_SIZE], // Tablica y[18][32] przekazana jako wskaźnik
     sis: &SideInfoSub,
     bc: &mut BlockCount,
 ) -> i32 {
@@ -1875,6 +1866,8 @@ pub unsafe fn HybridTransform(
     let mut x_prev = x_prev.as_mut_slice();
 
     let mut i = 0;
+    let y_slice = y;
+    let y = y_slice.as_mut_ptr() as *mut i32;
 
     // 1. Bloky długie (Long Blocks)
     while i < bc.nBlocksLong {
@@ -1943,7 +1936,7 @@ pub unsafe fn HybridTransform(
             // Próbki parzyste (2*j)
             let mut xp = x_prev_win[2 * j] << 2;
             non_zero |= xp;
-            *y.add((2 * j) * 32 + i as usize) = xp;
+            y_slice[2 * j][i as usize] = xp;
             m_out |= xp.abs();
 
             // Próbki nieparzyste (2*j + 1) + Inwersja Częstotliwości
@@ -1953,7 +1946,7 @@ pub unsafe fn HybridTransform(
             xp = (xp ^ mask).wrapping_add(i & 0x01);
 
             non_zero |= xp;
-            *y.add((2 * j + 1) * 32 + i as usize) = xp;
+            y_slice[2 * j + 1][i as usize] = xp;
             m_out |= xp.abs();
 
             x_prev[j] = 0;
@@ -1969,7 +1962,7 @@ pub unsafe fn HybridTransform(
     // 4. Czyszczenie pozostałych bloków (do 32 pasm)
     while i < 32 {
         for j in 0..18 {
-            *y.add(j * 32 + i as usize) = 0;
+            y_slice[j][i as usize] = 0;
         }
         i += 1;
     }
@@ -2141,7 +2134,7 @@ pub unsafe extern "C" fn IMDCT(
     m_IMDCTInfo.numPrevIMDCT[ch as usize] = HybridTransform(
         &mut m_HuffmanInfo.huff_dec_buf[ch as usize],
         &mut m_IMDCTInfo.overBuf[ch as usize],
-        m_IMDCTInfo.outBuf[ch as usize].as_mut_ptr() as *mut i32,
+        &mut m_IMDCTInfo.outBuf[ch as usize],
         sis,
         &mut bc,
     );
