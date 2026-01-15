@@ -1042,7 +1042,7 @@ const IMDCT_WIN: [[u32;36];4] = [
 
 
 #[allow(non_snake_case)]
-pub fn win_previous(x_prev: &mut [i32; 9], x_prev_win: &mut [i32; 18], bt_prev: i32) {
+pub fn win_previous(x_prev: &mut [i32; BLOCK_SIZE / 2], x_prev_win: &mut [i32; BLOCK_SIZE], bt_prev: i32) {
     if bt_prev == 2 {
         // Special case for short blocks – explicit unrolled version matching the original
         let w = IMDCT_WIN[2];
@@ -1118,7 +1118,7 @@ pub const SAMPLERATE_TAB: [[i32; 3]; 3] = [
 /* indexing = [version][mono/stereo]
  * number of bytes in side info section of bitstream
  */
-const sideBytesTab: [[i32; 2]; 3] = [
+const SIDE_BYTES_TAB: [[i32; 2]; 3] = [
     [ 17, 32 ], /* MPEG-1:   mono, stereo */
     [ 9, 17 ], /* MPEG-2:   mono, stereo */
     [ 9, 17 ], /* MPEG-2.5: mono, stereo */
@@ -1176,7 +1176,7 @@ const SF_BAND_TABLE: [[SFBandTable; 3]; 3] = [
 /* indexing = [version][layer]
  * number of samples in one frame (per channel)
  */
-pub const samplesPerFrameTab: [[i32; 3]; 3] = [
+pub const SAMPLES_PER_FRAME_TAB: [[i32; 3]; 3] = [
     [ 384, 1152, 1152 ], /* MPEG1 */
     [ 384, 1152, 576 ], /* MPEG2 */
     [ 384, 1152, 576 ], /* MPEG2.5 */
@@ -1366,7 +1366,7 @@ impl MP3Decoder {
         m_mp3_dec_info.nChans = if self.m_sMode == StereoMode::Mono { 1 } else { 2 };
         m_mp3_dec_info.samprate = SAMPLERATE_TAB[self.m_MPEGVersion as usize][m_frame_header.srIdx as usize];
         m_mp3_dec_info.nGrans = if self.m_MPEGVersion == MPEGVersion::MPEG1 { NGRANS_MPEG1 as i32 } else { NGRANS_MPEG2 as i32 };
-        m_mp3_dec_info.nGranSamps = (samplesPerFrameTab[self.m_MPEGVersion as usize][(m_frame_header.layer - 1) as usize])/m_mp3_dec_info.nGrans;
+        m_mp3_dec_info.nGranSamps = (SAMPLES_PER_FRAME_TAB[self.m_MPEGVersion as usize][(m_frame_header.layer - 1) as usize])/m_mp3_dec_info.nGrans;
         m_mp3_dec_info.layer = m_frame_header.layer;
 
         /* get bitrate and nSlots from table, unless brIdx == 0 (free mode) in which case caller must figure it out himself
@@ -1379,7 +1379,7 @@ impl MP3Decoder {
                 ((bitrateTab[self.m_MPEGVersion as usize][m_frame_header.layer as usize - 1][m_frame_header.brIdx as usize])) as i32 * 1000;
             /* nSlots = total frame bytes (from table) - sideInfo bytes - header - CRC (if present) + pad (if present) */
             m_mp3_dec_info.nSlots= slotTab[self.m_MPEGVersion as usize][m_frame_header.srIdx as usize][m_frame_header.brIdx as usize]  as i32
-                    - sideBytesTab[self.m_MPEGVersion as usize][if self.m_sMode == StereoMode::Mono { 0 } else { 1 }] - 4
+                    - SIDE_BYTES_TAB[self.m_MPEGVersion as usize][if self.m_sMode == StereoMode::Mono { 0 } else { 1 }] - 4
                     - (if m_frame_header.crc != 0 { 2 } else { 0 }) + (if m_frame_header.paddingBit != 0 { 1 } else { 0 });
         }
         /* load crc word, if enabled, and return length of frame header (in bytes) */
@@ -1424,7 +1424,7 @@ impl MP3Decoder {
             self.m_MP3FrameInfo.samprate=self.m_MP3DecInfo.samprate;
             self.m_MP3FrameInfo.bitsPerSample=16;
             self.m_MP3FrameInfo.outputSamps=self.m_MP3DecInfo.nChans
-                    * samplesPerFrameTab[self.m_MPEGVersion as usize][self.m_MP3DecInfo.layer as usize-1] as i32;
+                    * SAMPLES_PER_FRAME_TAB[self.m_MPEGVersion as usize][self.m_MP3DecInfo.layer as usize-1] as i32;
             self.m_MP3FrameInfo.layer=self.m_MP3DecInfo.layer;
             self.m_MP3FrameInfo.version= self.m_MPEGVersion;
         }
