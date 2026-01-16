@@ -4250,7 +4250,17 @@ int Audio::sendBytes(uint8_t* data, size_t len) {
                              if(getBitsPerSample() == 16) m_validSamples = len / (2 * getChannels());
                              if(getBitsPerSample() == 8 ) m_validSamples = len / 2;
                              bytesLeft = 0; break;
-        case CODEC_MP3:      ret = MP3Decode(data, len, &bytesLeft, m_outBuff, 0); break;
+        case CODEC_MP3: {
+            int64_t start_time = esp_timer_get_time();
+
+            ret = MP3Decode(data, len, &bytesLeft, m_outBuff, 0);
+
+            int64_t end_time = esp_timer_get_time();
+            int64_t execution_time = end_time - start_time;
+
+            printf("The operation took %lld microseconds.\n", execution_time);
+            break;
+        }
         case CODEC_AAC:      ret = AACDecode(data, &bytesLeft, m_outBuff);    break;
         case CODEC_M4A:      ret = AACDecode(data, &bytesLeft, m_outBuff);    break;
         case CODEC_FLAC:     ret = FLACDecode(data, &bytesLeft, m_outBuff);   break;

@@ -4,10 +4,39 @@ use core::panic::PanicInfo;
 
 use crabio::{
     mp3_decoder::{
-        BLOCK_SIZE, CriticalBandInfo, ERR_MP3_FREE_BITRATE_SYNC, ERR_MP3_INDATA_UNDERFLOW, ERR_MP3_INVALID_DEQUANTIZE, ERR_MP3_INVALID_FRAMEHEADER, ERR_MP3_INVALID_HUFFCODES, ERR_MP3_INVALID_IMDCT, ERR_MP3_INVALID_SCALEFACT, ERR_MP3_INVALID_SIDEINFO, ERR_MP3_INVALID_SUBBAND, ERR_MP3_MAINDATA_UNDERFLOW, ERR_MP3_NONE, FrameHeader, HUFF_PAIRTABS, HuffTabLookup, HuffTabType, HuffmanInfo, IMDCT_SCALE, IMDCTInfo, MAX_NCHAN, MAX_NGRAN, MAX_NSAMP, MAX_SCFBD, MP3DecInfo, MP3Decoder, MPEGVersion, NBANDS, SFBandTable, SQRTHALF, ScaleFactorInfoSub, ScaleFactorJS, SideInfo, SideInfoSub, clip_2n, freq_invert_rescale, idct_9, imdct_12, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, win_previous
+        BLOCK_SIZE, CriticalBandInfo, ERR_MP3_FREE_BITRATE_SYNC, ERR_MP3_INDATA_UNDERFLOW,
+        ERR_MP3_INVALID_DEQUANTIZE, ERR_MP3_INVALID_FRAMEHEADER, ERR_MP3_INVALID_HUFFCODES,
+        ERR_MP3_INVALID_IMDCT, ERR_MP3_INVALID_SCALEFACT, ERR_MP3_INVALID_SIDEINFO,
+        ERR_MP3_INVALID_SUBBAND, ERR_MP3_MAINDATA_UNDERFLOW, ERR_MP3_NONE, FrameHeader,
+        HUFF_PAIRTABS, HuffTabLookup, HuffTabType, HuffmanInfo, IMDCT_SCALE, IMDCTInfo, MAX_NCHAN,
+        MAX_NGRAN, MAX_NSAMP, MAX_SCFBD, MP3DecInfo, MP3Decoder, MPEGVersion, NBANDS, SFBandTable,
+        SQRTHALF, ScaleFactorInfoSub, ScaleFactorJS, SideInfo, SideInfoSub, clip_2n,
+        freq_invert_rescale, idct_9, imdct_12, mp3_find_free_sync, mp3_find_sync_word, mulshift_32,
+        win_previous,
     },
     utils::bit_stream_cache::BitStreamInfo,
 };
+
+macro_rules! profile_block {
+    ($name:expr, $code:block) => {{
+        let start_cycles: u32;
+        unsafe {
+            core::arch::asm!("rsr.ccount {0}", out(reg) start_cycles);
+        }
+
+        let result = unsafe { $code };
+
+        let end_cycles: u32;
+        unsafe {
+            core::arch::asm!("rsr.ccount {0}", out(reg) end_cycles);
+        }
+
+        let diff = end_cycles.wrapping_sub(start_cycles);
+        esp_println::println!("PERF: {} | {} cycles | {} us", $name, diff, diff / 240);
+
+        result
+    }};
+}
 
 #[repr(C)]
 pub struct BlockCount {
@@ -464,7 +493,7 @@ pub fn unpack_sfmpeg2(
  **********************************************************************************************************************/
 // no improvement with section=data
 
-const HUFF_TABLE: [u16; 4242] = [
+static HUFF_TABLE: [u16; 4242] = [
     /* huffTable01[9] */
     0xf003, 0x3112, 0x3101, 0x2011, 0x2011, 0x1000, 0x1000, 0x1000, 0x1000,
     /* huffTable02[65] */
@@ -1995,7 +2024,7 @@ pub unsafe fn IMDCT12x3(
 
     // 2. Trzy transformaty IMDCT 12-punktowe
     // Dane wejściowe są przeplatane: b0[0], b1[0], b2[0], b0[1]...
-    let (c1, _)=  x_buf.as_chunks_mut::<6>();
+    let (c1, _) = x_buf.as_chunks_mut::<6>();
     imdct12(x_curr, &mut c1[0]); // Block 0
     imdct12(x_curr.offset(1), &mut c1[1]); // Block 1
     imdct12(x_curr.offset(2), &mut c1[2]); // Block 2
