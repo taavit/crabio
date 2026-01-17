@@ -474,11 +474,7 @@ pub fn unpack_sfmpeg2(
  **********************************************************************************************************************/
 // no improvement with section=data
 
-#[repr(align(4))]
-struct AlignedHuffman<const N: usize>([u16; N]);
-
-#[unsafe(link_section = ".rodata")]
-static HUFF_TABLE: AlignedHuffman<4242> = AlignedHuffman([
+const HUFF_TABLE: [u16; 4242] = [
     /* huffTable01[9] */
     0xf003, 0x3112, 0x3101, 0x2011, 0x2011, 0x1000, 0x1000, 0x1000, 0x1000,
     /* huffTable02[65] */
@@ -846,7 +842,7 @@ static HUFF_TABLE: AlignedHuffman<4242> = AlignedHuffman([
     0x20b1, 0x2a01, 0x1a12, 0x1a12, 0xf001, 0x1a62, 0x16a2, 0xf001, 0x1972, 0x1792, 0xf002, 0x20a1,
     0x2901, 0x1091, 0x1091, 0xf001, 0x1b22, 0x1a52, 0xf001, 0x15a2, 0x1b12, 0xf001, 0x11b2, 0x1962,
     0xf001, 0x1a42, 0x1872, 0xf001, 0x1801, 0x1081, 0xf001, 0x1701, 0x1071,
-]);
+];
 
 const HUFF_OFFSET_01: u16 = 0;
 const HUFF_OFFSET_02: u16 = 9 + HUFF_OFFSET_01;
@@ -1067,7 +1063,7 @@ pub unsafe fn DecodeHuffmanPairs(
     startBits = bits_left;
 
     // Uzyskiwanie dostępu do tablic huffmana (zakładam nazwy z Twojego kodu)
-    tBase = (HUFF_TABLE.0.as_ptr() as *const u16).add(HUFF_TAB_OFFSET[tab_idx as usize] as usize);
+    tBase = (HUFF_TABLE.as_ptr() as *const u16).add(HUFF_TAB_OFFSET[tab_idx as usize] as usize);
     linBits = HUFF_TAB_LOOKUP[tab_idx as usize].lin_bits as i32;
     tabType = HUFF_TAB_LOOKUP[tab_idx as usize].tab_type;
 
