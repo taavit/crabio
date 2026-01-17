@@ -1665,8 +1665,6 @@ pub unsafe fn IMDCT36(
     let es;
     let mut x_buf: [i32; 18] = [0; 18];
     let mut x_prev_win: [i32; 18] = [0; 18];
-    let mut xp;
-    let mut cp;
     let mut c;
     let mut xo;
     let mut xe;
@@ -1712,19 +1710,18 @@ pub unsafe fn IMDCT36(
     /* do 9-point IDCT on even and odd */
     idct_9(&mut spliced_buf[0]); /* even */
     idct_9(&mut spliced_buf[1]); /* odd */
-
-    xp = x_buf.as_mut_ptr().add(8);
-    cp = C18.as_ptr().add(8);
-    let mut mOut = 0;
-    if (btPrev == 0 && btCurr == 0) {
+    let mut xp_idx = 8;
+    let mut cp_idx = 8;
+    let mut m_out = 0;
+    if btPrev == 0 && btCurr == 0 {
         /* fast path - use symmetry of sin window to reduce windowing multiplies to 18 (N/2) */
         for (i, e) in FAST_WIN36.chunks_exact(2).enumerate() {
             /* do ARM-style pointer arithmetic (i still needed for y[] indexing - compiler spills if 2 y pointers) */
-            c = *cp;
-            cp = cp.sub(1);
-            xo = *(xp.add(9));
-            xe = *xp;
-            xp = xp.sub(1);
+            c = C18[cp_idx];
+            cp_idx -= 1;
+            xo = x_buf[xp_idx + 9];
+            xe = x_buf[xp_idx];
+            xp_idx -= 1;
             /* gain 2 int bits here */
             xo = mulshift_32(c as i32, xo); /* 2*c18*xOdd (mul by 2 implicit in scaling)  */
             xe >>= 2;
@@ -1739,8 +1736,8 @@ pub unsafe fn IMDCT36(
             y_hi = s + (mulshift_32(t, e[1] as i32) << 2);
             *y.add((i) * NBANDS as usize) = y_lo;
             *y.add((17 - i) * NBANDS as usize) = y_hi;
-            mOut |= y_lo.abs();
-            mOut |= y_hi.abs();
+            m_out |= y_lo.abs();
+            m_out |= y_hi.abs();
         }
     } else {
         /* slower method - either prev or curr is using window type != 0 so do full 36-point window
@@ -1750,11 +1747,11 @@ pub unsafe fn IMDCT36(
 
         let wp = IMDCT_WIN[btCurr as usize];
         for i in 0..9 {
-            c = *cp;
-            cp = cp.sub(1);
-            xo = *(xp.add(9));
-            xe = *xp;
-            xp = xp.sub(1);
+            c = C18[cp_idx];
+            cp_idx -= 1;
+            xo = x_buf[xp_idx + 9];
+            xe = x_buf[xp_idx];
+            xp_idx -= 1;
             /* gain 2 int bits here */
             xo = mulshift_32(c as i32, xo); /* 2*c18*xOdd (mul by 2 implicit in scaling)  */
             xe >>= 2;
@@ -1767,15 +1764,15 @@ pub unsafe fn IMDCT36(
             y_hi = (x_prev_win[17 - i] + mulshift_32(d, wp[17 - i] as i32)) << 2;
             *(y.add((i) * NBANDS)) = y_lo;
             *(y.add((17 - i) * NBANDS)) = y_hi;
-            mOut |= y_lo.abs();
-            mOut |= y_hi.abs();
+            m_out |= y_lo.abs();
+            m_out |= y_hi.abs();
         }
     }
 
     xPrev_idx -= 9;
-    mOut |= FreqInvertRescale(y, xPrev, blockIdx, es);
+    m_out |= FreqInvertRescale(y, xPrev, blockIdx, es);
 
-    mOut
+    m_out
 }
 
 /***********************************************************************************************************************
