@@ -1769,7 +1769,6 @@ pub unsafe fn IMDCT36(
         }
     }
 
-    xPrev_idx -= 9;
     m_out |= FreqInvertRescale(y, xPrev, blockIdx, es);
 
     m_out
