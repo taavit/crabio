@@ -9,3 +9,13 @@ crate-type = ["staticlib"]
 [dependencies]
 crabio = { path="../crabio" }
 esp-println = { version = "0.16.1", features = ["esp32s3"] }
+
+[profile.release]
+opt-level = "s"               # lub 3 – przetestuj oba
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
+debug = false
+overflow-checks = false
+incremental = false

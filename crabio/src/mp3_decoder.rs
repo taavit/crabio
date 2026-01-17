@@ -92,7 +92,7 @@ pub fn madd_64(sum64: u64, x: i32, y: i32) -> u64 {
 /// Input:  exactly 18 coefficients (only indices 0,3,6,9,12,15 used)
 /// Output: exactly 6 time-domain samples
 #[inline(always)]
-pub fn imdct_12(x: &[i32; 18], out: &mut [i32; 6]) {
+pub fn imdct_12(x: &[i32; 16], out: &mut [i32; 6]) {
     let x0 = x[0];
     let x1 = x[3];
     let x2 = x[6];
@@ -731,18 +731,19 @@ pub fn fdct_32(buf_slice: &mut[i32; NBANDS], dest_slice: &mut[i32], offset: i32,
 
     /* first pass */
     for i in 0..8 {
+        let base = i*3;
         let a0 = buf_slice[i];
         let a1 = buf_slice[15 - i];
         let a2 = buf_slice[16 + i];
         let a3 = buf_slice[31 - i];
 
         let b0 = a0 + a3;
-        let b3 = mulshift_32(cptr[0][i * 3], a0 - a3) << 1;
+        let b3 = mulshift_32(cptr[0][base], a0 - a3) << 1;
 
         let b1 = a1 + a2;
-        let b2 = mulshift_32(cptr[0][i * 3 + 1], a1 - a2) << FDCT32S1S2[i] as i32;
+        let b2 = mulshift_32(cptr[0][base + 1], a1 - a2) << FDCT32S1S2[i] as i32;
 
-        let coeff = cptr[0][i * 3 + 2]; // shared for next two uses
+        let coeff = cptr[0][base + 2]; // shared for next two uses
         buf_slice[i] = b0 + b1;
         buf_slice[15 - i] = mulshift_32(coeff, b0 - b1) << FDCT32S1S2[8 + i] as i32;
 
@@ -755,23 +756,24 @@ pub fn fdct_32(buf_slice: &mut[i32; NBANDS], dest_slice: &mut[i32], offset: i32,
     let (chunks, _) = buf_slice.as_chunks_mut::<8>();
     /* second pass */
     for (idx, buf_chunk) in chunks.iter_mut().enumerate() {
+        let base = idx*6;
         let a0 = buf_chunk[0];
         let a3 = buf_chunk[3];
         let a4 = buf_chunk[4];
         let a7 = buf_chunk[7];
 
         let b0 = a0 + a7;
-        let b7 = mulshift_32(cptr_slice_second[idx * 6], a0 - a7) << 1;
+        let b7 = mulshift_32(cptr_slice_second[base], a0 - a7) << 1;
 
         let b3 = a3 + a4;
-        let b4 = mulshift_32(cptr_slice_second[idx * 6 + 1], a3 - a4) << 3;
+        let b4 = mulshift_32(cptr_slice_second[base + 1], a3 - a4) << 3;
 
 
         let t0 = b0 + b3;
-        let t3 = mulshift_32(cptr_slice_second[idx * 6 + 2], b0 - b3) << 1;
+        let t3 = mulshift_32(cptr_slice_second[base + 2], b0 - b3) << 1;
 
         let t4 = b4 + b7;
-        let t7 = mulshift_32(cptr_slice_second[idx * 6 + 2], b7 - b4) << 1;
+        let t7 = mulshift_32(cptr_slice_second[base + 2], b7 - b4) << 1;
 
 
         let a1 = buf_chunk[1];
@@ -780,16 +782,16 @@ pub fn fdct_32(buf_slice: &mut[i32; NBANDS], dest_slice: &mut[i32], offset: i32,
         let a5 = buf_chunk[5];
 
         let b1 = a1 + a6;
-        let b6 = mulshift_32(cptr_slice_second[idx * 6 + 3], a1 - a6) << 1;
+        let b6 = mulshift_32(cptr_slice_second[base + 3], a1 - a6) << 1;
 
         let b2 = a2 + a5;
-        let b5 = mulshift_32(cptr_slice_second[idx * 6 + 4], a2 - a5) << 1;
+        let b5 = mulshift_32(cptr_slice_second[base + 4], a2 - a5) << 1;
 
         let t1 = b1 + b2;
-        let t2 = mulshift_32(cptr_slice_second[idx * 6 + 5], b1 - b2) << 2;
+        let t2 = mulshift_32(cptr_slice_second[base + 5], b1 - b2) << 2;
 
         let t5 = b5 + b6;
-        let t6 = mulshift_32(cptr_slice_second[idx * 6 + 5], b6 - b5) << 2;
+        let t6 = mulshift_32(cptr_slice_second[base + 5], b6 - b5) << 2;
 
         let bb0 = t0 + t1;
         let bb1 = mulshift_32(M_COS4_0, t0 - t1) << 1;

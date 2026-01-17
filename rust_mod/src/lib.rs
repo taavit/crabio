@@ -63,25 +63,6 @@ pub fn CLIP_2N(y: i32, n: u32) -> i32 {
     clip_2n(y, n)
 }
 
-pub unsafe fn imdct12(x: *const i32, out_arr: &mut [i32; 6]) {
-    let x_arr: &[i32; 18] = unsafe {
-        core::slice::from_raw_parts(x, 18)
-            .try_into()
-            .unwrap_unchecked()
-    };
-
-    imdct_12(x_arr, out_arr);
-}
-
-pub fn idct9(x: *mut i32) {
-    let x_arr: &mut [i32; 9] = unsafe {
-        core::slice::from_raw_parts_mut(x, 9)
-            .try_into()
-            .unwrap_unchecked()
-    };
-    idct_9(x_arr);
-}
-
 #[panic_handler]
 fn panic_handler(_: &PanicInfo) -> ! {
     loop {}
@@ -493,7 +474,11 @@ pub fn unpack_sfmpeg2(
  **********************************************************************************************************************/
 // no improvement with section=data
 
-static HUFF_TABLE: [u16; 4242] = [
+#[repr(align(4))]
+struct AlignedHuffman<const N: usize>([u16; N]);
+
+#[unsafe(link_section = ".rodata")]
+static HUFF_TABLE: AlignedHuffman<4242> = AlignedHuffman([
     /* huffTable01[9] */
     0xf003, 0x3112, 0x3101, 0x2011, 0x2011, 0x1000, 0x1000, 0x1000, 0x1000,
     /* huffTable02[65] */
@@ -861,7 +846,7 @@ static HUFF_TABLE: [u16; 4242] = [
     0x20b1, 0x2a01, 0x1a12, 0x1a12, 0xf001, 0x1a62, 0x16a2, 0xf001, 0x1972, 0x1792, 0xf002, 0x20a1,
     0x2901, 0x1091, 0x1091, 0xf001, 0x1b22, 0x1a52, 0xf001, 0x15a2, 0x1b12, 0xf001, 0x11b2, 0x1962,
     0xf001, 0x1a42, 0x1872, 0xf001, 0x1801, 0x1081, 0xf001, 0x1701, 0x1071,
-];
+]);
 
 const HUFF_OFFSET_01: u16 = 0;
 const HUFF_OFFSET_02: u16 = 9 + HUFF_OFFSET_01;
@@ -1082,7 +1067,7 @@ pub unsafe fn DecodeHuffmanPairs(
     startBits = bits_left;
 
     // Uzyskiwanie dostępu do tablic huffmana (zakładam nazwy z Twojego kodu)
-    tBase = (HUFF_TABLE.as_ptr() as *const u16).add(HUFF_TAB_OFFSET[tab_idx as usize] as usize);
+    tBase = (HUFF_TABLE.0.as_ptr() as *const u16).add(HUFF_TAB_OFFSET[tab_idx as usize] as usize);
     linBits = HUFF_TAB_LOOKUP[tab_idx as usize].lin_bits as i32;
     tabType = HUFF_TAB_LOOKUP[tab_idx as usize].tab_type;
 
@@ -1679,8 +1664,8 @@ pub const IMDCT_WIN: [[u32; 36]; 4] = [
 ];
 
 pub unsafe fn IMDCT36(
-    mut xCurr: *mut i32,
-    mut xPrev: *mut i32,
+    mut xCurr: &mut [i32; 18],
+    mut xPrev: &mut [i32; 9],
     y: *mut i32,
     btCurr: i32,
     btPrev: i32,
@@ -1702,6 +1687,8 @@ pub unsafe fn IMDCT36(
     let mut t;
     let mut y_lo;
     let mut y_hi;
+    let mut xCurr = xCurr.as_mut_ptr();
+    let mut xPrev = xPrev.as_mut_ptr();
     xCurr = xCurr.add(17);
     /* 7 gb is always adequate for antialias + accumulator loop + idct9 */
     if (gb < 7) {
@@ -1733,10 +1720,10 @@ pub unsafe fn IMDCT36(
     /* xEven[0] and xOdd[0] scaled by 0.5 */
     x_buf[9] >>= 1;
     x_buf[0] >>= 1;
-
+    let (spliced_buf, _) = x_buf.as_chunks_mut::<9>();
     /* do 9-point IDCT on even and odd */
-    idct9(x_buf.as_mut_ptr()); /* even */
-    idct9(x_buf.as_mut_ptr().add(9)); /* odd */
+    idct_9(&mut spliced_buf[0]); /* even */
+    idct_9(&mut spliced_buf[1]); /* odd */
 
     xp = x_buf.as_mut_ptr().add(8);
     cp = C18.as_ptr().add(8);
@@ -1885,8 +1872,8 @@ pub unsafe fn HybridTransform(
     let mut x_prev_win = [0i32; 18];
     let mut m_out = 0i32;
     let mut n_blocks_out;
-    let mut x_curr = x_curr.as_mut_slice();
-    let mut x_prev = x_prev.as_mut_slice();
+    let (mut x_curr, _) = x_curr.as_chunks_mut::<18>();
+    let (mut x_prev, _) = x_prev.as_chunks_mut::<9>();
 
     let mut i = 0;
     let y_slice = y;
@@ -1907,8 +1894,8 @@ pub unsafe fn HybridTransform(
         // Adresowanie y[0][i] w tablicy y[18][32] to po prostu y + i
         // ponieważ y[row][col] = y[row * 32 + col]
         m_out |= IMDCT36(
-            x_curr.as_mut_ptr(),
-            x_prev.as_mut_ptr(),
+            &mut x_curr[i as usize],
+            &mut x_prev[i as usize],
             y.add(i as usize),
             curr_win_idx,
             prev_win_idx,
@@ -1916,8 +1903,6 @@ pub unsafe fn HybridTransform(
             bc.gbIn,
         );
 
-        x_curr = &mut x_curr[18..];
-        x_prev = &mut x_prev[9..];
         i += 1;
     }
 
@@ -1929,16 +1914,14 @@ pub unsafe fn HybridTransform(
         }
 
         m_out |= IMDCT12x3(
-            x_curr.as_mut_ptr(),
-            x_prev.as_mut_ptr(),
+            &mut x_curr[i as usize],
+            &mut x_prev[i as usize],
             y.add(i as usize),
             prev_win_idx,
             i,
             bc.gbIn,
         );
 
-        x_curr = &mut x_curr[18..];
-        x_prev = &mut x_prev[9..];
         i += 1;
     }
     n_blocks_out = i;
@@ -1950,7 +1933,7 @@ pub unsafe fn HybridTransform(
             prev_win_idx = 0;
         }
 
-        WinPrevious(x_prev.as_mut_ptr(), &mut x_prev_win, prev_win_idx);
+        win_previous(&mut x_prev[i as usize], &mut x_prev_win, prev_win_idx);
 
         let mut non_zero = 0i32;
         let fi_bit = (i as i32) << 31;
@@ -1972,10 +1955,9 @@ pub unsafe fn HybridTransform(
             y_slice[2 * j + 1][i as usize] = xp;
             m_out |= xp.abs();
 
-            x_prev[j] = 0;
+            x_prev[i as usize][j] = 0;
         }
 
-        x_prev = &mut x_prev[9..];
         if non_zero != 0 {
             n_blocks_out = i;
         }
@@ -1998,8 +1980,8 @@ pub unsafe fn HybridTransform(
 }
 
 pub unsafe fn IMDCT12x3(
-    x_curr: *mut i32,
-    x_prev: *mut i32,
+    x_curr: &mut [i32; 18],
+    x_prev: &mut [i32; 9],
     y: *mut i32,
     bt_prev: i32,
     block_idx: i32,
@@ -2016,22 +1998,22 @@ pub unsafe fn IMDCT12x3(
         es = 7 - gb;
         for i in 0..9 {
             // x_curr jest interleafed (3 bloki po 6 próbek)
-            *x_curr.offset(i * 2) >>= es;
-            *x_curr.offset(i * 2 + 1) >>= es;
-            *x_prev.offset(i) >>= es;
+            x_curr[i * 2] >>= es;
+            x_curr[i * 2 + 1] >>= es;
+            x_prev[i] >>= es;
         }
     }
-
+    
     // 2. Trzy transformaty IMDCT 12-punktowe
     // Dane wejściowe są przeplatane: b0[0], b1[0], b2[0], b0[1]...
     let (c1, _) = x_buf.as_chunks_mut::<6>();
-    imdct12(x_curr, &mut c1[0]); // Block 0
-    imdct12(x_curr.offset(1), &mut c1[1]); // Block 1
-    imdct12(x_curr.offset(2), &mut c1[2]); // Block 2
+    imdct_12(&x_curr[..16].try_into().unwrap(), &mut c1[0]); // Block 0
+    imdct_12(&x_curr[1..17].try_into().unwrap(), &mut c1[1]); // Block 1
+    imdct_12(&x_curr[2..18].try_into().unwrap(), &mut c1[2]); // Block 2
 
     // 3. Okienkowanie poprzedniego bloku (Overlap z poprzedniej ramki)
-    WinPrevious(x_prev, &mut x_prev_win, bt_prev);
-
+    win_previous(x_prev, &mut x_prev_win, bt_prev);
+    let x_prev = x_prev.as_mut_ptr();
     // Pobranie wskaźnika do okna krótkiego (index 2)
     let wp = IMDCT_WIN[2];
     let mut m_out = 0i32;
