@@ -2190,14 +2190,13 @@ const POW2FRAC: [i32; 8] = [
     0x6597fa94, 0x50a28be6, 0x7fffffff, 0x6597fa94, 0x50a28be6, 0x7fffffff, 0x6597fa94, 0x50a28be6,
 ];
 
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn DequantBlock(
-    mut in_buf: *const i32,
-    mut out_buf: *mut i32,
+pub fn dequant_block(
+    in_buf: &[i32],
+    out_buf: &mut [i32],
     num: i32,
     scale: i32,
 ) -> i32 {
-    if num <= 0 || in_buf.is_null() || out_buf.is_null() {
+    if num <= 0 {
         return 0;
     }
 
@@ -2229,9 +2228,8 @@ pub unsafe extern "C" fn DequantBlock(
     tab4[3] = tab16[3] >> shift_init;
 
     // Przetwarzamy num próbek
-    for _ in 0..num {
-        let sx = *in_buf;
-        in_buf = in_buf.add(1);
+    for i in 0..num {
+        let sx = in_buf[i as usize];
 
         let x = (sx & 0x7fffffff) as u32; // x = magnitude
         let mut y: i32;
@@ -2305,8 +2303,126 @@ pub unsafe extern "C" fn DequantBlock(
         /* Przywrócenie znaku i zapis */
         mask |= y;
         let final_y = if sx < 0 { -y } else { y };
-        *out_buf = final_y;
-        out_buf = out_buf.add(1);
+        out_buf[i as usize] = final_y;
+    }
+
+    mask
+}
+
+
+pub fn dequant_block_in_place(
+    buf: &mut [i32],
+    num: i32,
+    scale: i32,
+) -> i32 {
+    if num <= 0 {
+        return 0;
+    }
+
+    let mut tab4 = [0i32; 4];
+    let mut mask = 0i32;
+
+    // Pobranie tablicy dla skali ułamkowej
+    let tab16 = &pow43_14[(scale & 0x3) as usize];
+    let scalef = pow14[(scale & 0x3) as usize];
+
+    // scalei = min(scale >> 2, 31)
+    let mut scalei = scale >> 2;
+    if scalei > 31 {
+        scalei = 31;
+    }
+
+    /* Cache first 4 values */
+    let mut shift_init = scalei + 3;
+    if shift_init > 31 {
+        shift_init = 31;
+    }
+    if shift_init < 0 {
+        shift_init = 0;
+    }
+
+    tab4[0] = 0;
+    tab4[1] = tab16[1] >> shift_init;
+    tab4[2] = tab16[2] >> shift_init;
+    tab4[3] = tab16[3] >> shift_init;
+
+    // Przetwarzamy num próbek
+    for i in 0..num {
+        let sx = buf[i as usize];
+
+        let x = (sx & 0x7fffffff) as u32; // x = magnitude
+        let mut y: i32;
+        let mut shift: i32;
+
+        if x < 4 {
+            y = tab4[x as usize];
+        } else if x < 16 {
+            y = tab16[x as usize];
+            if scalei < 0 {
+                y <<= -scalei;
+            } else {
+                y >>= scalei;
+            }
+        } else {
+            if x < 64 {
+                y = pow43[(x - 16) as usize];
+                y = mulshift_32(y, scalef);
+                shift = scalei - 3;
+            } else {
+                /* Normalizacja do [0x40000000, 0x7fffffff] */
+                let mut x_norm = x << 17;
+                shift = 0;
+                if x_norm < 0x08000000 {
+                    x_norm <<= 4;
+                    shift += 4;
+                }
+                if x_norm < 0x20000000 {
+                    x_norm <<= 2;
+                    shift += 2;
+                }
+                if x_norm < 0x40000000 {
+                    x_norm <<= 1;
+                    shift += 1;
+                }
+
+                let coef = if x_norm < SQRTHALF {
+                    &POLY43LO
+                } else {
+                    &POLY43HI
+                };
+
+                /* Aproksymacja wielomianowa */
+                y = coef[0] as i32;
+                y = mulshift_32(y, x_norm as i32) + (coef[1] as i32);
+                y = mulshift_32(y, x_norm as i32) + (coef[2] as i32);
+                y = mulshift_32(y, x_norm as i32) + (coef[3] as i32);
+                y = mulshift_32(y, x_norm as i32) + (coef[4] as i32);
+
+                // y = (y * pow2frac[shift]) << 3
+                y = mulshift_32(y, POW2FRAC[shift as usize]) << 3;
+
+                /* Skala ułamkowa */
+                y = mulshift_32(y, scalef);
+                shift = scalei - POW2EXP[shift as usize];
+            }
+
+            /* Skala całkowita z clippingiem */
+            if shift < 0 {
+                shift = -shift;
+                if y > (0x7fffffff >> shift) {
+                    y = 0x7fffffff;
+                } else {
+                    y <<= shift;
+                }
+            } else {
+                y >>= shift;
+            }
+        }
+
+        /* Przywrócenie znaku i zapis */
+        mask |= y;
+        let final_y = if sx < 0 { -y } else { y };
+        buf[i as usize] = final_y;
     }
 
     mask
@@ -2319,7 +2435,7 @@ const PRE_TAB: [u8; 22] = [
 
 pub unsafe fn DequantChannel(
     sample_buf: &mut [i32; MAX_NSAMP],
-    work_buf: *mut i32,
+    work_buf: &mut [i32],
     non_zero_bound: &mut i32,
     sis: *const SideInfoSub,
     sfis: *const ScaleFactorInfoSub,
@@ -2383,9 +2499,8 @@ pub unsafe fn DequantChannel(
         };
         let gain_i = 210 - global_gain + s_multiplier * (sfis.l[cb as usize] as i32 + pre_val);
 
-        let non_zero = DequantBlock(
-            sample_buf.as_mut_ptr().add(i),
-            sample_buf.as_mut_ptr().add(i),
+        let non_zero = dequant_block_in_place(
+            &mut sample_buf[i..],
             n_samps,
             gain_i,
         );
@@ -2422,11 +2537,9 @@ pub unsafe fn DequantChannel(
                 + s_multiplier * (sfis.s[cb as usize][w] as i32);
 
             // Dekwantyzujemy do workBuf, aby móc potem bezpiecznie przełożyć dane do sampleBuf
-            let non_zero = DequantBlock(
-                sample_buf
-                    .as_mut_ptr()
-                    .add(i + (n_samps * w as i32) as usize),
-                work_buf.add((n_samps * w as i32) as usize),
+            let non_zero = dequant_block(
+                &sample_buf[i + (n_samps * w as i32) as usize..],
+                &mut work_buf[(n_samps * w as i32) as usize..],
                 n_samps,
                 gain_i,
             );
@@ -2442,9 +2555,9 @@ pub unsafe fn DequantChannel(
         let current_ptr = sample_buf.as_mut_ptr().add(i) as *mut [i32; 3];
         for j in 0..n_samps as usize {
             let row = &mut *current_ptr.add(j);
-            row[0] = *work_buf.add(j);
-            row[1] = *work_buf.add(n_samps as usize + j);
-            row[2] = *work_buf.add(2 * n_samps as usize + j);
+            row[0] = work_buf[j];
+            row[1] = work_buf[n_samps as usize + j];
+            row[2] = work_buf[2 * n_samps as usize + j];
         }
 
         i += (3 * n_samps) as usize;
@@ -2887,7 +3000,7 @@ pub unsafe fn MP3Dequantize(gr: i32, m_mp3_decoder: &mut MP3Decoder) -> i32 {
     for ch in 0..di.nChans as usize {
         hi.gb[ch] = DequantChannel(
             &mut hi.huff_dec_buf[ch],
-            dqi.work_buf.as_mut_ptr(),
+            &mut dqi.work_buf[..],
             &mut hi.non_zero_bound[ch],
             &mut side_info_sub[gr_idx][ch],
             &mut (*sf_info_sub)[gr_idx][ch],
