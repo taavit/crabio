@@ -123,13 +123,6 @@ pub unsafe fn FreqInvertRescale(y: *mut i32, x_prev: &mut [i32], block_idx: i32,
     freq_invert_rescale(y_slice, x_prev, block_idx, es)
 }
 
-#[allow(non_snake_case)]
-pub fn WinPrevious(xPrev: *mut i32, x_prev_win: &mut [i32; 18], bt_prev: i32) {
-    let x_prev: &mut [i32; 9] = unsafe { &mut *xPrev.cast::<[i32; 9]>() };
-
-    win_previous(x_prev, x_prev_win, bt_prev);
-}
-
 /***********************************************************************************************************************
  * Function:    MP3ClearBadFrame
  *
@@ -1753,7 +1746,7 @@ pub unsafe fn IMDCT36(
         /* slower method - either prev or curr is using window type != 0 so do full 36-point window
          * output xPrevWin has at least 3 guard bits (xPrev has 2, gain 1 in WinPrevious)
          */
-        WinPrevious(xPrev[xPrev_idx..].as_mut_ptr(), &mut x_prev_win, btPrev);
+        win_previous(xPrev, &mut x_prev_win, btPrev);
 
         let wp = IMDCT_WIN[btCurr as usize];
         for i in 0..9 {
