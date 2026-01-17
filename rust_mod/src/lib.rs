@@ -1683,7 +1683,7 @@ pub unsafe fn IMDCT36(
     let mut y_lo;
     let mut y_hi;
     let mut xCurr = xCurr.as_mut_ptr();
-    let mut xPrev = xPrev.as_mut_ptr();
+    let mut xPrev_idx = 0;
     xCurr = xCurr.add(17);
     /* 7 gb is always adequate for antialias + accumulator loop + idct9 */
     if (gb < 7) {
@@ -1697,7 +1697,7 @@ pub unsafe fn IMDCT36(
             xCurr = xCurr.sub(1);
             x_buf[i + 9] = acc2; /* odd */
             x_buf[i + 0] = acc1; /* even */
-            *xPrev.add(i) >>= es;
+            xPrev[i] >>= es;
         }
     } else {
         es = 0;
@@ -1736,14 +1736,14 @@ pub unsafe fn IMDCT36(
             xo = mulshift_32(c as i32, xo); /* 2*c18*xOdd (mul by 2 implicit in scaling)  */
             xe >>= 2;
 
-            s = -(*xPrev); /* sum from last block (always at least 2 guard bits) */
+            s = -(xPrev[xPrev_idx]); /* sum from last block (always at least 2 guard bits) */
             d = -(xe - xo); /* gain 2 int bits, don't shift xo (effective << 1 to eat sign bit, << 1 for mul by 2) */
-            (*xPrev) = xe + xo; /* symmetry - xPrev[i] = xPrev[17-i] for long blocks */
-            xPrev = xPrev.add(1);
+            xPrev[xPrev_idx] = xe + xo; /* symmetry - xPrev[i] = xPrev[17-i] for long blocks */
+            xPrev_idx += 1;
             t = s - d;
 
-            y_lo = (d + (mulshift_32(t, e[0] as i32) << 2));
-            y_hi = (s + (mulshift_32(t, e[1] as i32) << 2));
+            y_lo = d + (mulshift_32(t, e[0] as i32) << 2);
+            y_hi = s + (mulshift_32(t, e[1] as i32) << 2);
             *y.add((i) * NBANDS as usize) = y_lo;
             *y.add((17 - i) * NBANDS as usize) = y_hi;
             mOut |= y_lo.abs();
@@ -1753,7 +1753,7 @@ pub unsafe fn IMDCT36(
         /* slower method - either prev or curr is using window type != 0 so do full 36-point window
          * output xPrevWin has at least 3 guard bits (xPrev has 2, gain 1 in WinPrevious)
          */
-        WinPrevious(xPrev, &mut x_prev_win, btPrev);
+        WinPrevious(xPrev[xPrev_idx..].as_mut_ptr(), &mut x_prev_win, btPrev);
 
         let wp = IMDCT_WIN[btCurr as usize];
         for i in 0..9 {
@@ -1767,8 +1767,8 @@ pub unsafe fn IMDCT36(
             xe >>= 2;
 
             d = xe - xo;
-            (*xPrev) = xe + xo; /* symmetry - xPrev[i] = xPrev[17-i] for long blocks */
-            xPrev = xPrev.add(1);
+            xPrev[xPrev_idx] = xe + xo; /* symmetry - xPrev[i] = xPrev[17-i] for long blocks */
+            xPrev_idx += 1;
 
             y_lo = (x_prev_win[i] + mulshift_32(d, wp[i] as i32)) << 2;
             y_hi = (x_prev_win[17 - i] + mulshift_32(d, wp[17 - i] as i32)) << 2;
@@ -1779,8 +1779,7 @@ pub unsafe fn IMDCT36(
         }
     }
 
-    xPrev = xPrev.sub(9);
-    let xPrev = unsafe { core::slice::from_raw_parts_mut(xPrev, 9) };
+    xPrev_idx -= 9;
     mOut |= FreqInvertRescale(y, xPrev, blockIdx, es);
 
     mOut
