@@ -117,9 +117,8 @@ pub unsafe extern "C" fn MP3FindFreeSync(buf: *const u8, first_fh: *const u8, n_
  * Return:      updated mOut (from new outputs y)
  **********************************************************************************************************************/
 #[allow(non_snake_case)]
-pub unsafe fn FreqInvertRescale(y: *mut i32, x_prev: *mut i32, block_idx: i32, es: i32) -> i32 {
+pub unsafe fn FreqInvertRescale(y: *mut i32, x_prev: &mut [i32], block_idx: i32, es: i32) -> i32 {
     let y_slice = unsafe { core::slice::from_raw_parts_mut(y, 9 * NBANDS * 2 + NBANDS) };
-    let x_prev: &mut [i32] = unsafe { core::slice::from_raw_parts_mut(x_prev, 9) };
 
     freq_invert_rescale(y_slice, x_prev, block_idx, es)
 }
@@ -1781,6 +1780,7 @@ pub unsafe fn IMDCT36(
     }
 
     xPrev = xPrev.sub(9);
+    let xPrev = unsafe { core::slice::from_raw_parts_mut(xPrev, 9) };
     mOut |= FreqInvertRescale(y, xPrev, blockIdx, es);
 
     mOut
@@ -1986,7 +1986,6 @@ pub unsafe fn IMDCT12x3(
     let mut x_buf: [i32; BLOCK_SIZE] = [0i32; BLOCK_SIZE];
     let mut x_prev_win = [0i32; BLOCK_SIZE];
     let mut es = 0;
-    let n_bands = NBANDS; // m_NBANDS
 
     // 1. Skalowanie (Guard Bits)
     // Jeśli mamy za mało bitów strażniczych, przesuwamy dane w prawo
@@ -2009,7 +2008,6 @@ pub unsafe fn IMDCT12x3(
 
     // 3. Okienkowanie poprzedniego bloku (Overlap z poprzedniej ramki)
     win_previous(x_prev, &mut x_prev_win, bt_prev);
-    let x_prev = x_prev.as_mut_ptr();
     // Pobranie wskaźnika do okna krótkiego (index 2)
     let wp = IMDCT_WIN[2];
     let mut m_out = 0i32;
@@ -2021,42 +2019,42 @@ pub unsafe fn IMDCT12x3(
         // Pierwsze 6 próbek pochodzi tylko z poprzedniego okna (xPrevWin)
         y_lo = x_prev_win[i] << 2;
         m_out |= y_lo.abs();
-        *y.add(i * n_bands) = y_lo;
+        *y.add(i * NBANDS) = y_lo;
 
         y_lo = x_prev_win[3 + i] << 2;
         m_out |= y_lo.abs();
-        *y.add((3 + i) * n_bands) = y_lo;
+        *y.add((3 + i) * NBANDS) = y_lo;
 
         // Kolejne próbki to suma poprzedniego okna i nowych danych (xBuf) z oknem wp
         y_lo = (x_prev_win[6 + i] << 2) + mulshift_32(wp[i] as i32, x_buf[3 + i]);
         m_out |= y_lo.abs();
-        *y.add((6 + i) * n_bands) = y_lo;
+        *y.add((6 + i) * NBANDS) = y_lo;
 
         y_lo = (x_prev_win[9 + i] << 2) + mulshift_32(wp[3 + i] as i32, x_buf[5 - i]);
         m_out |= y_lo.abs();
-        *y.add((9 + i) * n_bands) = y_lo;
+        *y.add((9 + i) * NBANDS) = y_lo;
 
         // Składanie na stykach bloków wewnętrznych (short block concatenation)
         y_lo = (x_prev_win[12 + i] << 2)
             + mulshift_32(wp[6 + i] as i32, x_buf[2 - i])
             + mulshift_32(wp[i] as i32, x_buf[9 + i]);
         m_out |= y_lo.abs();
-        *y.add((12 + i) * n_bands) = y_lo;
+        *y.add((12 + i) * NBANDS) = y_lo;
 
         y_lo = (x_prev_win[15 + i] << 2)
             + mulshift_32(wp[9 + i] as i32, x_buf[i])
             + mulshift_32(wp[3 + i] as i32, x_buf[11 - i]);
         m_out |= y_lo.abs();
-        *y.add((15 + i) * n_bands) = y_lo;
+        *y.add((15 + i) * NBANDS) = y_lo;
     }
 
     // 5. Zapisanie części do overlapu na następną ramkę (tylko 9 próbek)
     // Wykorzystujemy symetrię IMDCT
     for i in 0..3 {
-        *x_prev.offset(i as isize) = x_buf[6 + i] >> 2;
+        x_prev[i] = x_buf[6 + i] >> 2;
     }
     for i in 0..6 {
-        *x_prev.offset((3 + i) as isize) = x_buf[12 + i] >> 2;
+        x_prev[3 + i] = x_buf[12 + i] >> 2;
     }
 
     // 6. Korekta końcowa: inwersja i skalowanie
