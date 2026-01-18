@@ -1648,10 +1648,10 @@ pub const IMDCT_WIN: [[u32; 36]; 4] = [
     ],
 ];
 
-pub unsafe fn IMDCT36(
+pub fn imdct36(
     x_curr: &mut [i32; BLOCK_SIZE],
     x_prev: &mut [i32; BLOCK_SIZE / 2],
-    y: *mut i32,
+    y: &mut [i32],
     bt_curr: i32,
     bt_prev: i32,
     block_idx: i32,
@@ -1730,8 +1730,8 @@ pub unsafe fn IMDCT36(
 
             y_lo = d + (mulshift_32(t, e[0] as i32) << 2);
             y_hi = s + (mulshift_32(t, e[1] as i32) << 2);
-            *y.add((i) * NBANDS as usize) = y_lo;
-            *y.add((17 - i) * NBANDS as usize) = y_hi;
+            y[(i) * NBANDS as usize] = y_lo;
+            y[(17 - i) * NBANDS as usize] = y_hi;
             m_out |= y_lo.abs();
             m_out |= y_hi.abs();
         }
@@ -1758,14 +1758,14 @@ pub unsafe fn IMDCT36(
 
             y_lo = (x_prev_win[i] + mulshift_32(d, wp[i] as i32)) << 2;
             y_hi = (x_prev_win[17 - i] + mulshift_32(d, wp[17 - i] as i32)) << 2;
-            *(y.add((i) * NBANDS)) = y_lo;
-            *(y.add((17 - i) * NBANDS)) = y_hi;
+            y[(i) * NBANDS] = y_lo;
+            y[(17 - i) * NBANDS] = y_hi;
             m_out |= y_lo.abs();
             m_out |= y_hi.abs();
         }
     }
 
-    m_out |= FreqInvertRescale(y, x_prev, block_idx, es);
+    m_out |= freq_invert_rescale(y, x_prev, block_idx, es);
 
     m_out
 }
@@ -1842,7 +1842,7 @@ pub fn anti_alias(x: &mut [i32], n_bfly: usize) {
     }
 }
 
-pub unsafe fn HybridTransform(
+pub fn hybrid_transform(
     x_curr: &mut [i32; MAX_NSAMP],
     x_prev: &mut [i32; MAX_NSAMP / 2],
     y: &mut [[i32; NBANDS]; BLOCK_SIZE], // Tablica y[18][32] przekazana jako wskaźnik
@@ -1856,8 +1856,6 @@ pub unsafe fn HybridTransform(
     let (x_prev, _) = x_prev.as_chunks_mut::<9>();
 
     let mut i = 0;
-    let y_slice = y;
-    let y = y_slice.as_mut_ptr() as *mut i32;
 
     // 1. Bloky długie (Long Blocks)
     while i < bc.nBlocksLong {
@@ -1873,10 +1871,10 @@ pub unsafe fn HybridTransform(
 
         // Adresowanie y[0][i] w tablicy y[18][32] to po prostu y + i
         // ponieważ y[row][col] = y[row * 32 + col]
-        m_out |= IMDCT36(
+        m_out |= imdct36(
             &mut x_curr[i as usize],
             &mut x_prev[i as usize],
-            y.add(i as usize),
+            &mut y.as_flattened_mut()[i as usize..],
             curr_win_idx,
             prev_win_idx,
             i,
@@ -1893,10 +1891,10 @@ pub unsafe fn HybridTransform(
             prev_win_idx = 0;
         }
 
-        m_out |= IMDCT12x3(
+        m_out |= imdct12x3(
             &mut x_curr[i as usize],
             &mut x_prev[i as usize],
-            &mut y_slice.as_flattened_mut()[i as usize..],
+            &mut y.as_flattened_mut()[i as usize..],
             prev_win_idx,
             i,
             bc.gbIn,
@@ -1922,7 +1920,7 @@ pub unsafe fn HybridTransform(
             // Próbki parzyste (2*j)
             let mut xp = x_prev_win[2 * j] << 2;
             non_zero |= xp;
-            y_slice[2 * j][i as usize] = xp;
+            y[2 * j][i as usize] = xp;
             m_out |= xp.abs();
 
             // Próbki nieparzyste (2*j + 1) + Inwersja Częstotliwości
@@ -1932,7 +1930,7 @@ pub unsafe fn HybridTransform(
             xp = (xp ^ mask).wrapping_add(i & 0x01);
 
             non_zero |= xp;
-            y_slice[2 * j + 1][i as usize] = xp;
+            y[2 * j + 1][i as usize] = xp;
             m_out |= xp.abs();
 
             x_prev[i as usize][j] = 0;
@@ -1947,7 +1945,7 @@ pub unsafe fn HybridTransform(
     // 4. Czyszczenie pozostałych bloków (do 32 pasm)
     while i < 32 {
         for j in 0..18 {
-            y_slice[j][i as usize] = 0;
+            y[j][i as usize] = 0;
         }
         i += 1;
     }
@@ -1959,7 +1957,7 @@ pub unsafe fn HybridTransform(
     n_blocks_out
 }
 
-pub unsafe fn IMDCT12x3(
+pub fn imdct12x3(
     x_curr: &mut [i32; 18],
     x_prev: &mut [i32; 9],
     y: &mut [i32],
@@ -2047,14 +2045,14 @@ pub unsafe fn IMDCT12x3(
     m_out
 }
 
-pub unsafe extern "C" fn IMDCT(
+pub fn imdct(
     gr: i32,
     ch: i32,
     sfb: &SFBandTable,
-    m_MPEGVersion: MPEGVersion,
-    m_SideInfoSub: &[[SideInfoSub; 2]; 2],
-    m_HuffmanInfo: &mut HuffmanInfo,
-    m_IMDCTInfo: &mut IMDCTInfo,
+    m_mpegversion: MPEGVersion,
+    m_side_info_sub: &[[SideInfoSub; 2]; 2],
+    m_huffman_info: &mut HuffmanInfo,
+    m_imdctinfo: &mut IMDCTInfo,
 ) -> i32 {
     let mut bc = BlockCount {
         nBlocksLong: 0,
@@ -2068,11 +2066,11 @@ pub unsafe extern "C" fn IMDCT(
     };
 
     let n_bfly: i32;
-    let sis = &m_SideInfoSub[gr as usize][ch as usize];
+    let sis = &m_side_info_sub[gr as usize][ch as usize];
 
     // blockCutoff logic
     // MPEG1 = 0, inne = MPEG2/2.5
-    let cutoff_idx = if m_MPEGVersion == MPEGVersion::MPEG1 {
+    let cutoff_idx = if m_mpegversion == MPEGVersion::MPEG1 {
         8
     } else {
         6
@@ -2081,7 +2079,7 @@ pub unsafe extern "C" fn IMDCT(
 
     if sis.blockType != 2 {
         /* all long transforms */
-        let x = (m_HuffmanInfo.non_zero_bound[ch as usize] + 7) / 18 + 1;
+        let x = (m_huffman_info.non_zero_bound[ch as usize] + 7) / 18 + 1;
         bc.nBlocksLong = if x < 32 { x } else { 32 };
         n_bfly = bc.nBlocksLong - 1;
     } else if sis.blockType == 2 && sis.mixedBlock != 0 {
@@ -2097,41 +2095,41 @@ pub unsafe extern "C" fn IMDCT(
     // Wywołanie AntiAlias na buforze konkretnego kanału
     // huffDecBuf[ch] to tablica 576 intów
     if let Ok(size) = n_bfly.try_into() {
-        anti_alias(&mut m_HuffmanInfo.huff_dec_buf[ch as usize], size);
+        anti_alias(&mut m_huffman_info.huff_dec_buf[ch as usize], size);
     }
 
     // Aktualizacja nonZeroBound
-    let x_nz = m_HuffmanInfo.non_zero_bound[ch as usize];
+    let x_nz = m_huffman_info.non_zero_bound[ch as usize];
     let y_nz = n_bfly * 18 + 8;
-    m_HuffmanInfo.non_zero_bound[ch as usize] = if x_nz > y_nz { x_nz } else { y_nz };
+    m_huffman_info.non_zero_bound[ch as usize] = if x_nz > y_nz { x_nz } else { y_nz };
 
     // bc setup
-    bc.nBlocksTotal = (m_HuffmanInfo.non_zero_bound[ch as usize] + 17) / 18;
-    bc.nBlocksPrev = m_IMDCTInfo.numPrevIMDCT[ch as usize];
-    bc.prevType = m_IMDCTInfo.prevType[ch as usize];
-    bc.prevWinSwitch = m_IMDCTInfo.prevWinSwitch[ch as usize];
+    bc.nBlocksTotal = (m_huffman_info.non_zero_bound[ch as usize] + 17) / 18;
+    bc.nBlocksPrev = m_imdctinfo.numPrevIMDCT[ch as usize];
+    bc.prevType = m_imdctinfo.prevType[ch as usize];
+    bc.prevWinSwitch = m_imdctinfo.prevWinSwitch[ch as usize];
     bc.currWinSwitch = if sis.mixedBlock != 0 { block_cutoff } else { 0 };
     // Założenie: HuffmanInfo ma pole gb (guard bits)
     // bc.gbIn = hi.gb[ch as usize];
 
     // Wywołanie HybridTransform
-    m_IMDCTInfo.numPrevIMDCT[ch as usize] = HybridTransform(
-        &mut m_HuffmanInfo.huff_dec_buf[ch as usize],
-        &mut m_IMDCTInfo.overBuf[ch as usize],
-        &mut m_IMDCTInfo.outBuf[ch as usize],
+    m_imdctinfo.numPrevIMDCT[ch as usize] = hybrid_transform(
+        &mut m_huffman_info.huff_dec_buf[ch as usize],
+        &mut m_imdctinfo.overBuf[ch as usize],
+        &mut m_imdctinfo.outBuf[ch as usize],
         sis,
         &mut bc,
     );
 
-    m_IMDCTInfo.prevType[ch as usize] = sis.blockType;
-    m_IMDCTInfo.prevWinSwitch[ch as usize] = bc.currWinSwitch;
+    m_imdctinfo.prevType[ch as usize] = sis.blockType;
+    m_imdctinfo.prevWinSwitch[ch as usize] = bc.currWinSwitch;
     // im.gb[ch as usize] = bc.gbOut;
 
     0
 }
 
 /* pow(2,-i/4) * pow(j,4/3) for i=0..3 j=0..15, Q25 format */
-const pow43_14: [[i32; 16]; 4] = [
+const POW43_14: [[i32; 16]; 4] = [
     /* Q28 */
     [
         0x00000000, 0x10000000, 0x285145f3, 0x453a5cdb, 0x0cb2ff53, 0x111989d6, 0x15ce31c8,
@@ -2156,10 +2154,10 @@ const pow43_14: [[i32; 16]; 4] = [
 ];
 
 /* pow(2,-i/4) for i=0..3, Q31 format */
-const pow14: [i32; 4] = [0x7fffffff, 0x6ba27e65, 0x5a82799a, 0x4c1bf829];
+const POW14: [i32; 4] = [0x7fffffff, 0x6ba27e65, 0x5a82799a, 0x4c1bf829];
 
 /* pow(j,4/3) for j=16..63, Q23 format */
-const pow43: [i32; 48] = [
+const POW43: [i32; 48] = [
     0x1428a2fa, 0x15db1bd6, 0x1796302c, 0x19598d85, 0x1b24e8bb, 0x1cf7fcfa, 0x1ed28af2, 0x20b4582a,
     0x229d2e6e, 0x248cdb55, 0x26832fda, 0x28800000, 0x2a832287, 0x2c8c70a8, 0x2e9bc5d8, 0x30b0ff99,
     0x32cbfd4a, 0x34eca001, 0x3712ca62, 0x393e6088, 0x3b6f47e0, 0x3da56717, 0x3fe0a5fc, 0x4220ed72,
@@ -2200,8 +2198,8 @@ pub fn dequant_block(
     let mut mask = 0i32;
 
     // Pobranie tablicy dla skali ułamkowej
-    let tab16 = &pow43_14[(scale & 0x3) as usize];
-    let scalef = pow14[(scale & 0x3) as usize];
+    let tab16 = &POW43_14[(scale & 0x3) as usize];
+    let scalef = POW14[(scale & 0x3) as usize];
 
     // scalei = min(scale >> 2, 31)
     let mut scalei = scale >> 2;
@@ -2242,7 +2240,7 @@ pub fn dequant_block(
             }
         } else {
             if x < 64 {
-                y = pow43[(x - 16) as usize];
+                y = POW43[(x - 16) as usize];
                 y = mulshift_32(y, scalef);
                 shift = scalei - 3;
             } else {
@@ -2319,8 +2317,8 @@ pub fn dequant_block_in_place(
     let mut mask = 0i32;
 
     // Pobranie tablicy dla skali ułamkowej
-    let tab16 = &pow43_14[(scale & 0x3) as usize];
-    let scalef = pow14[(scale & 0x3) as usize];
+    let tab16 = &POW43_14[(scale & 0x3) as usize];
+    let scalef = POW14[(scale & 0x3) as usize];
 
     // scalei = min(scale >> 2, 31)
     let mut scalei = scale >> 2;
@@ -2361,7 +2359,7 @@ pub fn dequant_block_in_place(
             }
         } else {
             if x < 64 {
-                y = pow43[(x - 16) as usize];
+                y = POW43[(x - 16) as usize];
                 y = mulshift_32(y, scalef);
                 shift = scalei - 3;
             } else {
@@ -2979,7 +2977,7 @@ pub unsafe fn unpack_scale_factors(
  * Return:      0 on success,  -1 if null input pointers
  **********************************************************************************************************************/
 
-pub unsafe fn MP3Dequantize(gr: i32, m_mp3_decoder: &mut MP3Decoder) -> i32 {
+pub fn mp3_dequantize(gr: i32, m_mp3_decoder: &mut MP3Decoder) -> i32 {
     let di = &mut m_mp3_decoder.m_MP3DecInfo;
     let hi = &mut m_mp3_decoder.m_HuffmanInfo;
     let dqi = &mut m_mp3_decoder.m_DequantInfo;
@@ -3273,13 +3271,13 @@ pub unsafe fn MP3DecodeHelper(
             main_bits -= (8 * offset - prev_bit_offset + bit_offset);
         }
 
-        if MP3Dequantize(gr, m_mp3_decoder) < 0 {
+        if mp3_dequantize(gr, m_mp3_decoder) < 0 {
             MP3ClearBadFrame(outbuf);
             return ERR_MP3_INVALID_DEQUANTIZE;
         }
 
         for ch in 0..m_mp3_decoder.m_MP3DecInfo.nChans {
-            if IMDCT(
+            if imdct(
                 gr,
                 ch,
                 &mut m_mp3_decoder.m_SFBandTable,
