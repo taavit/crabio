@@ -1526,9 +1526,9 @@ pub unsafe fn DecodeHuffman(
     /* decode Huffman pairs (rEnd[i] are always even numbers) */
     bitsLeft = huffBlockBits;
 
-    let mut bitsUsed;
+    let mut bits_used;
     for i in 0..3 {
-        bitsUsed = DecodeHuffmanPairs(
+        bits_used = DecodeHuffmanPairs(
             &mut m_HuffmanInfo.huff_dec_buf[ch as usize]
                 [rEnd[i] as usize..rEnd[i] as usize + (rEnd[i + 1] - rEnd[i]) as usize],
             sis.tableSelect[i],
@@ -1536,16 +1536,16 @@ pub unsafe fn DecodeHuffman(
             buf,
             *bitOffset,
         );
-        if (bitsUsed < 0 || bitsUsed > bitsLeft)
+        if (bits_used < 0 || bits_used > bitsLeft)
         /* error - overran end of bitstream */
         {
             return -1;
         }
 
         /* update bitstream position */
-        buf = buf.add((bitsUsed + *bitOffset) as usize >> 3);
-        *bitOffset = (bitsUsed + *bitOffset) & 0x07;
-        bitsLeft -= bitsUsed;
+        buf = buf.add((bits_used + *bitOffset) as usize >> 3);
+        *bitOffset = (bits_used + *bitOffset) & 0x07;
+        bitsLeft -= bits_used;
     }
 
     /* decode Huffman quads (if any) */
@@ -1649,19 +1649,19 @@ pub const IMDCT_WIN: [[u32; 36]; 4] = [
 ];
 
 pub unsafe fn IMDCT36(
-    mut xCurr: &mut [i32; 18],
-    mut xPrev: &mut [i32; 9],
+    x_curr: &mut [i32; BLOCK_SIZE],
+    x_prev: &mut [i32; BLOCK_SIZE / 2],
     y: *mut i32,
-    btCurr: i32,
-    btPrev: i32,
-    blockIdx: i32,
+    bt_curr: i32,
+    bt_prev: i32,
+    block_idx: i32,
     gb: i32,
 ) -> i32 {
     let mut acc1 = 0;
     let mut acc2 = 0;
     let es;
-    let mut x_buf: [i32; 18] = [0; 18];
-    let mut x_prev_win: [i32; 18] = [0; 18];
+    let mut x_buf: [i32; BLOCK_SIZE] = [0; 18];
+    let mut x_prev_win: [i32; BLOCK_SIZE] = [0; 18];
     let mut c;
     let mut xo;
     let mut xe;
@@ -1673,27 +1673,27 @@ pub unsafe fn IMDCT36(
     let mut x_curr_idx = 17;
     let mut x_prev_idx = 0;
     /* 7 gb is always adequate for antialias + accumulator loop + idct9 */
-    if (gb < 7) {
+    if gb < 7 {
         /* rarely triggered - 5% to 10% of the time on normal clips (with Q25 input) */
         es = 7 - gb;
         for i in (0..=8).rev() {
-            acc1 = ((xCurr[x_curr_idx]) >> es) - acc1;
+            acc1 = ((x_curr[x_curr_idx]) >> es) - acc1;
             x_curr_idx -= 1;
             acc2 = acc1 - acc2;
-            acc1 = ((xCurr[x_curr_idx]) >> es) - acc1;
+            acc1 = ((x_curr[x_curr_idx]) >> es) - acc1;
             x_curr_idx -= 1;
             x_buf[i + 9] = acc2; /* odd */
             x_buf[i + 0] = acc1; /* even */
-            xPrev[i] >>= es;
+            x_prev[i] >>= es;
         }
     } else {
         es = 0;
         /* max gain = 18, assume adequate guard bits */
         for i in (0..=8).rev() {
-            acc1 = (xCurr[x_curr_idx]) - acc1;
+            acc1 = (x_curr[x_curr_idx]) - acc1;
             x_curr_idx -= 1;
             acc2 = acc1 - acc2;
-            acc1 = (xCurr[x_curr_idx]) - acc1;
+            acc1 = (x_curr[x_curr_idx]) - acc1;
             x_curr_idx -= 1;
             x_buf[i + 9] = acc2; /* odd */
             x_buf[i + 0] = acc1; /* even */
@@ -1709,7 +1709,7 @@ pub unsafe fn IMDCT36(
     let mut xp_idx = 8;
     let mut cp_idx = 8;
     let mut m_out = 0;
-    if btPrev == 0 && btCurr == 0 {
+    if bt_prev == 0 && bt_curr == 0 {
         /* fast path - use symmetry of sin window to reduce windowing multiplies to 18 (N/2) */
         for (i, e) in FAST_WIN36.chunks_exact(2).enumerate() {
             /* do ARM-style pointer arithmetic (i still needed for y[] indexing - compiler spills if 2 y pointers) */
@@ -1722,9 +1722,9 @@ pub unsafe fn IMDCT36(
             xo = mulshift_32(c as i32, xo); /* 2*c18*xOdd (mul by 2 implicit in scaling)  */
             xe >>= 2;
 
-            s = -(xPrev[x_prev_idx]); /* sum from last block (always at least 2 guard bits) */
+            s = -(x_prev[x_prev_idx]); /* sum from last block (always at least 2 guard bits) */
             d = -(xe - xo); /* gain 2 int bits, don't shift xo (effective << 1 to eat sign bit, << 1 for mul by 2) */
-            xPrev[x_prev_idx] = xe + xo; /* symmetry - xPrev[i] = xPrev[17-i] for long blocks */
+            x_prev[x_prev_idx] = xe + xo; /* symmetry - xPrev[i] = xPrev[17-i] for long blocks */
             x_prev_idx += 1;
             t = s - d;
 
@@ -1739,9 +1739,9 @@ pub unsafe fn IMDCT36(
         /* slower method - either prev or curr is using window type != 0 so do full 36-point window
          * output xPrevWin has at least 3 guard bits (xPrev has 2, gain 1 in WinPrevious)
          */
-        win_previous(xPrev, &mut x_prev_win, btPrev);
+        win_previous(x_prev, &mut x_prev_win, bt_prev);
 
-        let wp = IMDCT_WIN[btCurr as usize];
+        let wp = IMDCT_WIN[bt_curr as usize];
         for i in 0..9 {
             c = C18[cp_idx];
             cp_idx -= 1;
@@ -1753,7 +1753,7 @@ pub unsafe fn IMDCT36(
             xe >>= 2;
 
             d = xe - xo;
-            xPrev[x_prev_idx] = xe + xo; /* symmetry - xPrev[i] = xPrev[17-i] for long blocks */
+            x_prev[x_prev_idx] = xe + xo; /* symmetry - xPrev[i] = xPrev[17-i] for long blocks */
             x_prev_idx += 1;
 
             y_lo = (x_prev_win[i] + mulshift_32(d, wp[i] as i32)) << 2;
@@ -1765,7 +1765,7 @@ pub unsafe fn IMDCT36(
         }
     }
 
-    m_out |= FreqInvertRescale(y, xPrev, blockIdx, es);
+    m_out |= FreqInvertRescale(y, x_prev, block_idx, es);
 
     m_out
 }
@@ -1896,7 +1896,7 @@ pub unsafe fn HybridTransform(
         m_out |= IMDCT12x3(
             &mut x_curr[i as usize],
             &mut x_prev[i as usize],
-            y.add(i as usize),
+            &mut y_slice.as_flattened_mut()[i as usize..],
             prev_win_idx,
             i,
             bc.gbIn,
@@ -1962,7 +1962,7 @@ pub unsafe fn HybridTransform(
 pub unsafe fn IMDCT12x3(
     x_curr: &mut [i32; 18],
     x_prev: &mut [i32; 9],
-    y: *mut i32,
+    y: &mut [i32],
     bt_prev: i32,
     block_idx: i32,
     gb: i32,
@@ -2003,33 +2003,33 @@ pub unsafe fn IMDCT12x3(
         // Pierwsze 6 próbek pochodzi tylko z poprzedniego okna (xPrevWin)
         y_lo = x_prev_win[i] << 2;
         m_out |= y_lo.abs();
-        *y.add(i * NBANDS) = y_lo;
+        y[i * NBANDS] = y_lo;
 
         y_lo = x_prev_win[3 + i] << 2;
         m_out |= y_lo.abs();
-        *y.add((3 + i) * NBANDS) = y_lo;
+        y[(3 + i) * NBANDS] = y_lo;
 
         // Kolejne próbki to suma poprzedniego okna i nowych danych (xBuf) z oknem wp
         y_lo = (x_prev_win[6 + i] << 2) + mulshift_32(wp[i] as i32, x_buf[3 + i]);
         m_out |= y_lo.abs();
-        *y.add((6 + i) * NBANDS) = y_lo;
+        y[(6 + i) * NBANDS] = y_lo;
 
         y_lo = (x_prev_win[9 + i] << 2) + mulshift_32(wp[3 + i] as i32, x_buf[5 - i]);
         m_out |= y_lo.abs();
-        *y.add((9 + i) * NBANDS) = y_lo;
+        y[(9 + i) * NBANDS] = y_lo;
 
         // Składanie na stykach bloków wewnętrznych (short block concatenation)
         y_lo = (x_prev_win[12 + i] << 2)
             + mulshift_32(wp[6 + i] as i32, x_buf[2 - i])
             + mulshift_32(wp[i] as i32, x_buf[9 + i]);
         m_out |= y_lo.abs();
-        *y.add((12 + i) * NBANDS) = y_lo;
+        y[(12 + i) * NBANDS] = y_lo;
 
         y_lo = (x_prev_win[15 + i] << 2)
             + mulshift_32(wp[9 + i] as i32, x_buf[i])
             + mulshift_32(wp[3 + i] as i32, x_buf[11 - i]);
         m_out |= y_lo.abs();
-        *y.add((15 + i) * NBANDS) = y_lo;
+        y[(15 + i) * NBANDS] = y_lo;
     }
 
     // 5. Zapisanie części do overlapu na następną ramkę (tylko 9 próbek)
@@ -2042,7 +2042,7 @@ pub unsafe fn IMDCT12x3(
     }
 
     // 6. Korekta końcowa: inwersja i skalowanie
-    m_out |= FreqInvertRescale(y, x_prev, block_idx, es);
+    m_out |= freq_invert_rescale(y, x_prev, block_idx, es);
 
     m_out
 }
