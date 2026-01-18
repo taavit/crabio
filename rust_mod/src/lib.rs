@@ -1308,21 +1308,21 @@ const QUAD_TABLE: [u8; 64 + 16] = [
  **********************************************************************************************************************/
 // no improvement with section=data
 pub unsafe fn DecodeHuffmanQuads(
-    mut vwxy: *mut i32,
+    vwxy: &mut [i32],
     n_vals: i32,
-    tabIdx: i32,
+    tab_idx: i32,
     mut bits_left: i32,
     mut buf: *mut u8,
-    bitOffset: i32,
+    bit_offset: i32,
 ) -> i32 {
     let mut v: i32;
     let mut w: i32;
     let mut x: i32;
     let mut y: i32;
     let mut len: i32;
-    let maxBits: i32;
-    let mut cachedBits: i32;
-    let mut padBits: i32;
+    let max_bits: i32;
+    let mut cached_bits: i32;
+    let mut pad_bits: i32;
     let mut cache: u32;
     let mut cw: u8;
 
@@ -1330,64 +1330,66 @@ pub unsafe fn DecodeHuffmanQuads(
         return 0;
     }
 
+    let mut vwxy_idx = 0;
+
     // Pobieranie bazy tabeli i parametrów (zakładamy dostęp do globalnych tablic)
     // tBase = (unsigned char *) quadTable + quadTabOffset[tabIdx];
-    let t_base = (QUAD_TABLE.as_ptr() as *const u8).add(QUAD_TAB_OFFSET[tabIdx as usize] as usize);
-    maxBits = QUAD_TAB_MAX_BITS[tabIdx as usize] as i32;
+    let t_base = &QUAD_TABLE[QUAD_TAB_OFFSET[tab_idx as usize] as usize..];
+    max_bits = QUAD_TAB_MAX_BITS[tab_idx as usize] as i32;
 
     /* Inicjalizacja cache partial byte */
     cache = 0;
-    cachedBits = (8 - bitOffset) & 0x07;
-    if cachedBits != 0 {
-        cache = (*buf as u32) << (32 - cachedBits);
+    cached_bits = (8 - bit_offset) & 0x07;
+    if cached_bits != 0 {
+        cache = (*buf as u32) << (32 - cached_bits);
         buf = buf.add(1);
     }
-    bits_left -= cachedBits;
+    bits_left -= cached_bits;
 
     let mut i = 0;
-    padBits = 0;
+    pad_bits = 0;
 
     while i < (n_vals - 3) {
         /* Uzupełnianie cache - ładowanie 16 bitów */
         if bits_left >= 16 {
-            cache |= (*buf as u32) << (24 - cachedBits);
+            cache |= (*buf as u32) << (24 - cached_bits);
             buf = buf.add(1);
-            cache |= (*buf as u32) << (16 - cachedBits);
+            cache |= (*buf as u32) << (16 - cached_bits);
             buf = buf.add(1);
-            cachedBits += 16;
+            cached_bits += 16;
             bits_left -= 16;
         } else {
             /* Ostatnia partia bitów, wyrównanie i padBits */
-            if cachedBits + bits_left <= 0 {
+            if cached_bits + bits_left <= 0 {
                 return i;
             }
             if bits_left > 0 {
-                cache |= (*buf as u32) << (24 - cachedBits);
+                cache |= (*buf as u32) << (24 - cached_bits);
                 buf = buf.add(1);
             }
             if bits_left > 8 {
-                cache |= (*buf as u32) << (16 - cachedBits);
+                cache |= (*buf as u32) << (16 - cached_bits);
                 buf = buf.add(1);
             }
-            cachedBits += bits_left;
+            cached_bits += bits_left;
             bits_left = 0;
 
             // cache &= (signed int) 0x80000000 >> (cachedBits - 1);
             // W Rust przesunięcie i32 jest arytmetyczne (zachowuje bit znaku)
-            let mask = ((0x80000000u32 as i32) >> (cachedBits.wrapping_sub(1))) as u32;
+            let mask = ((0x80000000u32 as i32) >> (cached_bits.wrapping_sub(1))) as u32;
             cache &= mask;
 
-            padBits = 10;
-            cachedBits += padBits;
+            pad_bits = 10;
+            cached_bits += pad_bits;
         }
 
         /* Dekodowanie kwadratów */
-        while i < (n_vals - 3) && cachedBits >= 10 {
+        while i < (n_vals - 3) && cached_bits >= 10 {
             // cw = pgm_read_byte(&tBase[cache >> (32 - maxBits)]);
-            cw = *(t_base.add((cache >> (32 - maxBits)) as usize));
+            cw = t_base[(cache >> (32 - max_bits)) as usize];
 
             len = ((cw >> 4) & 0x0f) as i32;
-            cachedBits -= len;
+            cached_bits -= len;
             cache <<= len;
 
             // V
@@ -1395,7 +1397,7 @@ pub unsafe fn DecodeHuffmanQuads(
             if v != 0 {
                 v |= (cache & 0x80000000) as i32;
                 cache <<= 1;
-                cachedBits -= 1;
+                cached_bits -= 1;
             }
 
             // W
@@ -1403,7 +1405,7 @@ pub unsafe fn DecodeHuffmanQuads(
             if w != 0 {
                 w |= (cache & 0x80000000) as i32;
                 cache <<= 1;
-                cachedBits -= 1;
+                cached_bits -= 1;
             }
 
             // X
@@ -1411,7 +1413,7 @@ pub unsafe fn DecodeHuffmanQuads(
             if x != 0 {
                 x |= (cache & 0x80000000) as i32;
                 cache <<= 1;
-                cachedBits -= 1;
+                cached_bits -= 1;
             }
 
             // Y
@@ -1419,23 +1421,20 @@ pub unsafe fn DecodeHuffmanQuads(
             if y != 0 {
                 y |= (cache & 0x80000000) as i32;
                 cache <<= 1;
-                cachedBits -= 1;
+                cached_bits -= 1;
             }
 
-            if cachedBits < padBits {
+            if cached_bits < pad_bits {
                 return i;
             }
 
             // Zapis do bufora i inkrementacja wskaźnika (jak vwxy++)
-            *vwxy = v;
-            vwxy = vwxy.add(1);
-            *vwxy = w;
-            vwxy = vwxy.add(1);
-            *vwxy = x;
-            vwxy = vwxy.add(1);
-            *vwxy = y;
-            vwxy = vwxy.add(1);
+            vwxy[vwxy_idx] = v;
+            vwxy[vwxy_idx + 1] = w;
+            vwxy[vwxy_idx + 2] = x;
+            vwxy[vwxy_idx + 3] = y;
             i += 4;
+            vwxy_idx+=4;
         }
     }
 
@@ -1551,9 +1550,7 @@ pub unsafe fn DecodeHuffman(
 
     /* decode Huffman quads (if any) */
     m_HuffmanInfo.non_zero_bound[ch as usize] += DecodeHuffmanQuads(
-        m_HuffmanInfo.huff_dec_buf[ch as usize]
-            .as_mut_ptr()
-            .add(rEnd[3] as usize),
+        &mut m_HuffmanInfo.huff_dec_buf[ch as usize][rEnd[3] as usize..],
         MAX_NSAMP as i32 - rEnd[3],
         sis.count1TableSelect,
         bitsLeft,
