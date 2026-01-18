@@ -2430,7 +2430,7 @@ const PRE_TAB: [u8; 22] = [
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 3, 3, 3, 2, 0,
 ];
 
-pub unsafe fn DequantChannel(
+pub fn dequant_channel(
     sample_buf: &mut [i32; MAX_NSAMP],
     work_buf: &mut [i32],
     non_zero_bound: &mut i32,
@@ -2543,12 +2543,19 @@ pub unsafe fn DequantChannel(
 
         // 4. Reordering: Przeplatanie próbek z 3 bloków krótkich
         // C: buf[j][0] = workBuf[0*nSamps + j]
-        let current_ptr = sample_buf.as_mut_ptr().add(i) as *mut [i32; 3];
-        for j in 0..n_samps as usize {
-            let row = &mut *current_ptr.add(j);
+        let n = n_samps as usize;
+        let start = i;
+        let end = start + n * 3;
+
+        // Bezpośrednie wycięcie fragmentu (rzuci panic jeśli poza zakresem)
+        let target_slice = &mut sample_buf[start..end];
+        let (rows, _) = target_slice.as_chunks_mut::<3>();
+
+        for (j, row) in rows.iter_mut().enumerate() {
+            // row jest &mut [i32; 3], kompilator usuwa sprawdzenie granic dla row[0,1,2]
             row[0] = work_buf[j];
-            row[1] = work_buf[n_samps as usize + j];
-            row[2] = work_buf[2 * n_samps as usize + j];
+            row[1] = work_buf[n + j];
+            row[2] = work_buf[2 * n + j];
         }
 
         i += (3 * n_samps) as usize;
@@ -2989,7 +2996,7 @@ pub unsafe fn MP3Dequantize(gr: i32, m_mp3_decoder: &mut MP3Decoder) -> i32 {
 
     // 1. Dekwantyzacja każdego kanału
     for ch in 0..di.nChans as usize {
-        hi.gb[ch] = DequantChannel(
+        hi.gb[ch] = dequant_channel(
             &mut hi.huff_dec_buf[ch],
             &mut dqi.work_buf[..],
             &mut hi.non_zero_bound[ch],
