@@ -2864,30 +2864,39 @@ pub fn intensity_proc_mpeg2(
 pub fn mid_side_proc(
     x: &mut [[i32; MAX_NSAMP]; MAX_NCHAN], // x[2][576]
     n_samps: usize,
-    m_out: &mut [i32; 2], // mOut[2]
+    m_out: &mut [i32; MAX_NCHAN],
 ) {
+    // 1. Ograniczamy n_samps do faktycznego rozmiaru tablicy,
+    // co pomaga kompilatorowi wyeliminować checks w pętli.
+    let n = n_samps.min(MAX_NSAMP);
+
+    // 2. Rozbijamy x na dwa oddzielne slice'y, aby uniknąć indeksowania x[0][i] i x[1][i].
+    // Dzięki temu procesor ma dwa stałe wskaźniki, które idą liniowo.
+    let (left_chan, right_chan) = x.split_at_mut(1);
+    let l_slice = &mut left_chan[0][..n];
+    let r_slice = &mut right_chan[0][..n];
+
     let mut m_out_l = 0i32;
     let mut m_out_r = 0i32;
 
-    for i in 0..n_samps {
-        let mid = x[0][i];
-        let side = x[1][i];
+    // 3. zip() tworzy iterator par. LLVM zamieni to na pętlę operującą na dwóch wskaźnikach.
+    // Użycie iteratora zamiast indeksowania pętlą 'for i in 0..n' jest kluczowe dla Xtensa.
+    for (mid_ref, side_ref) in l_slice.iter_mut().zip(r_slice.iter_mut()) {
+        let mid = *mid_ref;
+        let side = *side_ref;
 
-        // Wykonujemy operację sumy i różnicy
-        // Używamy wrapping_add/sub, aby zachować zachowanie C w razie przepełnienia,
-        // choć przy 1 bicie strażniczym (guard bit) nie powinno to nastąpić.
         let l = mid.wrapping_add(side);
         let r = mid.wrapping_sub(side);
 
-        x[0][i] = l;
-        x[1][i] = r;
+        *mid_ref = l;
+        *side_ref = r;
 
-        // Aktualizacja maski dla bitów strażniczych
+        // 4. Bitowe abs() jest często szybsze na S3 niż instrukcja warunkowa.
+        // Chociaż S3 ma instrukcję ABS, LLVM przy |= abs() potrafi zrobić świetne unrollowanie.
         m_out_l |= l.abs();
         m_out_r |= r.abs();
     }
 
-    // Łączymy nową maskę z istniejącą (operator |= w C)
     m_out[0] |= m_out_l;
     m_out[1] |= m_out_r;
 }
