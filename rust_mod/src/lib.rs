@@ -1670,19 +1670,18 @@ pub unsafe fn IMDCT36(
     let mut t;
     let mut y_lo;
     let mut y_hi;
-    let mut xCurr = xCurr.as_mut_ptr();
-    let mut xPrev_idx = 0;
-    xCurr = xCurr.add(17);
+    let mut x_curr_idx = 17;
+    let mut x_prev_idx = 0;
     /* 7 gb is always adequate for antialias + accumulator loop + idct9 */
     if (gb < 7) {
         /* rarely triggered - 5% to 10% of the time on normal clips (with Q25 input) */
         es = 7 - gb;
         for i in (0..=8).rev() {
-            acc1 = ((*xCurr) >> es) - acc1;
-            xCurr = xCurr.sub(1);
+            acc1 = ((xCurr[x_curr_idx]) >> es) - acc1;
+            x_curr_idx -= 1;
             acc2 = acc1 - acc2;
-            acc1 = ((*xCurr) >> es) - acc1;
-            xCurr = xCurr.sub(1);
+            acc1 = ((xCurr[x_curr_idx]) >> es) - acc1;
+            x_curr_idx -= 1;
             x_buf[i + 9] = acc2; /* odd */
             x_buf[i + 0] = acc1; /* even */
             xPrev[i] >>= es;
@@ -1691,11 +1690,11 @@ pub unsafe fn IMDCT36(
         es = 0;
         /* max gain = 18, assume adequate guard bits */
         for i in (0..=8).rev() {
-            acc1 = (*xCurr) - acc1;
-            xCurr = xCurr.sub(1);
+            acc1 = (xCurr[x_curr_idx]) - acc1;
+            x_curr_idx -= 1;
             acc2 = acc1 - acc2;
-            acc1 = (*xCurr) - acc1;
-            xCurr = xCurr.sub(1);
+            acc1 = (xCurr[x_curr_idx]) - acc1;
+            x_curr_idx -= 1;
             x_buf[i + 9] = acc2; /* odd */
             x_buf[i + 0] = acc1; /* even */
         }
@@ -1723,10 +1722,10 @@ pub unsafe fn IMDCT36(
             xo = mulshift_32(c as i32, xo); /* 2*c18*xOdd (mul by 2 implicit in scaling)  */
             xe >>= 2;
 
-            s = -(xPrev[xPrev_idx]); /* sum from last block (always at least 2 guard bits) */
+            s = -(xPrev[x_prev_idx]); /* sum from last block (always at least 2 guard bits) */
             d = -(xe - xo); /* gain 2 int bits, don't shift xo (effective << 1 to eat sign bit, << 1 for mul by 2) */
-            xPrev[xPrev_idx] = xe + xo; /* symmetry - xPrev[i] = xPrev[17-i] for long blocks */
-            xPrev_idx += 1;
+            xPrev[x_prev_idx] = xe + xo; /* symmetry - xPrev[i] = xPrev[17-i] for long blocks */
+            x_prev_idx += 1;
             t = s - d;
 
             y_lo = d + (mulshift_32(t, e[0] as i32) << 2);
@@ -1754,8 +1753,8 @@ pub unsafe fn IMDCT36(
             xe >>= 2;
 
             d = xe - xo;
-            xPrev[xPrev_idx] = xe + xo; /* symmetry - xPrev[i] = xPrev[17-i] for long blocks */
-            xPrev_idx += 1;
+            xPrev[x_prev_idx] = xe + xo; /* symmetry - xPrev[i] = xPrev[17-i] for long blocks */
+            x_prev_idx += 1;
 
             y_lo = (x_prev_win[i] + mulshift_32(d, wp[i] as i32)) << 2;
             y_hi = (x_prev_win[17 - i] + mulshift_32(d, wp[17 - i] as i32)) << 2;
