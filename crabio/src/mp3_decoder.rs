@@ -249,7 +249,7 @@ pub struct FrameHeader {
     pub srIdx: i32,              /* sample rate index (0 - 2) */
     pub paddingBit: i32,         /* padding flag: 0 = no padding, 1 = single pad byte */
     pub privateBit: i32,         /* unused */
-    pub modeExt: i32,            /* used to decipher joint stereo mode */
+    pub modeExt: usize,            /* used to decipher joint stereo mode */
     pub copyFlag: i32,           /* copyright flag: 0 = no, 1 = yes */
     pub origFlag: i32,           /* original flag: 0 = copy, 1 = original */
     pub emphasis: i32,           /* deemphasis mode */
@@ -1355,7 +1355,7 @@ impl MP3Decoder {
             0x03 => StereoMode::Mono,
             _ => { return Err(ERR_MP3_INVALID_FRAMEHEADER) }
         }; /* maps to correct enum (see definition) */
-        m_frame_header.modeExt = (buf[3] as i32>> 4) & 0x03;
+        m_frame_header.modeExt = (buf[3] as usize>> 4) & 0x03;
         m_frame_header.copyFlag = (buf[3] as i32 >> 3) & 0x01;
         m_frame_header.origFlag = (buf[3] as i32 >> 2) & 0x01;
         m_frame_header.emphasis = (buf[3] as i32 >> 0) & 0x03;
