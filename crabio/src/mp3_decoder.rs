@@ -1,17 +1,21 @@
 use crate::utils::{bit_stream_cache::BitStreamInfo, clip_to_short::clip_to_short};
 
-pub const SYNCWORDH: u8              =0xff;
-pub const SYNCWORDL: u8              =0xf0;
-pub const DQ_FRACBITS_OUT: u8        =25;  // number of fraction bits in output of dequant
-pub const CSHIFT: u8                 =12;  // coefficients have 12 leading sign bits for early-terminating mulitplies
-pub const SIBYTES_MPEG1_MONO: usize  =17;
-pub const SIBYTES_MPEG1_STEREO: usize=32;
-pub const SIBYTES_MPEG2_MONO: usize  =9;
-pub const SIBYTES_MPEG2_STEREO: usize=17;
-pub const IMDCT_SCALE: u8            =2;   // additional scaling (by sqrt(2)) for fast IMDCT36
-pub const NGRANS_MPEG1: u8           =2;
-pub const NGRANS_MPEG2: u8           =1;
-pub const SQRTHALF: u32               =0x5a82799a;  // sqrt(0.5) in Q31 format
+pub const CHANNEL_MONO: usize = 0;
+pub const CHANNEL_LEFT: usize = 0;
+pub const CHANNEL_RIGHT: usize = 1;
+
+pub const SYNCWORDH: u8 = 0xff;
+pub const SYNCWORDL: u8 = 0xf0;
+pub const DQ_FRACBITS_OUT: u8 = 25; // number of fraction bits in output of dequant
+pub const CSHIFT: u8 = 12; // coefficients have 12 leading sign bits for early-terminating mulitplies
+pub const SIBYTES_MPEG1_MONO: usize = 17;
+pub const SIBYTES_MPEG1_STEREO: usize = 32;
+pub const SIBYTES_MPEG2_MONO: usize = 9;
+pub const SIBYTES_MPEG2_STEREO: usize = 17;
+pub const IMDCT_SCALE: u8 = 2; // additional scaling (by sqrt(2)) for fast IMDCT36
+pub const NGRANS_MPEG1: u8 = 2;
+pub const NGRANS_MPEG2: u8 = 1;
+pub const SQRTHALF: u32 = 0x5a82799a; // sqrt(0.5) in Q31 format
 
 const C3_0: i32 = 0x6ed9eba1; /* format = Q31, cos(pi/6) */
 const C6: [i32; 3] = [0x7ba3751d, 0x5a82799a, 0x2120fb83]; /* format = Q31, cos(((0:2) + 0.5) * (pi/6)) */
@@ -21,7 +25,6 @@ const C9_1: i32 = 0x620dbe8b;
 const C9_2: i32 = 0x163a1a7e;
 const C9_3: i32 = 0x5246dd49;
 const C9_4: i32 = 0x7e0e2e32;
-
 
 pub const POLY_COEF: [u32; 264] = [
     /* shuffled vs. original from 0, 1, ... 15 to 0, 15, 2, 13, ... 14, 1 */
@@ -68,7 +71,7 @@ pub fn clip_2n(y: i32, n: u32) -> i32 {
         y
     } else {
         // n is 0..=30 → 1 << n is safe (positive, no sign-bit issue)
-        let bound = 1i32 << n;  // normal shift is fine and preferred here
+        let bound = 1i32 << n; // normal shift is fine and preferred here
         y.min(bound - 1).max(-bound)
     }
 }
@@ -82,10 +85,12 @@ pub fn sar_64(x: u64, n: i32) -> u64 {
 pub fn mulshift_32(x: i32, y: i32) -> i32 {
     ((x as u64) * (y as u64) >> 32) as i32
 }
-#[inline]
+
+#[inline(always)]
 pub fn madd_64(sum64: u64, x: i32, y: i32) -> u64 {
-    sum64 + (x as u64) * (y as u64)
-}/* returns 64-bit value in [edx:eax] */
+    let prod = (x as i64).wrapping_mul(y as i64);
+    sum64.wrapping_add(prod as u64)
+} /* returns 64-bit value in [edx:eax] */
 
 /// 12-point IMDCT for MP3 short blocks (fixed-point)
 ///
@@ -123,7 +128,7 @@ pub fn imdct_12(x: &[i32; 16], out: &mut [i32; 6]) {
 
     // Odd part
     let a0 = mulshift_32(C3_0, t3) << 1;
-    let a1 = t1 + (x5 >> 1);  // note: x5, not t5 — original uses original x5
+    let a1 = t1 + (x5 >> 1); // note: x5, not t5 — original uses original x5
     let a2 = t1 - x5;
 
     let odd1 = mulshift_32(C6[0], a1 + a0) << 2;
@@ -160,19 +165,19 @@ pub fn idct_9(x: &mut [i32; 9]) {
     let a6 = x2 + x8;
     let a7 = x1 + x7;
 
-    let a8  = a6 - a5; // x8 - x4
-    let a9  = a3 - a7; // x5 - x7
+    let a8 = a6 - a5; // x8 - x4
+    let a9 = a3 - a7; // x5 - x7
     let a10 = a2 - x7; // x1 - x5 - x7
     let a11 = a4 - x8; // x2 - x4 - x8
 
     // Multiplies with precomputed constants
-    let m1  = mulshift_32(C9_0, x3);
-    let m3  = mulshift_32(C9_0, a10);
-    let m5  = mulshift_32(C9_1, a5);
-    let m6  = mulshift_32(C9_2, a6);
-    let m7  = mulshift_32(C9_1, a8);
-    let m8  = mulshift_32(C9_2, a5);
-    let m9  = mulshift_32(C9_3, a9);
+    let m1 = mulshift_32(C9_0, x3);
+    let m3 = mulshift_32(C9_0, a10);
+    let m5 = mulshift_32(C9_1, a5);
+    let m6 = mulshift_32(C9_2, a6);
+    let m7 = mulshift_32(C9_1, a8);
+    let m8 = mulshift_32(C9_2, a5);
+    let m9 = mulshift_32(C9_3, a9);
     let m10 = mulshift_32(C9_4, a7);
     let m11 = mulshift_32(C9_3, a3);
     let m12 = mulshift_32(C9_4, a9);
@@ -212,48 +217,47 @@ pub fn idct_9(x: &mut [i32; 9]) {
 ///  P O L Y P H A S E
 ///
 
-pub const HUFF_PAIRTABS: usize       = 32;
-pub const BLOCK_SIZE: usize          = 18;
-pub const NBANDS: usize              = 32;
-pub const MAX_REORDER_SAMPS: usize   = (192-126)*3;      // largest critical band for short blocks (see sfBandTable)
-pub const VBUF_LENGTH: usize         = 17*2* NBANDS;    // for double-sized vbuf FIFO
-pub const MAX_SCFBD: usize           = 4;     // max scalefactor bands per channel
-pub const MAINBUF_SIZE: usize        = 1940;
-pub const MAX_NGRAN: usize           = 2;     // max granules
-pub const MAX_NCHAN: usize           = 2;     // max channels
-pub const MAX_NSAMP: usize           = 576;   // max samples per channel, per granule
+pub const HUFF_PAIRTABS: usize = 32;
+pub const BLOCK_SIZE: usize = 18;
+pub const NBANDS: usize = 32;
+pub const MAX_REORDER_SAMPS: usize = (192 - 126) * 3; // largest critical band for short blocks (see sfBandTable)
+pub const VBUF_LENGTH: usize = 17 * 2 * NBANDS; // for double-sized vbuf FIFO
+pub const MAX_SCFBD: usize = 4; // max scalefactor bands per channel
+pub const MAINBUF_SIZE: usize = 1940;
+pub const MAX_NGRAN: usize = 2; // max granules
+pub const MAX_NCHAN: usize = 2; // max channels
+pub const MAX_NSAMP: usize = 576; // max samples per channel, per granule
 
-
-pub const ERR_MP3_NONE: i8 =                  0;
-pub const ERR_MP3_INDATA_UNDERFLOW: i8 =     -1;
-pub const ERR_MP3_MAINDATA_UNDERFLOW: i8 =   -2;
-pub const ERR_MP3_FREE_BITRATE_SYNC: i8 =    -3;
-pub const ERR_MP3_OUT_OF_MEMORY: i8 =        -4;
-pub const ERR_MP3_NULL_POINTER: i8 =         -5;
-pub const ERR_MP3_INVALID_FRAMEHEADER: i8 =  -6;
-pub const ERR_MP3_INVALID_SIDEINFO: i8 =     -7;
-pub const ERR_MP3_INVALID_SCALEFACT: i8 =    -8;
-pub const ERR_MP3_INVALID_HUFFCODES: i8 =    -9;
-pub const ERR_MP3_INVALID_DEQUANTIZE: i8 =   -10;
-pub const ERR_MP3_INVALID_IMDCT: i8 =        -11;
-pub const ERR_MP3_INVALID_SUBBAND: i8 =      -12;
-pub const ERR_UNKNOWN: i8 =                  -127;
+pub const ERR_MP3_NONE: i8 = 0;
+pub const ERR_MP3_INDATA_UNDERFLOW: i8 = -1;
+pub const ERR_MP3_MAINDATA_UNDERFLOW: i8 = -2;
+pub const ERR_MP3_FREE_BITRATE_SYNC: i8 = -3;
+pub const ERR_MP3_OUT_OF_MEMORY: i8 = -4;
+pub const ERR_MP3_NULL_POINTER: i8 = -5;
+pub const ERR_MP3_INVALID_FRAMEHEADER: i8 = -6;
+pub const ERR_MP3_INVALID_SIDEINFO: i8 = -7;
+pub const ERR_MP3_INVALID_SCALEFACT: i8 = -8;
+pub const ERR_MP3_INVALID_HUFFCODES: i8 = -9;
+pub const ERR_MP3_INVALID_DEQUANTIZE: i8 = -10;
+pub const ERR_MP3_INVALID_IMDCT: i8 = -11;
+pub const ERR_MP3_INVALID_SUBBAND: i8 = -12;
+pub const ERR_UNKNOWN: i8 = -127;
 
 #[repr(C)]
 #[allow(non_snake_case)]
 #[derive(Default)]
 pub struct FrameHeader {
-    pub layer: i32,              /* layer index (1, 2, or 3) */
-    pub crc: i32,                /* CRC flag: 0 = disabled, 1 = enabled */
-    pub brIdx: i32,              /* bitrate index (0 - 15) */
-    pub srIdx: i32,              /* sample rate index (0 - 2) */
-    pub paddingBit: i32,         /* padding flag: 0 = no padding, 1 = single pad byte */
-    pub privateBit: i32,         /* unused */
-    pub modeExt: usize,            /* used to decipher joint stereo mode */
-    pub copyFlag: i32,           /* copyright flag: 0 = no, 1 = yes */
-    pub origFlag: i32,           /* original flag: 0 = copy, 1 = original */
-    pub emphasis: i32,           /* deemphasis mode */
-    pub CRCWord: i32,            /* CRC word (16 bits, 0 if crc not enabled) */
+    pub layer: i32,      /* layer index (1, 2, or 3) */
+    pub crc: i32,        /* CRC flag: 0 = disabled, 1 = enabled */
+    pub brIdx: i32,      /* bitrate index (0 - 15) */
+    pub srIdx: i32,      /* sample rate index (0 - 2) */
+    pub paddingBit: i32, /* padding flag: 0 = no padding, 1 = single pad byte */
+    pub privateBit: i32, /* unused */
+    pub modeExt: usize,  /* used to decipher joint stereo mode */
+    pub copyFlag: i32,   /* copyright flag: 0 = no, 1 = yes */
+    pub origFlag: i32,   /* original flag: 0 = copy, 1 = original */
+    pub emphasis: i32,   /* deemphasis mode */
+    pub CRCWord: i32,    /* CRC word (16 bits, 0 if crc not enabled) */
 }
 
 impl FrameHeader {
@@ -265,49 +269,48 @@ impl FrameHeader {
 #[repr(C)]
 #[derive(Debug, Default, Clone, Copy)]
 pub struct SideInfoSub {
-    pub part23_length: i32,       /* number of bits in main data */
-    pub n_bigvals: i32,           /* 2x this = first set of Huffman cw's (maximum amplitude can be > 1) */
-    pub global_gain: i32,         /* overall gain for dequantizer */
-    pub sfCompress: i32,         /* unpacked to figure out number of bits in scale factors */
-    pub win_switch_flag: i32,      /* window switching flag */
-    pub blockType: i32,          /* block type */
-    pub mixedBlock: i32,         /* 0 = regular block (all short or long), 1 = mixed block */
-    pub tableSelect: [i32; 3],     /* index of Huffman tables for the big values regions */
-    pub subBlockGain: [i32; 3],    /* subblock gain offset, relative to global gain */
-    pub region0Count: i32,       /* 1+region0Count = num scale factor bands in first region of bigvals */
-    pub region1Count: i32,       /* 1+region1Count = num scale factor bands in second region of bigvals */
-    pub preFlag: i32,            /* for optional high frequency boost */
-    pub sfactScale: i32,         /* scaling of the scalefactors */
-    pub count1TableSelect: i32,  /* index of Huffman table for quad codewords */
+    pub part23_length: i32,     /* number of bits in main data */
+    pub n_bigvals: i32, /* 2x this = first set of Huffman cw's (maximum amplitude can be > 1) */
+    pub global_gain: i32, /* overall gain for dequantizer */
+    pub sfCompress: i32, /* unpacked to figure out number of bits in scale factors */
+    pub win_switch_flag: i32, /* window switching flag */
+    pub blockType: i32, /* block type */
+    pub mixedBlock: i32, /* 0 = regular block (all short or long), 1 = mixed block */
+    pub tableSelect: [i32; 3], /* index of Huffman tables for the big values regions */
+    pub subBlockGain: [i32; 3], /* subblock gain offset, relative to global gain */
+    pub region0Count: i32, /* 1+region0Count = num scale factor bands in first region of bigvals */
+    pub region1Count: i32, /* 1+region1Count = num scale factor bands in second region of bigvals */
+    pub preFlag: i32,   /* for optional high frequency boost */
+    pub sfactScale: i32, /* scaling of the scalefactors */
+    pub count1TableSelect: i32, /* index of Huffman table for quad codewords */
 }
 
 #[repr(C)]
 pub struct SideInfo {
     pub mainDataBegin: i32,
     pub privateBits: i32,
-    pub scfsi: [[i32; MAX_SCFBD]; MAX_NCHAN],                /* 4 scalefactor bands per channel */
+    pub scfsi: [[i32; MAX_SCFBD]; MAX_NCHAN], /* 4 scalefactor bands per channel */
 }
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct CriticalBandInfo {
-    pub cbType: i32,             /* pure long = 0, pure short = 1, mixed = 2 */
-    pub cbEndS: [i32; 3],          /* number nonzero short cb's, per subbblock */
-    pub cbEndSMax: i32,          /* max of cbEndS[] */
-    pub cbEndL: i32,             /* number nonzero long cb's  */
+    pub cbType: i32,      /* pure long = 0, pure short = 1, mixed = 2 */
+    pub cbEndS: [i32; 3], /* number nonzero short cb's, per subbblock */
+    pub cbEndSMax: i32,   /* max of cbEndS[] */
+    pub cbEndL: i32,      /* number nonzero long cb's  */
 }
-
 
 #[repr(C)]
 pub struct DequantInfo {
-    pub work_buf: [i32; MAX_REORDER_SAMPS],             /* workbuf for reordering short blocks */
+    pub work_buf: [i32; MAX_REORDER_SAMPS], /* workbuf for reordering short blocks */
 }
 
 #[repr(C)]
 pub struct HuffmanInfo {
-    pub huff_dec_buf: [[i32; MAX_NSAMP]; MAX_NCHAN],       /* used both for decoded Huffman values and dequantized coefficients */
-    pub non_zero_bound: [i32; MAX_NCHAN],                /* number of coeffs in huffDecBuf[ch] which can be > 0 */
-    pub gb: [i32; MAX_NCHAN],                          /* minimum number of guard bits in huffDecBuf[ch] */
+    pub huff_dec_buf: [[i32; MAX_NSAMP]; MAX_NCHAN], /* used both for decoded Huffman values and dequantized coefficients */
+    pub non_zero_bound: [i32; MAX_NCHAN], /* number of coeffs in huffDecBuf[ch] which can be > 0 */
+    pub gb: [i32; MAX_NCHAN],             /* minimum number of guard bits in huffDecBuf[ch] */
 }
 
 #[repr(C)]
@@ -319,7 +322,7 @@ pub enum HuffTabType {
     LoopLinbits,
     QuadA,
     QuadB,
-    InvalidTab
+    InvalidTab,
 }
 
 #[repr(C)]
@@ -330,9 +333,9 @@ pub struct HuffTabLookup {
 
 #[repr(C)]
 pub struct IMDCTInfo {
-    pub outBuf: [[[i32; NBANDS]; BLOCK_SIZE]; MAX_NCHAN],  /* output of IMDCT */
-    pub overBuf: [[i32; MAX_NSAMP / 2]; MAX_NCHAN],      /* overlap-add buffer (by symmetry, only need 1/2 size) */
-    pub numPrevIMDCT: [i32; MAX_NCHAN],                /* how many IMDCT's calculated in this channel on prev. granule */
+    pub outBuf: [[[i32; NBANDS]; BLOCK_SIZE]; MAX_NCHAN], /* output of IMDCT */
+    pub overBuf: [[i32; MAX_NSAMP / 2]; MAX_NCHAN], /* overlap-add buffer (by symmetry, only need 1/2 size) */
+    pub numPrevIMDCT: [i32; MAX_NCHAN], /* how many IMDCT's calculated in this channel on prev. granule */
     pub prevType: [i32; MAX_NCHAN],
     pub prevWinSwitch: [i32; MAX_NCHAN],
     pub gb: [i32; MAX_NCHAN],
@@ -352,13 +355,15 @@ struct BlockCount {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct ScaleFactorInfoSub {    /* max bits in scalefactors = 5, so use char's to save space */
-    pub l: [u8; 23],            /* [band] */
-    pub s: [[u8; 3]; 13],         /* [band][window] */
+pub struct ScaleFactorInfoSub {
+    /* max bits in scalefactors = 5, so use char's to save space */
+    pub l: [u8; 23],      /* [band] */
+    pub s: [[u8; 3]; 13], /* [band][window] */
 }
 
 #[repr(C)]
-pub struct ScaleFactorJS { /* used in MPEG 2, 2.5 intensity (joint) stereo only */
+pub struct ScaleFactorJS {
+    /* used in MPEG 2, 2.5 intensity (joint) stereo only */
     pub intensity_scale: i32,
     pub slen: [i32; 4],
     pub nr: [i32; 4],
@@ -370,14 +375,14 @@ pub struct ScaleFactorJS { /* used in MPEG 2, 2.5 intensity (joint) stereo only 
  */
 #[repr(C)]
 pub struct SubbandInfo {
-    pub vbuf: [i32; MAX_NCHAN * VBUF_LENGTH],      /* vbuf for fast DCT-based synthesis PQMF - double size for speed (no modulo indexing) */
-    pub vindex: i32,                             /* internal index for tracking position in vbuf */
+    pub vbuf: [i32; MAX_NCHAN * VBUF_LENGTH], /* vbuf for fast DCT-based synthesis PQMF - double size for speed (no modulo indexing) */
+    pub vindex: i32,                          /* internal index for tracking position in vbuf */
 }
 
 #[repr(C)]
 pub struct MP3Decoder {
     pub m_MP3DecInfo: MP3DecInfo,
-    pub m_FrameHeader:FrameHeader,
+    pub m_FrameHeader: FrameHeader,
     pub m_MP3FrameInfo: MP3FrameInfo,
     pub m_SideInfo: SideInfo,
     pub m_SideInfoSub: [[SideInfoSub; MAX_NCHAN]; MAX_NGRAN],
@@ -385,12 +390,12 @@ pub struct MP3Decoder {
     pub m_ScaleFactorJS: ScaleFactorJS,
     pub m_SubbandInfo: SubbandInfo,
     pub m_ScaleFactorInfoSub: [[ScaleFactorInfoSub; MAX_NCHAN]; MAX_NGRAN],
-    pub m_CriticalBandInfo: [CriticalBandInfo; MAX_NCHAN],  /* filled in dequantizer, used in joint stereo reconstruction */
+    pub m_CriticalBandInfo: [CriticalBandInfo; MAX_NCHAN], /* filled in dequantizer, used in joint stereo reconstruction */
     pub m_HuffmanInfo: HuffmanInfo,
     pub m_DequantInfo: DequantInfo,
     pub m_IMDCTInfo: IMDCTInfo,
-    pub m_sMode: StereoMode,  /* mono/stereo mode */
-    pub m_MPEGVersion: MPEGVersion,  /* version ID */
+    pub m_sMode: StereoMode,        /* mono/stereo mode */
+    pub m_MPEGVersion: MPEGVersion, /* version ID */
 }
 
 /***********************************************************************************************************************
@@ -477,64 +482,74 @@ pub fn mp3_find_free_sync(buf: &[u8], first_header: [u8; 4]) -> Option<usize> {
  *
  * Notes:       interleaves PCM samples LRLRLR...
  **********************************************************************************************************************/
-pub fn polyphase_stereo(mut pcm: &mut [i16], vbuf: &[i32], coef_base: &[u32]) {
+
+pub fn polyphase_stereo(pcm: &mut [i16], vbuf: &[i32], coef: &[u32; 264]) {
     let rnd_val = 1 << ((DQ_FRACBITS_OUT - 2 - 2 - 15) - 1 + (32 - CSHIFT));
 
     /* special case, output sample 0 */
-    let mut coef = coef_base;
     let vb1 = vbuf;
     let mut sum1_r: u64 = rnd_val;
     let mut sum1_l: u64 = rnd_val;
-    let mut sum2_r: u64 ;
-    let mut sum2_l: u64 ;
+    let mut sum2_r: u64;
+    let mut sum2_l: u64;
     let mut c1: u32;
     let mut c2: u32;
     let mut v_lo: i32;
     let mut v_hi: i32;
 
+    let mut coef_idx = 0;
+
     for j in 0..8 {
-        c1 = coef[0];
-        coef = &coef[1..];
-        c2=coef[0];
-        coef = &coef[1..];
-        v_lo=vb1[j];
-        v_hi=vb1[23-j];
-        sum1_l = madd_64(
-            sum1_l as u64,
-            v_lo,
-            c1 as i32
-        );
+        c1 = coef[coef_idx];
+        coef_idx += 1;
+        c2 = coef[coef_idx];
+        coef_idx += 1;
+        v_lo = vb1[j];
+        v_hi = vb1[23 - j];
+        sum1_l = madd_64(sum1_l as u64, v_lo, c1 as i32);
         sum1_l = madd_64(sum1_l as u64, v_hi, -(c2 as i32));
-        v_lo=vb1[32+j];
-        v_hi=vb1[32+(23-j)];
-        sum1_r=madd_64(sum1_r as u64, v_lo,  c1 as i32);
-        sum1_r=madd_64(sum1_r as u64, v_hi, -(c2 as i32));
+        v_lo = vb1[32 + j];
+        v_hi = vb1[32 + (23 - j)];
+        sum1_r = madd_64(sum1_r as u64, v_lo, c1 as i32);
+        sum1_r = madd_64(sum1_r as u64, v_hi, -(c2 as i32));
     }
 
-    pcm[0] = clip_to_short(sar_64(sum1_l as u64, (32 - CSHIFT) as i32) as i32, (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32);
-    pcm[1] = clip_to_short(sar_64(sum1_r as u64, (32 - CSHIFT) as i32) as i32, (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32);
+    pcm[CHANNEL_LEFT] = clip_to_short(
+        sar_64(sum1_l as u64, (32 - CSHIFT) as i32) as i32,
+        (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32,
+    );
+    pcm[CHANNEL_RIGHT] = clip_to_short(
+        sar_64(sum1_r as u64, (32 - CSHIFT) as i32) as i32,
+        (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32,
+    );
 
     /* special case, output sample 16 */
-    coef = &coef_base[256..];
-    let mut vb1 = &vbuf[64*16..];
+    coef_idx = 256;
+    let mut vb1 = &vbuf[64 * 16..];
     sum1_l = rnd_val;
     sum1_r = rnd_val;
 
     for j in 0..8 {
-        c1 = coef[0];
-        coef = &coef[1..];
+        c1 = coef[coef_idx];
+        coef_idx += 1;
         v_lo = vb1[j];
-        sum1_l = madd_64(sum1_l as u64, v_lo,  c1 as i32);
-        v_lo = vb1[32+j];
-        sum1_r = madd_64(sum1_r as u64, v_lo,  c1 as i32);
+        sum1_l = madd_64(sum1_l as u64, v_lo, c1 as i32);
+        v_lo = vb1[32 + j];
+        sum1_r = madd_64(sum1_r as u64, v_lo, c1 as i32);
     }
-    pcm[2*16 + 0] = clip_to_short(sar_64(sum1_l as u64, (32-CSHIFT) as i32) as i32, (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32);
-    pcm[2*16 + 1] = clip_to_short(sar_64(sum1_r as u64, (32-CSHIFT) as i32) as i32, (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32);
+    pcm[2 * 16 + CHANNEL_LEFT] = clip_to_short(
+        sar_64(sum1_l as u64, (32 - CSHIFT) as i32) as i32,
+        (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32,
+    );
+    pcm[2 * 16 + CHANNEL_RIGHT] = clip_to_short(
+        sar_64(sum1_r as u64, (32 - CSHIFT) as i32) as i32,
+        (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32,
+    );
 
     /* main convolution loop: sum1L = samples 1, 2, 3, ... 15   sum2L = samples 31, 30, ... 17 */
-    coef = &coef_base[16..];
+    coef_idx = 16;
     vb1 = &vbuf[64..];
-    pcm = &mut pcm[2..];
+    let mut pcm_idx = 2;
 
     /* right now, the compiler creates bad asm from this... */
     for i in (1..=15).rev() {
@@ -544,31 +559,43 @@ pub fn polyphase_stereo(mut pcm: &mut [i16], vbuf: &[i32], coef_base: &[u32]) {
         sum2_r = rnd_val;
 
         for j in 0..8 {
-            c1=coef[0];
-            coef = &coef[1..];
-            c2=coef[0];
-            coef = &coef[1..];
-            v_lo=vb1[j];
-            v_hi = vb1[23-j];
-            sum1_l=madd_64(sum1_l as u64, v_lo,  c1 as i32);
-            sum2_l=madd_64(sum2_l as u64, v_lo,  c2 as i32);
+            c1 = coef[coef_idx];
+            coef_idx += 1;
+            c2 = coef[coef_idx];
+            coef_idx += 1;
+            v_lo = vb1[j];
+            v_hi = vb1[23 - j];
+            sum1_l = madd_64(sum1_l as u64, v_lo, c1 as i32);
+            sum2_l = madd_64(sum2_l as u64, v_lo, c2 as i32);
 
-            sum1_l=madd_64(sum1_l as u64, v_hi, -(c2 as i32));
-            sum2_l=madd_64(sum2_l as u64, v_hi,  c1 as i32);
+            sum1_l = madd_64(sum1_l as u64, v_hi, -(c2 as i32));
+            sum2_l = madd_64(sum2_l as u64, v_hi, c1 as i32);
 
-            v_lo=vb1[32+j];
-            v_hi=vb1[32+23-(j)];
-            sum1_r= madd_64(sum1_r as u64, v_lo,  c1 as i32);
-            sum2_r= madd_64(sum2_r as u64, v_lo,  c2 as i32);
-            sum1_r= madd_64(sum1_r as u64, v_hi, -(c2 as i32));
-            sum2_r= madd_64(sum2_r as u64, v_hi,  c1 as i32);
+            v_lo = vb1[32 + j];
+            v_hi = vb1[32 + 23 - (j)];
+            sum1_r = madd_64(sum1_r as u64, v_lo, c1 as i32);
+            sum2_r = madd_64(sum2_r as u64, v_lo, c2 as i32);
+            sum1_r = madd_64(sum1_r as u64, v_hi, -(c2 as i32));
+            sum2_r = madd_64(sum2_r as u64, v_hi, c1 as i32);
         }
         vb1 = &vb1[64..];
-        pcm[0]         = clip_to_short(sar_64(sum1_l as u64, (32-CSHIFT) as i32) as i32, (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32);
-        pcm[1]         = clip_to_short(sar_64(sum1_r as u64, (32-CSHIFT) as i32) as i32, (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32);
-        pcm[2*2*i + 0] = clip_to_short(sar_64(sum2_l as u64, (32-CSHIFT) as i32) as i32, (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32);
-        pcm[2*2*i + 1] = clip_to_short(sar_64(sum2_r as u64, (32-CSHIFT) as i32) as i32, (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32);
-        pcm = &mut pcm[2..];
+        pcm[pcm_idx + CHANNEL_LEFT] = clip_to_short(
+            sar_64(sum1_l as u64, (32 - CSHIFT) as i32) as i32,
+            (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32,
+        );
+        pcm[pcm_idx + CHANNEL_RIGHT] = clip_to_short(
+            sar_64(sum1_r as u64, (32 - CSHIFT) as i32) as i32,
+            (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32,
+        );
+        pcm[pcm_idx + 2 * 2 * i + CHANNEL_LEFT] = clip_to_short(
+            sar_64(sum2_l as u64, (32 - CSHIFT) as i32) as i32,
+            (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32,
+        );
+        pcm[pcm_idx + 2 * 2 * i + CHANNEL_RIGHT] = clip_to_short(
+            sar_64(sum2_r as u64, (32 - CSHIFT) as i32) as i32,
+            (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32,
+        );
+        pcm_idx += 2;
     }
 }
 
@@ -586,27 +613,34 @@ pub fn polyphase_mono(mut pcm: &mut [i16], vbuf: &[i32], coef_base: &[u32]) {
     let mut vb1 = vbuf;
     sum1_l = rnd_val;
     for j in 0..8 {
-        c1=coef[0];
+        c1 = coef[0];
         coef = &coef[1..];
-        c2=coef[0];
+        c2 = coef[0];
         coef = &coef[1..];
-        v_lo=vb1[j];
-        v_hi=vb1[23-(j)]; // 0...7
-        sum1_l=madd_64(sum1_l, v_lo, c1 as i32); sum1_l=madd_64(sum1_l, v_hi, -(c2 as i32));
+        v_lo = vb1[j];
+        v_hi = vb1[23 - (j)]; // 0...7
+        sum1_l = madd_64(sum1_l, v_lo, c1 as i32);
+        sum1_l = madd_64(sum1_l, v_hi, -(c2 as i32));
     }
-    pcm[0] = clip_to_short(sar_64(sum1_l, (32-CSHIFT) as i32) as i32, (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32);
+    pcm[CHANNEL_MONO] = clip_to_short(
+        sar_64(sum1_l, (32 - CSHIFT) as i32) as i32,
+        (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32,
+    );
 
     /* special case, output sample 16 */
     coef = &coef_base[256..];
-    vb1 = &vbuf[64*16..];
+    vb1 = &vbuf[64 * 16..];
     sum1_l = rnd_val;
     for j in 0..8 {
-        c1=coef[0];
+        c1 = coef[0];
         coef = &coef[1..];
-        v_lo=vb1[j];
-        sum1_l = madd_64(sum1_l, v_lo,  c1 as i32); // 0...7
+        v_lo = vb1[j];
+        sum1_l = madd_64(sum1_l, v_lo, c1 as i32); // 0...7
     }
-    pcm[16] = clip_to_short(sar_64(sum1_l, (32-CSHIFT) as i32)as i32, (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32);
+    pcm[16] = clip_to_short(
+        sar_64(sum1_l, (32 - CSHIFT) as i32) as i32,
+        (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32,
+    );
 
     /* main convolution loop: sum1L = samples 1, 2, 3, ... 15   sum2L = samples 31, 30, ... 17 */
     coef = &coef_base[16..];
@@ -618,22 +652,29 @@ pub fn polyphase_mono(mut pcm: &mut [i16], vbuf: &[i32], coef_base: &[u32]) {
         sum1_l = rnd_val;
         sum2_l = rnd_val;
         for j in 0..8 {
-            c1= coef[0];
+            c1 = coef[0];
             coef = &coef[1..];
-            c2=coef[0];
+            c2 = coef[0];
             coef = &coef[1..];
-            v_lo= vb1[j];
-            v_hi = vb1[23-j];
-            sum1_l=madd_64(sum1_l, v_lo,  c1 as i32); sum2_l = madd_64(sum2_l, v_lo,  c2 as i32);
-            sum1_l=madd_64(sum1_l, v_hi, -(c2 as i32)); sum2_l = madd_64(sum2_l, v_hi,  c1 as i32);
+            v_lo = vb1[j];
+            v_hi = vb1[23 - j];
+            sum1_l = madd_64(sum1_l, v_lo, c1 as i32);
+            sum2_l = madd_64(sum2_l, v_lo, c2 as i32);
+            sum1_l = madd_64(sum1_l, v_hi, -(c2 as i32));
+            sum2_l = madd_64(sum2_l, v_hi, c1 as i32);
         }
         vb1 = &vb1[64..];
-        pcm[0]       = clip_to_short(sar_64(sum1_l, (32-CSHIFT) as i32) as i32, (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32);
-        pcm[2*i] = clip_to_short(sar_64(sum2_l, (32-CSHIFT) as i32) as i32, (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32);
+        pcm[0] = clip_to_short(
+            sar_64(sum1_l, (32 - CSHIFT) as i32) as i32,
+            (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32,
+        );
+        pcm[2 * i] = clip_to_short(
+            sar_64(sum2_l, (32 - CSHIFT) as i32) as i32,
+            (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32,
+        );
         pcm = &mut pcm[1..];
     }
 }
-
 
 /***********************************************************************************************************************
  * D C T 3 2
@@ -663,63 +704,68 @@ pub fn polyphase_mono(mut pcm: &mut [i16], vbuf: &[i32], coef_base: &[u32]) {
  *              guard bit analysis verified by exhaustive testing of all 2^32
  *                combinations of max pos/max neg values in x[]
  **********************************************************************************************************************/
-const FDCT32S1S2: [i32; 16] = [5,3,3,2,2,1,1,1, 1,1,1,1,1,2,2,4];
+const FDCT32S1S2: [i32; 16] = [5, 3, 3, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 4];
 
-const M_COS0_0: i32 = 0x4013c251;  /* Q31 */
-const M_COS0_1: i32 = 0x40b345bd;  /* Q31 */
-const M_COS0_2: i32 = 0x41fa2d6d;  /* Q31 */
-const M_COS0_3: i32 = 0x43f93421;  /* Q31 */
-const M_COS0_4: i32 = 0x46cc1bc4;  /* Q31 */
-const M_COS0_5: i32 = 0x4a9d9cf0;  /* Q31 */
-const M_COS0_6: i32 = 0x4fae3711;  /* Q31 */
-const M_COS0_7: i32 = 0x56601ea7;  /* Q31 */
-const M_COS0_8: i32 = 0x5f4cf6eb;  /* Q31 */
-const M_COS0_9: i32 = 0x6b6fcf26;  /* Q31 */
-const M_COS0_10: i32= 0x7c7d1db3;  /* Q31 */
-const M_COS0_11: i32= 0x4ad81a97;  /* Q30 */
-const M_COS0_12: i32= 0x5efc8d96;  /* Q30 */
-const M_COS0_13: i32= 0x41d95790;  /* Q29 */
-const M_COS0_14: i32= 0x6d0b20cf;  /* Q29 */
-const M_COS0_15: i32= 0x518522fb;  /* Q27 */
-const M_COS1_0: i32 = 0x404f4672;  /* Q31 */
-const M_COS1_1: i32 = 0x42e13c10;  /* Q31 */
-const M_COS1_2: i32 = 0x48919f44;  /* Q31 */
-const M_COS1_3: i32 = 0x52cb0e63;  /* Q31 */
-const M_COS1_4: i32 = 0x64e2402e;  /* Q31 */
-const M_COS1_5: i32 = 0x43e224a9;  /* Q30 */
-const M_COS1_6: i32 = 0x6e3c92c1;  /* Q30 */
-const M_COS1_7: i32 = 0x519e4e04;  /* Q28 */
-const M_COS2_0: i32 = 0x4140fb46;  /* Q31 */
-const M_COS2_1: i32 = 0x4cf8de88;  /* Q31 */
-const M_COS2_2: i32 = 0x73326bbf;  /* Q31 */
-const M_COS2_3: i32 = 0x52036742;  /* Q29 */
-const M_COS3_0: i32 = 0x4545e9ef;  /* Q31 */
-const M_COS3_1: i32 = 0x539eba45;  /* Q30 */
-const M_COS4_0: i32 = 0x5a82799a;  /* Q31 */
+const M_COS0_0: i32 = 0x4013c251; /* Q31 */
+const M_COS0_1: i32 = 0x40b345bd; /* Q31 */
+const M_COS0_2: i32 = 0x41fa2d6d; /* Q31 */
+const M_COS0_3: i32 = 0x43f93421; /* Q31 */
+const M_COS0_4: i32 = 0x46cc1bc4; /* Q31 */
+const M_COS0_5: i32 = 0x4a9d9cf0; /* Q31 */
+const M_COS0_6: i32 = 0x4fae3711; /* Q31 */
+const M_COS0_7: i32 = 0x56601ea7; /* Q31 */
+const M_COS0_8: i32 = 0x5f4cf6eb; /* Q31 */
+const M_COS0_9: i32 = 0x6b6fcf26; /* Q31 */
+const M_COS0_10: i32 = 0x7c7d1db3; /* Q31 */
+const M_COS0_11: i32 = 0x4ad81a97; /* Q30 */
+const M_COS0_12: i32 = 0x5efc8d96; /* Q30 */
+const M_COS0_13: i32 = 0x41d95790; /* Q29 */
+const M_COS0_14: i32 = 0x6d0b20cf; /* Q29 */
+const M_COS0_15: i32 = 0x518522fb; /* Q27 */
+const M_COS1_0: i32 = 0x404f4672; /* Q31 */
+const M_COS1_1: i32 = 0x42e13c10; /* Q31 */
+const M_COS1_2: i32 = 0x48919f44; /* Q31 */
+const M_COS1_3: i32 = 0x52cb0e63; /* Q31 */
+const M_COS1_4: i32 = 0x64e2402e; /* Q31 */
+const M_COS1_5: i32 = 0x43e224a9; /* Q30 */
+const M_COS1_6: i32 = 0x6e3c92c1; /* Q30 */
+const M_COS1_7: i32 = 0x519e4e04; /* Q28 */
+const M_COS2_0: i32 = 0x4140fb46; /* Q31 */
+const M_COS2_1: i32 = 0x4cf8de88; /* Q31 */
+const M_COS2_2: i32 = 0x73326bbf; /* Q31 */
+const M_COS2_3: i32 = 0x52036742; /* Q29 */
+const M_COS3_0: i32 = 0x4545e9ef; /* Q31 */
+const M_COS3_1: i32 = 0x539eba45; /* Q30 */
+const M_COS4_0: i32 = 0x5a82799a; /* Q31 */
 
 const M_DCTTAB: [i32; 48] = [
     /* first pass */
-     M_COS0_0,  M_COS0_15, M_COS1_0,    /* 31, 27, 31 */
-     M_COS0_1,  M_COS0_14, M_COS1_1,    /* 31, 29, 31 */
-     M_COS0_2,  M_COS0_13, M_COS1_2,    /* 31, 29, 31 */
-     M_COS0_3,  M_COS0_12, M_COS1_3,    /* 31, 30, 31 */
-     M_COS0_4,  M_COS0_11, M_COS1_4,    /* 31, 30, 31 */
-     M_COS0_5,  M_COS0_10, M_COS1_5,    /* 31, 31, 30 */
-     M_COS0_6,  M_COS0_9,  M_COS1_6,    /* 31, 31, 30 */
-     M_COS0_7,  M_COS0_8,  M_COS1_7,    /* 31, 31, 28 */
+    M_COS0_0, M_COS0_15, M_COS1_0, /* 31, 27, 31 */
+    M_COS0_1, M_COS0_14, M_COS1_1, /* 31, 29, 31 */
+    M_COS0_2, M_COS0_13, M_COS1_2, /* 31, 29, 31 */
+    M_COS0_3, M_COS0_12, M_COS1_3, /* 31, 30, 31 */
+    M_COS0_4, M_COS0_11, M_COS1_4, /* 31, 30, 31 */
+    M_COS0_5, M_COS0_10, M_COS1_5, /* 31, 31, 30 */
+    M_COS0_6, M_COS0_9, M_COS1_6, /* 31, 31, 30 */
+    M_COS0_7, M_COS0_8, M_COS1_7, /* 31, 31, 28 */
     /* second pass */
-     M_COS2_0,  M_COS2_3,  M_COS3_0,   /* 31, 29, 31 */
-     M_COS2_1,  M_COS2_2,  M_COS3_1,   /* 31, 31, 30 */
-    -M_COS2_0, -M_COS2_3,  M_COS3_0,   /* 31, 29, 31 */
-    -M_COS2_1, -M_COS2_2,  M_COS3_1,   /* 31, 31, 30 */
-     M_COS2_0,  M_COS2_3,  M_COS3_0,   /* 31, 29, 31 */
-     M_COS2_1,  M_COS2_2,  M_COS3_1,   /* 31, 31, 30 */
-    -M_COS2_0, -M_COS2_3,  M_COS3_0,   /* 31, 29, 31 */
-    -M_COS2_1, -M_COS2_2,  M_COS3_1,   /* 31, 31, 30 */
+    M_COS2_0, M_COS2_3, M_COS3_0, /* 31, 29, 31 */
+    M_COS2_1, M_COS2_2, M_COS3_1, /* 31, 31, 30 */
+    -M_COS2_0, -M_COS2_3, M_COS3_0, /* 31, 29, 31 */
+    -M_COS2_1, -M_COS2_2, M_COS3_1, /* 31, 31, 30 */
+    M_COS2_0, M_COS2_3, M_COS3_0, /* 31, 29, 31 */
+    M_COS2_1, M_COS2_2, M_COS3_1, /* 31, 31, 30 */
+    -M_COS2_0, -M_COS2_3, M_COS3_0, /* 31, 29, 31 */
+    -M_COS2_1, -M_COS2_2, M_COS3_1, /* 31, 31, 30 */
 ];
 
-
-pub fn fdct_32(buf_slice: &mut[i32; NBANDS], dest_slice: &mut[i32], offset: i32, odd_block: i32, gb: i32) {
+pub fn fdct_32(
+    buf_slice: &mut [i32; NBANDS],
+    dest_slice: &mut [i32],
+    offset: i32,
+    odd_block: i32,
+    gb: i32,
+) {
     let mut es = 0;
     if gb < 6 {
         es = 6 - gb;
@@ -731,7 +777,7 @@ pub fn fdct_32(buf_slice: &mut[i32; NBANDS], dest_slice: &mut[i32], offset: i32,
 
     /* first pass */
     for i in 0..8 {
-        let base = i*3;
+        let base = i * 3;
         let a0 = buf_slice[i];
         let a1 = buf_slice[15 - i];
         let a2 = buf_slice[16 + i];
@@ -751,12 +797,11 @@ pub fn fdct_32(buf_slice: &mut[i32; NBANDS], dest_slice: &mut[i32], offset: i32,
         buf_slice[31 - i] = mulshift_32(coeff, b3 - b2) << FDCT32S1S2[8 + i] as i32;
     }
 
-
     let cptr_slice_second = cptr[1];
     let (chunks, _) = buf_slice.as_chunks_mut::<8>();
     /* second pass */
     for (idx, buf_chunk) in chunks.iter_mut().enumerate() {
-        let base = idx*6;
+        let base = idx * 6;
         let a0 = buf_chunk[0];
         let a3 = buf_chunk[3];
         let a4 = buf_chunk[4];
@@ -768,13 +813,11 @@ pub fn fdct_32(buf_slice: &mut[i32; NBANDS], dest_slice: &mut[i32], offset: i32,
         let b3 = a3 + a4;
         let b4 = mulshift_32(cptr_slice_second[base + 1], a3 - a4) << 3;
 
-
         let t0 = b0 + b3;
         let t3 = mulshift_32(cptr_slice_second[base + 2], b0 - b3) << 1;
 
         let t4 = b4 + b7;
         let t7 = mulshift_32(cptr_slice_second[base + 2], b7 - b4) << 1;
-
 
         let a1 = buf_chunk[1];
         let a6 = buf_chunk[6];
@@ -816,7 +859,9 @@ pub fn fdct_32(buf_slice: &mut[i32; NBANDS], dest_slice: &mut[i32], offset: i32,
     }
 
     /* sample 0 - always delayed one block */
-    let mut d = &mut dest_slice[64 * 16 + ((offset - odd_block) & 7) as usize + if odd_block != 0 { 0 } else { VBUF_LENGTH }..];
+    let mut d = &mut dest_slice[64 * 16
+        + ((offset - odd_block) & 7) as usize
+        + if odd_block != 0 { 0 } else { VBUF_LENGTH }..];
     let s = buf_slice[0];
     d[0] = s;
     d[8] = s;
@@ -825,95 +870,130 @@ pub fn fdct_32(buf_slice: &mut[i32; NBANDS], dest_slice: &mut[i32], offset: i32,
     d = &mut dest_slice[offset as usize + if odd_block != 0 { VBUF_LENGTH } else { 0 }..];
     let (d, _) = d.as_chunks_mut::<64>();
     let mut s = buf_slice[1];
-    d[0][0] = s; d[0][8] = s;
+    d[0][0] = s;
+    d[0][8] = s;
 
     let mut tmp = buf_slice[25] + buf_slice[29];
     s = buf_slice[17] + tmp;
-    d[1][0] = s; d[1][8] = s;
+    d[1][0] = s;
+    d[1][8] = s;
     s = buf_slice[9] + buf_slice[13];
-    d[2][0] = s; d[2][8] = s;
+    d[2][0] = s;
+    d[2][8] = s;
     s = buf_slice[21] + tmp;
-    d[3][0] = s; d[3][8] = s;
+    d[3][0] = s;
+    d[3][8] = s;
 
     tmp = buf_slice[29] + buf_slice[27];
     s = buf_slice[5];
-    d[4][0] = s; d[4][8] = s;
+    d[4][0] = s;
+    d[4][8] = s;
     s = buf_slice[21] + tmp;
-    d[5][0] = s; d[5][8] = s;
+    d[5][0] = s;
+    d[5][8] = s;
     s = buf_slice[13] + buf_slice[11];
-    d[6][0] = s; d[6][8] = s;
+    d[6][0] = s;
+    d[6][8] = s;
     s = buf_slice[19] + tmp;
-    d[7][0] = s; d[7][8] = s;
+    d[7][0] = s;
+    d[7][8] = s;
 
     tmp = buf_slice[27] + buf_slice[31];
     s = buf_slice[3];
-    d[8][0] = s; d[8][8] = s;
+    d[8][0] = s;
+    d[8][8] = s;
     s = buf_slice[19] + tmp;
-    d[9][0] = s; d[9][8] = s;
+    d[9][0] = s;
+    d[9][8] = s;
     s = buf_slice[11] + buf_slice[15];
-    d[10][0] = s; d[10][8] = s;
+    d[10][0] = s;
+    d[10][8] = s;
     s = buf_slice[23] + tmp;
-    d[11][0] = s; d[11][8] = s;
+    d[11][0] = s;
+    d[11][8] = s;
 
     tmp = buf_slice[31];
     s = buf_slice[7];
-    d[12][0] = s; d[12][8] = s;
+    d[12][0] = s;
+    d[12][8] = s;
     s = buf_slice[23] + tmp;
-    d[13][0] = s; d[13][8] = s;
+    d[13][0] = s;
+    d[13][8] = s;
     s = buf_slice[15];
-    d[14][0] = s; d[14][8] = s;
+    d[14][0] = s;
+    d[14][8] = s;
     s = tmp;
-    d[15][0] = s; d[15][8] = s;
+    d[15][0] = s;
+    d[15][8] = s;
 
     /* samples 1 to 16 */
-    let d = &mut dest_slice[16 + ((offset - odd_block) & 7) as usize + if odd_block != 0 { 0 } else { VBUF_LENGTH }..];
+    let d = &mut dest_slice
+        [16 + ((offset - odd_block) & 7) as usize + if odd_block != 0 { 0 } else { VBUF_LENGTH }..];
     let (d, _) = d.as_chunks_mut::<64>();
     s = buf_slice[1];
-    d[0][0] = s; d[0][8] = s;
+    d[0][0] = s;
+    d[0][8] = s;
 
     tmp = buf_slice[30] + buf_slice[25];
     s = buf_slice[17] + tmp;
-    d[1][0] = s; d[1][8] = s;
+    d[1][0] = s;
+    d[1][8] = s;
     s = buf_slice[14] + buf_slice[9];
-    d[2][0] = s; d[2][8] = s;
+    d[2][0] = s;
+    d[2][8] = s;
     s = buf_slice[22] + tmp;
-    d[3][0] = s; d[3][8] = s;
+    d[3][0] = s;
+    d[3][8] = s;
     s = buf_slice[6];
-    d[4][0] = s; d[4][8] = s;
+    d[4][0] = s;
+    d[4][8] = s;
 
     tmp = buf_slice[26] + buf_slice[30];
     s = buf_slice[22] + tmp;
-    d[5][0] = s; d[5][8] = s;
+    d[5][0] = s;
+    d[5][8] = s;
     s = buf_slice[10] + buf_slice[14];
-    d[6][0] = s; d[6][8] = s;
+    d[6][0] = s;
+    d[6][8] = s;
     s = buf_slice[18] + tmp;
-    d[7][0] = s; d[7][8] = s;
+    d[7][0] = s;
+    d[7][8] = s;
     s = buf_slice[2];
-    d[8][0] = s; d[8][8] = s;
+    d[8][0] = s;
+    d[8][8] = s;
 
     tmp = buf_slice[28] + buf_slice[26];
     s = buf_slice[18] + tmp;
-    d[9][0] = s; d[9][8] = s;
+    d[9][0] = s;
+    d[9][8] = s;
     s = buf_slice[12] + buf_slice[10];
-    d[10][0] = s; d[10][8] = s;
+    d[10][0] = s;
+    d[10][8] = s;
     s = buf_slice[20] + tmp;
-    d[11][0] = s; d[11][8] = s;
+    d[11][0] = s;
+    d[11][8] = s;
     s = buf_slice[4];
-    d[12][0] = s; d[12][8] = s;
+    d[12][0] = s;
+    d[12][8] = s;
 
     tmp = buf_slice[24] + buf_slice[28];
     s = buf_slice[20] + tmp;
-    d[13][0] = s; d[13][8] = s;
+    d[13][0] = s;
+    d[13][8] = s;
     s = buf_slice[8] + buf_slice[12];
-    d[14][0] = s; d[14][8] = s;
+    d[14][0] = s;
+    d[14][8] = s;
     s = buf_slice[16] + tmp;
-    d[15][0] = s; d[15][8] = s;
+    d[15][0] = s;
+    d[15][8] = s;
 
     /* final rescale + clip if es > 0 (rare) */
     if es != 0 {
         let n_clip = (31 - es) as u32;
 
-        let d = &mut dest_slice[64 * 16 + ((offset - odd_block) & 7) as usize + if odd_block != 0 { 0 } else { VBUF_LENGTH }..];
+        let d = &mut dest_slice[64 * 16
+            + ((offset - odd_block) & 7) as usize
+            + if odd_block != 0 { 0 } else { VBUF_LENGTH }..];
         s = d[0];
         s = clip_2n(s, n_clip);
         s <<= es;
@@ -931,7 +1011,9 @@ pub fn fdct_32(buf_slice: &mut[i32; NBANDS], dest_slice: &mut[i32], offset: i32,
             i[8] = s;
         }
 
-        let d = &mut dest_slice[16 + ((offset - odd_block) & 7) as usize + if odd_block != 0 { 0 } else { VBUF_LENGTH }..];
+        let d = &mut dest_slice[16
+            + ((offset - odd_block) & 7) as usize
+            + if odd_block != 0 { 0 } else { VBUF_LENGTH }..];
         let (d, _) = d.as_chunks_mut::<64>();
         for i in d.iter_mut().take(16) {
             s = i[0];
@@ -943,12 +1025,7 @@ pub fn fdct_32(buf_slice: &mut[i32; NBANDS], dest_slice: &mut[i32], offset: i32,
     }
 }
 
-pub fn freq_invert_rescale(
-    y_full: &mut [i32],
-    x_prev: &mut [i32],
-    block_idx: i32,
-    es: i32,
-) -> i32 {
+pub fn freq_invert_rescale(y_full: &mut [i32], x_prev: &mut [i32], block_idx: i32, es: i32) -> i32 {
     let is_odd_block = (block_idx & 0x01) == 0x01;
 
     if es == 0 {
@@ -992,7 +1069,7 @@ pub fn freq_invert_rescale(
         let res_xp = d_xp << es;
         *xp = res_xp;
     }
-    
+
     m_out
 }
 
@@ -1013,50 +1090,61 @@ pub fn freq_invert_rescale(
  *                sign bit, short blocks can have one addition but max gain < 1.0)
  **********************************************************************************************************************/
 
-const IMDCT_WIN: [[u32;36];4] = [
+const IMDCT_WIN: [[u32; 36]; 4] = [
     [
-    0x02aace8b, 0x07311c28, 0x0a868fec, 0x0c913b52, 0x0d413ccd, 0x0c913b52, 0x0a868fec, 0x07311c28,
-    0x02aace8b, 0xfd16d8dd, 0xf6a09e66, 0xef7a6275, 0xe7dbc161, 0xe0000000, 0xd8243e9f, 0xd0859d8b,
-    0xc95f619a, 0xc2e92723, 0xbd553175, 0xb8cee3d8, 0xb5797014, 0xb36ec4ae, 0xb2bec333, 0xb36ec4ae,
-    0xb5797014, 0xb8cee3d8, 0xbd553175, 0xc2e92723, 0xc95f619a, 0xd0859d8b, 0xd8243e9f, 0xe0000000,
-    0xe7dbc161, 0xef7a6275, 0xf6a09e66, 0xfd16d8dd  ],
+        0x02aace8b, 0x07311c28, 0x0a868fec, 0x0c913b52, 0x0d413ccd, 0x0c913b52, 0x0a868fec,
+        0x07311c28, 0x02aace8b, 0xfd16d8dd, 0xf6a09e66, 0xef7a6275, 0xe7dbc161, 0xe0000000,
+        0xd8243e9f, 0xd0859d8b, 0xc95f619a, 0xc2e92723, 0xbd553175, 0xb8cee3d8, 0xb5797014,
+        0xb36ec4ae, 0xb2bec333, 0xb36ec4ae, 0xb5797014, 0xb8cee3d8, 0xbd553175, 0xc2e92723,
+        0xc95f619a, 0xd0859d8b, 0xd8243e9f, 0xe0000000, 0xe7dbc161, 0xef7a6275, 0xf6a09e66,
+        0xfd16d8dd,
+    ],
     [
-    0x02aace8b, 0x07311c28, 0x0a868fec, 0x0c913b52, 0x0d413ccd, 0x0c913b52, 0x0a868fec, 0x07311c28,
-    0x02aace8b, 0xfd16d8dd, 0xf6a09e66, 0xef7a6275, 0xe7dbc161, 0xe0000000, 0xd8243e9f, 0xd0859d8b,
-    0xc95f619a, 0xc2e92723, 0xbd44ef14, 0xb831a052, 0xb3aa3837, 0xafb789a4, 0xac6145bb, 0xa9adecdc,
-    0xa864491f, 0xad1868f0, 0xb8431f49, 0xc8f42236, 0xdda8e6b1, 0xf47755dc, 0x00000000, 0x00000000,
-    0x00000000, 0x00000000, 0x00000000, 0x00000000  ],
+        0x02aace8b, 0x07311c28, 0x0a868fec, 0x0c913b52, 0x0d413ccd, 0x0c913b52, 0x0a868fec,
+        0x07311c28, 0x02aace8b, 0xfd16d8dd, 0xf6a09e66, 0xef7a6275, 0xe7dbc161, 0xe0000000,
+        0xd8243e9f, 0xd0859d8b, 0xc95f619a, 0xc2e92723, 0xbd44ef14, 0xb831a052, 0xb3aa3837,
+        0xafb789a4, 0xac6145bb, 0xa9adecdc, 0xa864491f, 0xad1868f0, 0xb8431f49, 0xc8f42236,
+        0xdda8e6b1, 0xf47755dc, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+        0x00000000,
+    ],
     [
-    0x07311c28, 0x0d413ccd, 0x07311c28, 0xf6a09e66, 0xe0000000, 0xc95f619a, 0xb8cee3d8, 0xb2bec333,
-    0xb8cee3d8, 0xc95f619a, 0xe0000000, 0xf6a09e66, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
-    0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
-    0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
-    0x00000000, 0x00000000, 0x00000000, 0x00000000  ],
+        0x07311c28, 0x0d413ccd, 0x07311c28, 0xf6a09e66, 0xe0000000, 0xc95f619a, 0xb8cee3d8,
+        0xb2bec333, 0xb8cee3d8, 0xc95f619a, 0xe0000000, 0xf6a09e66, 0x00000000, 0x00000000,
+        0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+        0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+        0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+        0x00000000,
+    ],
     [
-    0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x028e9709, 0x04855ec0,
-    0x026743a1, 0xfcde2c10, 0xf515dc82, 0xec93e53b, 0xe4c880f8, 0xdd5d0b08, 0xd63510b7, 0xcf5e834a,
-    0xc8e6b562, 0xc2da4105, 0xbd553175, 0xb8cee3d8, 0xb5797014, 0xb36ec4ae, 0xb2bec333, 0xb36ec4ae,
-    0xb5797014, 0xb8cee3d8, 0xbd553175, 0xc2e92723, 0xc95f619a, 0xd0859d8b, 0xd8243e9f, 0xe0000000,
-    0xe7dbc161, 0xef7a6275, 0xf6a09e66, 0xfd16d8dd  ],
+        0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x028e9709,
+        0x04855ec0, 0x026743a1, 0xfcde2c10, 0xf515dc82, 0xec93e53b, 0xe4c880f8, 0xdd5d0b08,
+        0xd63510b7, 0xcf5e834a, 0xc8e6b562, 0xc2da4105, 0xbd553175, 0xb8cee3d8, 0xb5797014,
+        0xb36ec4ae, 0xb2bec333, 0xb36ec4ae, 0xb5797014, 0xb8cee3d8, 0xbd553175, 0xc2e92723,
+        0xc95f619a, 0xd0859d8b, 0xd8243e9f, 0xe0000000, 0xe7dbc161, 0xef7a6275, 0xf6a09e66,
+        0xfd16d8dd,
+    ],
 ];
 
-
 #[allow(non_snake_case)]
-pub fn win_previous(x_prev: &mut [i32; BLOCK_SIZE / 2], x_prev_win: &mut [i32; BLOCK_SIZE], bt_prev: i32) {
+pub fn win_previous(
+    x_prev: &mut [i32; BLOCK_SIZE / 2],
+    x_prev_win: &mut [i32; BLOCK_SIZE],
+    bt_prev: i32,
+) {
     if bt_prev == 2 {
         // Special case for short blocks – explicit unrolled version matching the original
         let w = IMDCT_WIN[2];
 
-        x_prev_win[0]  = mulshift_32(w[6] as i32,  x_prev[2]) + mulshift_32(w[0] as i32,  x_prev[6]);
-        x_prev_win[1]  = mulshift_32(w[7] as i32,  x_prev[1]) + mulshift_32(w[1] as i32,  x_prev[7]);
-        x_prev_win[2]  = mulshift_32(w[8] as i32,  x_prev[0]) + mulshift_32(w[2] as i32,  x_prev[8]);
-        x_prev_win[3]  = mulshift_32(w[9] as i32,  x_prev[0]) + mulshift_32(w[3] as i32,  x_prev[8]);
-        x_prev_win[4]  = mulshift_32(w[10] as i32, x_prev[1]) + mulshift_32(w[4] as i32,  x_prev[7]);
-        x_prev_win[5]  = mulshift_32(w[11] as i32, x_prev[2]) + mulshift_32(w[5] as i32,  x_prev[6]);
-        x_prev_win[6]  = mulshift_32(w[6] as i32,  x_prev[5]);
-        x_prev_win[7]  = mulshift_32(w[7] as i32,  x_prev[4]);
-        x_prev_win[8]  = mulshift_32(w[8] as i32,  x_prev[3]);
-        x_prev_win[9]  = mulshift_32(w[9] as i32,  x_prev[3]);
+        x_prev_win[0] = mulshift_32(w[6] as i32, x_prev[2]) + mulshift_32(w[0] as i32, x_prev[6]);
+        x_prev_win[1] = mulshift_32(w[7] as i32, x_prev[1]) + mulshift_32(w[1] as i32, x_prev[7]);
+        x_prev_win[2] = mulshift_32(w[8] as i32, x_prev[0]) + mulshift_32(w[2] as i32, x_prev[8]);
+        x_prev_win[3] = mulshift_32(w[9] as i32, x_prev[0]) + mulshift_32(w[3] as i32, x_prev[8]);
+        x_prev_win[4] = mulshift_32(w[10] as i32, x_prev[1]) + mulshift_32(w[4] as i32, x_prev[7]);
+        x_prev_win[5] = mulshift_32(w[11] as i32, x_prev[2]) + mulshift_32(w[5] as i32, x_prev[6]);
+        x_prev_win[6] = mulshift_32(w[6] as i32, x_prev[5]);
+        x_prev_win[7] = mulshift_32(w[7] as i32, x_prev[4]);
+        x_prev_win[8] = mulshift_32(w[8] as i32, x_prev[3]);
+        x_prev_win[9] = mulshift_32(w[9] as i32, x_prev[3]);
         x_prev_win[10] = mulshift_32(w[10] as i32, x_prev[4]);
         x_prev_win[11] = mulshift_32(w[11] as i32, x_prev[5]);
 
@@ -1067,7 +1155,7 @@ pub fn win_previous(x_prev: &mut [i32; BLOCK_SIZE / 2], x_prev_win: &mut [i32; B
         // wpLo points to imdctWin[btPrev] + 18
         // wpHi points to imdctWin[btPrev] + 35 (i.e. wpLo + 17 backwards)
         let win = &IMDCT_WIN[bt_prev as usize];
-        let wp_lo = &win[18..36];  // 18 elements forward
+        let wp_lo = &win[18..36]; // 18 elements forward
         let wp_hi = &win[18..36][..18]; // same range, but we will iterate backwards
 
         let mut lo_idx = 0;
@@ -1099,8 +1187,8 @@ pub struct MP3DecInfo {
     pub bitrate: i32,
     pub nChans: i32,
     pub samprate: i32,
-    pub nGrans: i32,             /* granules per frame */
-    pub nGranSamps: i32,         /* samples per granule */
+    pub nGrans: i32,     /* granules per frame */
+    pub nGranSamps: i32, /* samples per granule */
     pub nSlots: i32,
     pub layer: i32,
 
@@ -1110,18 +1198,18 @@ pub struct MP3DecInfo {
 }
 
 pub const SAMPLERATE_TAB: [[i32; 3]; 3] = [
-        [ 44100, 48000, 32000 ], /* MPEG-1 */
-        [ 22050, 24000, 16000 ], /* MPEG-2 */
-        [ 11025, 12000, 8000  ], /* MPEG-2.5 */
+    [44100, 48000, 32000], /* MPEG-1 */
+    [22050, 24000, 16000], /* MPEG-2 */
+    [11025, 12000, 8000],  /* MPEG-2.5 */
 ];
 
 /* indexing = [version][mono/stereo]
  * number of bytes in side info section of bitstream
  */
 const SIDE_BYTES_TAB: [[i32; 2]; 3] = [
-    [ 17, 32 ], /* MPEG-1:   mono, stereo */
-    [ 9, 17 ], /* MPEG-2:   mono, stereo */
-    [ 9, 17 ], /* MPEG-2.5: mono, stereo */
+    [17, 32], /* MPEG-1:   mono, stereo */
+    [9, 17],  /* MPEG-2:   mono, stereo */
+    [9, 17],  /* MPEG-2.5: mono, stereo */
 ];
 
 /* indexing = [version][sampleRate][long (.l) or short (.s) block]
@@ -1129,47 +1217,77 @@ const SIDE_BYTES_TAB: [[i32; 2]; 3] = [
  *   sfBandTable[v][s].s[cb] = index of first bin in critical band cb (short blocks)
  */
 const SF_BAND_TABLE: [[SFBandTable; 3]; 3] = [
-    [ /* MPEG-1 (44, 48, 32 kHz) */
+    [
+        /* MPEG-1 (44, 48, 32 kHz) */
         SFBandTable {
-            l: [0, 4, 8, 12, 16, 20, 24, 30, 36, 44, 52,  62,  74,  90, 110, 134, 162, 196, 238, 288, 342, 418, 576 ],
-            s: [0, 4, 8, 12, 16, 22, 30, 40, 52, 66, 84, 106, 136, 192]
+            l: [
+                0, 4, 8, 12, 16, 20, 24, 30, 36, 44, 52, 62, 74, 90, 110, 134, 162, 196, 238, 288,
+                342, 418, 576,
+            ],
+            s: [0, 4, 8, 12, 16, 22, 30, 40, 52, 66, 84, 106, 136, 192],
         },
         SFBandTable {
-            l: [0, 4, 8, 12, 16, 20, 24, 30, 36, 42, 50,  60,  72,  88, 106, 128, 156, 190, 230, 276, 330, 384, 576 ],
-            s: [0, 4, 8, 12, 16, 22, 28, 38, 50, 64, 80, 100, 126, 192]
+            l: [
+                0, 4, 8, 12, 16, 20, 24, 30, 36, 42, 50, 60, 72, 88, 106, 128, 156, 190, 230, 276,
+                330, 384, 576,
+            ],
+            s: [0, 4, 8, 12, 16, 22, 28, 38, 50, 64, 80, 100, 126, 192],
         },
         SFBandTable {
-            l: [0, 4, 8, 12, 16, 20, 24, 30, 36, 44,  54,  66,  82, 102, 126, 156, 194, 240, 296, 364, 448, 550, 576 ],
-            s: [0, 4, 8, 12, 16, 22, 30, 42, 58, 78, 104, 138, 180, 192]
-        }
-    ],
-    [ /* MPEG-2 (22, 24, 16 kHz) */
-        SFBandTable   {
-            l: [0, 6, 12, 18, 24, 30, 36, 44, 54, 66,  80,  96, 116, 140, 168, 200, 238, 284, 336, 396, 464, 522, 576 ],
-            s: [0, 4,  8, 12, 18, 24, 32, 42, 56, 74, 100, 132, 174, 192]
-        },
-        SFBandTable {
-            l: [0, 6, 12, 18, 24, 30, 36, 44, 54, 66,  80,  96, 114, 136, 162, 194, 232, 278, 332, 394, 464, 540, 576 ],
-            s: [0, 4,  8, 12, 18, 26, 36, 48, 62, 80, 104, 136, 180, 192]
-        },
-        SFBandTable {
-            l: [0, 6, 12, 18, 24, 30, 36, 44, 54, 66,  80, 96,  116, 140, 168, 200, 238, 284, 336, 396, 464, 522, 576 ],
-            s: [0, 4,  8, 12, 18, 26, 36, 48, 62, 80, 104, 134, 174, 192]
+            l: [
+                0, 4, 8, 12, 16, 20, 24, 30, 36, 44, 54, 66, 82, 102, 126, 156, 194, 240, 296, 364,
+                448, 550, 576,
+            ],
+            s: [0, 4, 8, 12, 16, 22, 30, 42, 58, 78, 104, 138, 180, 192],
         },
     ],
-    [ /* MPEG-2.5 (11, 12, 8 kHz) */
+    [
+        /* MPEG-2 (22, 24, 16 kHz) */
         SFBandTable {
-            l :[0, 6, 12, 18, 24, 30, 36, 44, 54, 66,  80,  96, 116, 140, 168, 200, 238, 284, 336, 396, 464, 522, 576 ],
-            s: [0, 4,  8, 12, 18, 26, 36, 48, 62, 80, 104, 134, 174, 192 ]
+            l: [
+                0, 6, 12, 18, 24, 30, 36, 44, 54, 66, 80, 96, 116, 140, 168, 200, 238, 284, 336,
+                396, 464, 522, 576,
+            ],
+            s: [0, 4, 8, 12, 18, 24, 32, 42, 56, 74, 100, 132, 174, 192],
         },
         SFBandTable {
-            l: [0, 6, 12, 18, 24, 30, 36, 44, 54, 66,  80,  96, 116, 140, 168, 200, 238, 284, 336, 396, 464, 522, 576 ],
-            s: [0, 4,  8, 12, 18, 26, 36, 48, 62, 80, 104, 134, 174, 192 ]
+            l: [
+                0, 6, 12, 18, 24, 30, 36, 44, 54, 66, 80, 96, 114, 136, 162, 194, 232, 278, 332,
+                394, 464, 540, 576,
+            ],
+            s: [0, 4, 8, 12, 18, 26, 36, 48, 62, 80, 104, 136, 180, 192],
         },
         SFBandTable {
-            l: [0, 12, 24, 36, 48, 60, 72, 88, 108, 132, 160, 192, 232, 280, 336, 400, 476, 566, 568, 570, 572, 574, 576 ],
-            s: [0,  8, 16, 24, 36, 52, 72, 96, 124, 160, 162, 164, 166, 192]
-        }
+            l: [
+                0, 6, 12, 18, 24, 30, 36, 44, 54, 66, 80, 96, 116, 140, 168, 200, 238, 284, 336,
+                396, 464, 522, 576,
+            ],
+            s: [0, 4, 8, 12, 18, 26, 36, 48, 62, 80, 104, 134, 174, 192],
+        },
+    ],
+    [
+        /* MPEG-2.5 (11, 12, 8 kHz) */
+        SFBandTable {
+            l: [
+                0, 6, 12, 18, 24, 30, 36, 44, 54, 66, 80, 96, 116, 140, 168, 200, 238, 284, 336,
+                396, 464, 522, 576,
+            ],
+            s: [0, 4, 8, 12, 18, 26, 36, 48, 62, 80, 104, 134, 174, 192],
+        },
+        SFBandTable {
+            l: [
+                0, 6, 12, 18, 24, 30, 36, 44, 54, 66, 80, 96, 116, 140, 168, 200, 238, 284, 336,
+                396, 464, 522, 576,
+            ],
+            s: [0, 4, 8, 12, 18, 26, 36, 48, 62, 80, 104, 134, 174, 192],
+        },
+        SFBandTable {
+            l: [
+                0, 12, 24, 36, 48, 60, 72, 88, 108, 132, 160, 192, 232, 280, 336, 400, 476, 566,
+                568, 570, 572, 574, 576,
+            ],
+            s: [0, 8, 16, 24, 36, 52, 72, 96, 124, 160, 162, 164, 166, 192],
+        },
     ],
 ];
 
@@ -1177,18 +1295,18 @@ const SF_BAND_TABLE: [[SFBandTable; 3]; 3] = [
  * number of samples in one frame (per channel)
  */
 pub const SAMPLES_PER_FRAME_TAB: [[i32; 3]; 3] = [
-    [ 384, 1152, 1152 ], /* MPEG1 */
-    [ 384, 1152, 576 ], /* MPEG2 */
-    [ 384, 1152, 576 ], /* MPEG2.5 */
+    [384, 1152, 1152], /* MPEG1 */
+    [384, 1152, 576],  /* MPEG2 */
+    [384, 1152, 576],  /* MPEG2.5 */
 ];
-
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 #[repr(C)]
-pub enum MPEGVersion {          /* map to 0,1,2 to make table indexing easier */
-    MPEG1 =  0,
-    MPEG2 =  1,
-    MPEG25 = 2
+pub enum MPEGVersion {
+    /* map to 0,1,2 to make table indexing easier */
+    MPEG1 = 0,
+    MPEG2 = 1,
+    MPEG25 = 2,
 }
 
 #[repr(C)]
@@ -1211,11 +1329,12 @@ pub struct SFBandTable {
 
 #[repr(C)]
 #[derive(Debug, PartialEq, Clone, Copy)]
-pub enum StereoMode {          /* map these to the corresponding 2-bit values in the frame header */
-    Stereo = 0x00,      /* two independent channels, but L and R frames might have different # of bits */
-    Joint = 0x01,       /* coupled channels - layer III: mix of M-S and intensity, Layers I/II: intensity and direct coding only */
-    Dual = 0x02,        /* two independent channels, L and R always have exactly 1/2 the total bitrate */
-    Mono = 0x03         /* one channel */
+pub enum StereoMode {
+    /* map these to the corresponding 2-bit values in the frame header */
+    Stereo = 0x00, /* two independent channels, but L and R frames might have different # of bits */
+    Joint = 0x01, /* coupled channels - layer III: mix of M-S and intensity, Layers I/II: intensity and direct coding only */
+    Dual = 0x02,  /* two independent channels, L and R always have exactly 1/2 the total bitrate */
+    Mono = 0x03,  /* one channel */
 }
 
 /* indexing = [version][layer][bitrate index]
@@ -1223,50 +1342,82 @@ pub enum StereoMode {          /* map these to the corresponding 2-bit values in
  *   - bitrate index == 0 is "free" mode (bitrate determined on the fly by
  *       counting bits between successive sync words)
  */
-const bitrateTab: [[[i16; 15]; 3]; 3] = [[
-/* MPEG-1 */
-[ 0, 32, 64, 96, 128, 160, 192, 224, 256, 288, 320, 352, 384, 416, 448 ], /* Layer 1 */
-[ 0, 32, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384 ], /* Layer 2 */
-[ 0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320 ], /* Layer 3 */
-], [
-/* MPEG-2 */
-[ 0, 32, 48, 56, 64, 80, 96, 112, 128, 144, 160, 176, 192, 224, 256 ], /* Layer 1 */
-[ 0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160 ], /* Layer 2 */
-[ 0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160 ], /* Layer 3 */
-], [
-/* MPEG-2.5 */
-[ 0, 32, 48, 56, 64, 80, 96, 112, 128, 144, 160, 176, 192, 224, 256 ], /* Layer 1 */
-[ 0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160 ], /* Layer 2 */
-[ 0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160 ], /* Layer 3 */
-]];
+const bitrateTab: [[[i16; 15]; 3]; 3] = [
+    [
+        /* MPEG-1 */
+        [
+            0, 32, 64, 96, 128, 160, 192, 224, 256, 288, 320, 352, 384, 416, 448,
+        ], /* Layer 1 */
+        [
+            0, 32, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384,
+        ], /* Layer 2 */
+        [
+            0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320,
+        ], /* Layer 3 */
+    ],
+    [
+        /* MPEG-2 */
+        [
+            0, 32, 48, 56, 64, 80, 96, 112, 128, 144, 160, 176, 192, 224, 256,
+        ], /* Layer 1 */
+        [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160], /* Layer 2 */
+        [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160], /* Layer 3 */
+    ],
+    [
+        /* MPEG-2.5 */
+        [
+            0, 32, 48, 56, 64, 80, 96, 112, 128, 144, 160, 176, 192, 224, 256,
+        ], /* Layer 1 */
+        [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160], /* Layer 2 */
+        [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160], /* Layer 3 */
+    ],
+];
 
 /* indexing = [version][sampleRate][bitRate]
  * for layer3, nSlots = floor(samps/frame * bitRate / sampleRate / 8)
  *   - add one pad slot if necessary
  */
 const slotTab: [[[i16; 15]; 3]; 3] = [
-    [ /* MPEG-1 */
-        [ 0, 104, 130, 156, 182, 208, 261, 313, 365, 417, 522, 626, 731, 835, 1044 ], /* 44 kHz */
-        [ 0, 96, 120, 144, 168, 192, 240, 288, 336, 384, 480, 576, 672, 768, 960 ], /* 48 kHz */
-        [ 0, 144, 180, 216, 252, 288, 360, 432, 504, 576, 720, 864, 1008, 1152, 1440 ], /* 32 kHz */
+    [
+        /* MPEG-1 */
+        [
+            0, 104, 130, 156, 182, 208, 261, 313, 365, 417, 522, 626, 731, 835, 1044,
+        ], /* 44 kHz */
+        [
+            0, 96, 120, 144, 168, 192, 240, 288, 336, 384, 480, 576, 672, 768, 960,
+        ], /* 48 kHz */
+        [
+            0, 144, 180, 216, 252, 288, 360, 432, 504, 576, 720, 864, 1008, 1152, 1440,
+        ], /* 32 kHz */
     ],
-    [ /* MPEG-2 */
-        [ 0, 26, 52, 78, 104, 130, 156, 182, 208, 261, 313, 365, 417, 470, 522 ], /* 22 kHz */
-        [ 0, 24, 48, 72, 96, 120, 144, 168, 192, 240, 288, 336, 384, 432, 480 ], /* 24 kHz */
-        [ 0, 36, 72, 108, 144, 180, 216, 252, 288, 360, 432, 504, 576, 648, 720 ], /* 16 kHz */
+    [
+        /* MPEG-2 */
+        [
+            0, 26, 52, 78, 104, 130, 156, 182, 208, 261, 313, 365, 417, 470, 522,
+        ], /* 22 kHz */
+        [
+            0, 24, 48, 72, 96, 120, 144, 168, 192, 240, 288, 336, 384, 432, 480,
+        ], /* 24 kHz */
+        [
+            0, 36, 72, 108, 144, 180, 216, 252, 288, 360, 432, 504, 576, 648, 720,
+        ], /* 16 kHz */
     ],
-    [ /* MPEG-2.5 */
-        [ 0, 52, 104, 156, 208, 261, 313, 365, 417, 522, 626, 731, 835, 940, 1044 ], /* 11 kHz */
-        [ 0, 48, 96, 144, 192, 240, 288, 336, 384, 480, 576, 672, 768, 864, 960 ], /* 12 kHz */
-        [ 0, 72, 144, 216, 288, 360, 432, 504, 576, 720, 864, 1008, 1152, 1296, 1440 ], /*  8 kHz */
+    [
+        /* MPEG-2.5 */
+        [
+            0, 52, 104, 156, 208, 261, 313, 365, 417, 522, 626, 731, 835, 940, 1044,
+        ], /* 11 kHz */
+        [
+            0, 48, 96, 144, 192, 240, 288, 336, 384, 480, 576, 672, 768, 864, 960,
+        ], /* 12 kHz */
+        [
+            0, 72, 144, 216, 288, 360, 432, 504, 576, 720, 864, 1008, 1152, 1296, 1440,
+        ], /*  8 kHz */
     ],
 ];
 
 impl MP3Decoder {
-    pub fn subband(
-        &mut self,
-        mut pcm_buf: &mut [i16],
-    ) -> i32 {
+    pub fn subband(&mut self, mut pcm_buf: &mut [i16]) -> i32 {
         if self.m_MP3DecInfo.nChans == 2 {
             /* stereo */
             for b in 0..BLOCK_SIZE {
@@ -1286,8 +1437,8 @@ impl MP3Decoder {
                 );
                 polyphase_stereo(
                     pcm_buf,
-                    &self.m_SubbandInfo
-                        .vbuf[self.m_SubbandInfo.vindex as usize + VBUF_LENGTH * (b as i32 & 0x01) as usize..],
+                    &self.m_SubbandInfo.vbuf[self.m_SubbandInfo.vindex as usize
+                        + VBUF_LENGTH * (b as i32 & 0x01) as usize..],
                     &POLY_COEF,
                 );
                 self.m_SubbandInfo.vindex = (self.m_SubbandInfo.vindex - (b as i32 & 0x01)) & 7;
@@ -1305,8 +1456,8 @@ impl MP3Decoder {
                 );
                 polyphase_mono(
                     pcm_buf,
-                    &self.m_SubbandInfo
-                        .vbuf[self.m_SubbandInfo.vindex as usize + VBUF_LENGTH * (b & 0x01)..],
+                    &self.m_SubbandInfo.vbuf
+                        [self.m_SubbandInfo.vindex as usize + VBUF_LENGTH * (b & 0x01)..],
                     &POLY_COEF,
                 );
                 self.m_SubbandInfo.vindex = (self.m_SubbandInfo.vindex - (b as i32 & 0x01)) & 7;
@@ -1317,11 +1468,8 @@ impl MP3Decoder {
         return 0;
     }
 
-    pub fn unpack_frame_header(
-        &mut self,
-        buf: &[u8],
-    ) -> Result<usize, i8> {
-    /* validate pointers and sync word */
+    pub fn unpack_frame_header(&mut self, buf: &[u8]) -> Result<usize, i8> {
+        /* validate pointers and sync word */
         if (buf[0] & SYNCWORDH) != SYNCWORDH || (buf[1] & SYNCWORDL) != SYNCWORDL {
             return Err(ERR_MP3_INVALID_FRAMEHEADER);
         }
@@ -1337,7 +1485,7 @@ impl MP3Decoder {
             MPEGVersion::MPEG2
         };
         m_frame_header.layer = 4 - ((buf[1] as i32 >> 1) & 0x03); /* easy mapping of index to layer number, 4 = error */
-        m_frame_header.crc = 1 - ((buf[1] as i32>> 0) & 0x01);
+        m_frame_header.crc = 1 - ((buf[1] as i32 >> 0) & 0x01);
         m_frame_header.brIdx = (buf[2] as i32 >> 4) & 0x0f;
         m_frame_header.srIdx = (buf[2] as i32 >> 2) & 0x03;
         m_frame_header.paddingBit = (buf[2] as i32 >> 1) & 0x01;
@@ -1347,9 +1495,9 @@ impl MP3Decoder {
             0x01 => StereoMode::Joint,
             0x02 => StereoMode::Dual,
             0x03 => StereoMode::Mono,
-            _ => { return Err(ERR_MP3_INVALID_FRAMEHEADER) }
+            _ => return Err(ERR_MP3_INVALID_FRAMEHEADER),
         }; /* maps to correct enum (see definition) */
-        m_frame_header.modeExt = (buf[3] as usize>> 4) & 0x03;
+        m_frame_header.modeExt = (buf[3] as usize >> 4) & 0x03;
         m_frame_header.copyFlag = (buf[3] as i32 >> 3) & 0x01;
         m_frame_header.origFlag = (buf[3] as i32 >> 2) & 0x01;
         m_frame_header.emphasis = (buf[3] as i32 >> 0) & 0x03;
@@ -1358,29 +1506,52 @@ impl MP3Decoder {
             return Err(ERR_MP3_INVALID_FRAMEHEADER);
         }
         /* for readability (we reference sfBandTable many times in decoder) */
-        self.m_SFBandTable = SF_BAND_TABLE[self.m_MPEGVersion as usize][m_frame_header.srIdx as usize];
-        if self.m_sMode != StereoMode::Joint { /* just to be safe (dequant, stproc check fh->modeExt) */
+        self.m_SFBandTable =
+            SF_BAND_TABLE[self.m_MPEGVersion as usize][m_frame_header.srIdx as usize];
+        if self.m_sMode != StereoMode::Joint {
+            /* just to be safe (dequant, stproc check fh->modeExt) */
             m_frame_header.modeExt = 0;
         }
         /* init user-accessible data */
-        m_mp3_dec_info.nChans = if self.m_sMode == StereoMode::Mono { 1 } else { 2 };
-        m_mp3_dec_info.samprate = SAMPLERATE_TAB[self.m_MPEGVersion as usize][m_frame_header.srIdx as usize];
-        m_mp3_dec_info.nGrans = if self.m_MPEGVersion == MPEGVersion::MPEG1 { NGRANS_MPEG1 as i32 } else { NGRANS_MPEG2 as i32 };
-        m_mp3_dec_info.nGranSamps = (SAMPLES_PER_FRAME_TAB[self.m_MPEGVersion as usize][(m_frame_header.layer - 1) as usize])/m_mp3_dec_info.nGrans;
+        m_mp3_dec_info.nChans = if self.m_sMode == StereoMode::Mono {
+            1
+        } else {
+            2
+        };
+        m_mp3_dec_info.samprate =
+            SAMPLERATE_TAB[self.m_MPEGVersion as usize][m_frame_header.srIdx as usize];
+        m_mp3_dec_info.nGrans = if self.m_MPEGVersion == MPEGVersion::MPEG1 {
+            NGRANS_MPEG1 as i32
+        } else {
+            NGRANS_MPEG2 as i32
+        };
+        m_mp3_dec_info.nGranSamps = (SAMPLES_PER_FRAME_TAB[self.m_MPEGVersion as usize]
+            [(m_frame_header.layer - 1) as usize])
+            / m_mp3_dec_info.nGrans;
         m_mp3_dec_info.layer = m_frame_header.layer;
 
         /* get bitrate and nSlots from table, unless brIdx == 0 (free mode) in which case caller must figure it out himself
-        * question - do we want to overwrite mp3DecInfo->bitrate with 0 each time if it's free mode, and
-        *  copy the pre-calculated actual free bitrate into it in mp3dec.c (according to the spec,
-        *  this shouldn't be necessary, since it should be either all frames free or none free)
-        */
+         * question - do we want to overwrite mp3DecInfo->bitrate with 0 each time if it's free mode, and
+         *  copy the pre-calculated actual free bitrate into it in mp3dec.c (according to the spec,
+         *  this shouldn't be necessary, since it should be either all frames free or none free)
+         */
         if m_frame_header.brIdx != 0 {
-            m_mp3_dec_info.bitrate=
-                ((bitrateTab[self.m_MPEGVersion as usize][m_frame_header.layer as usize - 1][m_frame_header.brIdx as usize])) as i32 * 1000;
+            m_mp3_dec_info.bitrate = (bitrateTab[self.m_MPEGVersion as usize]
+                [m_frame_header.layer as usize - 1][m_frame_header.brIdx as usize])
+                as i32
+                * 1000;
             /* nSlots = total frame bytes (from table) - sideInfo bytes - header - CRC (if present) + pad (if present) */
-            m_mp3_dec_info.nSlots= slotTab[self.m_MPEGVersion as usize][m_frame_header.srIdx as usize][m_frame_header.brIdx as usize]  as i32
-                    - SIDE_BYTES_TAB[self.m_MPEGVersion as usize][if self.m_sMode == StereoMode::Mono { 0 } else { 1 }] - 4
-                    - (if m_frame_header.crc != 0 { 2 } else { 0 }) + (if m_frame_header.paddingBit != 0 { 1 } else { 0 });
+            m_mp3_dec_info.nSlots = slotTab[self.m_MPEGVersion as usize]
+                [m_frame_header.srIdx as usize][m_frame_header.brIdx as usize]
+                as i32
+                - SIDE_BYTES_TAB[self.m_MPEGVersion as usize][if self.m_sMode == StereoMode::Mono {
+                    0
+                } else {
+                    1
+                }]
+                - 4
+                - (if m_frame_header.crc != 0 { 2 } else { 0 })
+                + (if m_frame_header.paddingBit != 0 { 1 } else { 0 });
         }
         /* load crc word, if enabled, and return length of frame header (in bytes) */
         if m_frame_header.crc != 0 {
@@ -1393,47 +1564,43 @@ impl MP3Decoder {
     }
 
     /***********************************************************************************************************************
- * Function:    MP3GetLastFrameInfo
- *
- * Description: get info about last MP3 frame decoded (number of sampled decoded,
- *                sample rate, bitrate, etc.)
- *
- * Inputs:
- *
- * Outputs:     filled-in MP3FrameInfo struct
- *
- * Return:      none
- *
- * Notes:       call this right after calling MP3Decode
- **********************************************************************************************************************/
+     * Function:    MP3GetLastFrameInfo
+     *
+     * Description: get info about last MP3 frame decoded (number of sampled decoded,
+     *                sample rate, bitrate, etc.)
+     *
+     * Inputs:
+     *
+     * Outputs:     filled-in MP3FrameInfo struct
+     *
+     * Return:      none
+     *
+     * Notes:       call this right after calling MP3Decode
+     **********************************************************************************************************************/
 
-    pub fn mp3_get_last_frame_info(
-        &mut self,
-    ) {
+    pub fn mp3_get_last_frame_info(&mut self) {
         if self.m_MP3DecInfo.layer != 3 {
-            self.m_MP3FrameInfo.bitrate=0;
-            self.m_MP3FrameInfo.nChans=0;
-            self.m_MP3FrameInfo.samprate=0;
-            self.m_MP3FrameInfo.bitsPerSample=0;
-            self.m_MP3FrameInfo.outputSamps=0;
-            self.m_MP3FrameInfo.layer=0;
-            self.m_MP3FrameInfo.version= MPEGVersion::MPEG1;
-        } else{
-            self.m_MP3FrameInfo.bitrate=self.m_MP3DecInfo.bitrate;
+            self.m_MP3FrameInfo.bitrate = 0;
+            self.m_MP3FrameInfo.nChans = 0;
+            self.m_MP3FrameInfo.samprate = 0;
+            self.m_MP3FrameInfo.bitsPerSample = 0;
+            self.m_MP3FrameInfo.outputSamps = 0;
+            self.m_MP3FrameInfo.layer = 0;
+            self.m_MP3FrameInfo.version = MPEGVersion::MPEG1;
+        } else {
+            self.m_MP3FrameInfo.bitrate = self.m_MP3DecInfo.bitrate;
             self.m_MP3FrameInfo.nChans = self.m_MP3DecInfo.nChans;
-            self.m_MP3FrameInfo.samprate=self.m_MP3DecInfo.samprate;
-            self.m_MP3FrameInfo.bitsPerSample=16;
-            self.m_MP3FrameInfo.outputSamps=self.m_MP3DecInfo.nChans
-                    * SAMPLES_PER_FRAME_TAB[self.m_MPEGVersion as usize][self.m_MP3DecInfo.layer as usize-1] as i32;
-            self.m_MP3FrameInfo.layer=self.m_MP3DecInfo.layer;
-            self.m_MP3FrameInfo.version= self.m_MPEGVersion;
+            self.m_MP3FrameInfo.samprate = self.m_MP3DecInfo.samprate;
+            self.m_MP3FrameInfo.bitsPerSample = 16;
+            self.m_MP3FrameInfo.outputSamps = self.m_MP3DecInfo.nChans
+                * SAMPLES_PER_FRAME_TAB[self.m_MPEGVersion as usize]
+                    [self.m_MP3DecInfo.layer as usize - 1] as i32;
+            self.m_MP3FrameInfo.layer = self.m_MP3DecInfo.layer;
+            self.m_MP3FrameInfo.version = self.m_MPEGVersion;
         }
     }
 
-    pub fn unpack_side_info(
-        &mut self,
-        buf: &[u8],
-    ) -> usize {
+    pub fn unpack_side_info(&mut self, buf: &[u8]) -> usize {
         let n_bytes: usize;
 
         let m_side_info_sub = &mut self.m_SideInfoSub;
@@ -1447,11 +1614,15 @@ impl MP3Decoder {
         /* validate pointers and sync word */
         if m_mpegversion == MPEGVersion::MPEG1 {
             /* MPEG 1 */
-            n_bytes= if m_s_mode == StereoMode::Mono { SIBYTES_MPEG1_MONO } else { SIBYTES_MPEG1_STEREO };
+            n_bytes = if m_s_mode == StereoMode::Mono {
+                SIBYTES_MPEG1_MONO
+            } else {
+                SIBYTES_MPEG1_STEREO
+            };
             bsi = BitStreamInfo::from_slice(buf);
             m_side_info.mainDataBegin = bsi.get_bits(9) as i32;
-            m_side_info.privateBits= bsi.get_bits
-                (if m_s_mode == StereoMode::Mono { 5 } else { 3 }) as i32;
+            m_side_info.privateBits =
+                bsi.get_bits(if m_s_mode == StereoMode::Mono { 5 } else { 3 }) as i32;
             for ch in 0..m_mp3_dec_info.nChans {
                 for bd in 0..MAX_SCFBD {
                     m_side_info.scfsi[ch as usize][bd] = bsi.get_bits(1) as i32;
@@ -1459,18 +1630,27 @@ impl MP3Decoder {
             }
         } else {
             /* MPEG 2, MPEG 2.5 */
-            n_bytes = if m_s_mode == StereoMode::Mono { SIBYTES_MPEG2_MONO } else { SIBYTES_MPEG2_STEREO };
+            n_bytes = if m_s_mode == StereoMode::Mono {
+                SIBYTES_MPEG2_MONO
+            } else {
+                SIBYTES_MPEG2_STEREO
+            };
             bsi = BitStreamInfo::from_slice(buf);
             m_side_info.mainDataBegin = bsi.get_bits(8) as i32;
-            m_side_info.privateBits = bsi.get_bits(if m_s_mode == StereoMode::Mono { 1 } else { 2 }) as i32;
+            m_side_info.privateBits =
+                bsi.get_bits(if m_s_mode == StereoMode::Mono { 1 } else { 2 }) as i32;
         }
         for gr in 0..m_mp3_dec_info.nGrans {
-            for ch in  0..m_mp3_dec_info.nChans {
-                let sis =  &mut m_side_info_sub[gr as usize][ch as usize]; /* side info subblock for this granule, channel */
+            for ch in 0..m_mp3_dec_info.nChans {
+                let sis = &mut m_side_info_sub[gr as usize][ch as usize]; /* side info subblock for this granule, channel */
                 sis.part23_length = bsi.get_bits(12) as i32;
                 sis.n_bigvals = bsi.get_bits(9) as i32;
                 sis.global_gain = bsi.get_bits(8) as i32;
-                sis.sfCompress = bsi.get_bits(if m_mpegversion == MPEGVersion::MPEG1 { 4 } else { 9 }) as i32;
+                sis.sfCompress = bsi.get_bits(if m_mpegversion == MPEGVersion::MPEG1 {
+                    4
+                } else {
+                    9
+                }) as i32;
                 sis.win_switch_flag = bsi.get_bits(1) as i32;
                 if sis.win_switch_flag != 0 {
                     /* this is a start, stop, short, or mixed block */
@@ -1505,7 +1685,11 @@ impl MP3Decoder {
                     sis.region0Count = bsi.get_bits(4) as i32;
                     sis.region1Count = bsi.get_bits(3) as i32;
                 }
-                sis.preFlag = if m_mpegversion == MPEGVersion::MPEG1 { bsi.get_bits(1) as i32 } else { 0 };
+                sis.preFlag = if m_mpegversion == MPEGVersion::MPEG1 {
+                    bsi.get_bits(1) as i32
+                } else {
+                    0
+                };
                 sis.sfactScale = bsi.get_bits(1) as i32;
                 sis.count1TableSelect = bsi.get_bits(1) as i32;
             }
@@ -1516,10 +1700,14 @@ impl MP3Decoder {
     }
 }
 
-
 #[cfg(test)]
 mod unpack_frame_header_test {
-    use crate::mp3_decoder::{BLOCK_SIZE, CriticalBandInfo, DequantInfo, FrameHeader, HuffmanInfo, IMDCTInfo, MAINBUF_SIZE, MAX_NCHAN, MAX_NGRAN, MAX_NSAMP, MAX_REORDER_SAMPS, MAX_SCFBD, MP3Decoder, MP3FrameInfo, MPEGVersion, NBANDS, SFBandTable, ScaleFactorInfoSub, ScaleFactorJS, SideInfo, SideInfoSub, StereoMode, SubbandInfo, VBUF_LENGTH};
+    use crate::mp3_decoder::{
+        BLOCK_SIZE, CriticalBandInfo, DequantInfo, FrameHeader, HuffmanInfo, IMDCTInfo,
+        MAINBUF_SIZE, MAX_NCHAN, MAX_NGRAN, MAX_NSAMP, MAX_REORDER_SAMPS, MAX_SCFBD, MP3Decoder,
+        MP3FrameInfo, MPEGVersion, NBANDS, SFBandTable, ScaleFactorInfoSub, ScaleFactorJS,
+        SideInfo, SideInfoSub, StereoMode, SubbandInfo, VBUF_LENGTH,
+    };
 
     fn make_decoder() -> MP3Decoder {
         let m_FrameHeader = FrameHeader::default();
@@ -1570,21 +1758,26 @@ mod unpack_frame_header_test {
                 slen: [0; 4],
             },
             m_SubbandInfo: SubbandInfo {
-                vbuf:[0; MAX_NCHAN * VBUF_LENGTH],
+                vbuf: [0; MAX_NCHAN * VBUF_LENGTH],
                 vindex: 0,
             },
             m_ScaleFactorInfoSub: [[ScaleFactorInfoSub {
                 l: [0; 23],
                 s: [[0; 3]; 13],
             }; MAX_NCHAN]; MAX_NGRAN],
-            m_CriticalBandInfo: [CriticalBandInfo { cbEndL: 0, cbEndS: [0; 3], cbEndSMax: 0, cbType: 0 }; MAX_NCHAN],
+            m_CriticalBandInfo: [CriticalBandInfo {
+                cbEndL: 0,
+                cbEndS: [0; 3],
+                cbEndSMax: 0,
+                cbType: 0,
+            }; MAX_NCHAN],
             m_HuffmanInfo: HuffmanInfo {
                 gb: [0; MAX_NCHAN],
                 huff_dec_buf: [[0; MAX_NSAMP]; MAX_NCHAN],
-                non_zero_bound: [0; MAX_NCHAN]
+                non_zero_bound: [0; MAX_NCHAN],
             },
             m_DequantInfo: DequantInfo {
-                work_buf: [0; MAX_REORDER_SAMPS]
+                work_buf: [0; MAX_REORDER_SAMPS],
             },
             m_IMDCTInfo: IMDCTInfo {
                 gb: [0; MAX_NCHAN],
@@ -1593,7 +1786,6 @@ mod unpack_frame_header_test {
                 numPrevIMDCT: [0; MAX_NCHAN],
                 prevType: [0; MAX_NCHAN],
                 prevWinSwitch: [0; MAX_NCHAN],
-                
             },
             m_sMode: StereoMode::Stereo,
             m_MPEGVersion: MPEGVersion::MPEG1,
@@ -1601,10 +1793,9 @@ mod unpack_frame_header_test {
     }
     #[test]
     fn test_unpack_frame() {
-        let buf: [u8; 4] = [0xFF,0xFB,0x92, 0x64];
+        let buf: [u8; 4] = [0xFF, 0xFB, 0x92, 0x64];
         let mut m_MP3Decoder = make_decoder();
-        let res = m_MP3Decoder.unpack_frame_header(
-            &buf);
+        let res = m_MP3Decoder.unpack_frame_header(&buf);
 
         assert_eq!(m_MP3Decoder.m_MP3DecInfo.bitrate, 128000);
         assert_eq!(res, Ok(4));
@@ -1612,10 +1803,9 @@ mod unpack_frame_header_test {
 
     #[test]
     fn test_unpack_frame_mpeg2() {
-        let buf: [u8; 6] = [0xFF,0xF2,0x20, 0xC4, 0x8E, 0xF6];
+        let buf: [u8; 6] = [0xFF, 0xF2, 0x20, 0xC4, 0x8E, 0xF6];
         let mut m_MP3Decoder = make_decoder();
-        let res = m_MP3Decoder.unpack_frame_header(
-            &buf);
+        let res = m_MP3Decoder.unpack_frame_header(&buf);
         assert_eq!(m_MP3Decoder.m_MP3DecInfo.bitrate, 16000);
         assert_eq!(m_MP3Decoder.m_MP3DecInfo.samprate, 22050);
         assert_eq!(m_MP3Decoder.m_MPEGVersion, MPEGVersion::MPEG2);
@@ -1646,7 +1836,7 @@ mod clip_2n_tests {
     #[test]
     fn test_different_n_values() {
         assert_eq!(clip_2n(0, 0), 0);
-        assert_eq!(clip_2n(1, 0), 0);     // max = 0, min = -1 → clips to 0 on positive
+        assert_eq!(clip_2n(1, 0), 0); // max = 0, min = -1 → clips to 0 on positive
         assert_eq!(clip_2n(-1, 0), -1);
 
         assert_eq!(clip_2n(1023, 10), 1023);
@@ -1667,7 +1857,7 @@ mod clip_2n_tests {
         // Verify we match that exactly
 
         // n=15 → [-32768, 32767]
-        assert_eq!(clip_2n(32768, 15), 32767);  // 2^15 → clamped to 2^15 - 1
+        assert_eq!(clip_2n(32768, 15), 32767); // 2^15 → clamped to 2^15 - 1
         assert_eq!(clip_2n(i32::MAX, 15), 32767);
         assert_eq!(clip_2n(i32::MIN, 15), -32768);
 
@@ -1679,7 +1869,7 @@ mod clip_2n_tests {
     #[test]
     fn test_extreme_n_values() {
         // n too large → safely clamped to 31
-        assert_eq!(clip_2n(i32::MAX, 40), i32::MAX);       // n=40 → clamped to 31
+        assert_eq!(clip_2n(i32::MAX, 40), i32::MAX); // n=40 → clamped to 31
         assert_eq!(clip_2n(i32::MIN, 100), i32::MIN);
     }
 
@@ -1703,6 +1893,6 @@ mod clip_2n_tests {
     fn no_panic_on_invalid_shift() {
         // This test ensures we DON'T panic on large n
         // If you used raw `1 << n` without clamping/wrapping, this would panic in debug
-        let _ = clip_2n(123, 40);  // Should NOT panic
+        let _ = clip_2n(123, 40); // Should NOT panic
     }
 }
