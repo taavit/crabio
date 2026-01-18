@@ -944,62 +944,56 @@ pub fn fdct_32(buf_slice: &mut[i32; NBANDS], dest_slice: &mut[i32], offset: i32,
 }
 
 pub fn freq_invert_rescale(
-    mut y_slice: &mut [i32],
+    y_full: &mut [i32],
     x_prev: &mut [i32],
     block_idx: i32,
     es: i32,
 ) -> i32 {
+    let is_odd_block = (block_idx & 0x01) == 0x01;
+
     if es == 0 {
-        /* fast case - frequency invert only (no rescaling) */
-        if (block_idx & 0x01) == 0x01 {
-            y_slice
-                .iter_mut()
-                .skip(NBANDS)
-                .step_by(2 * NBANDS)
-                .take(9)
-                .for_each(|e| *e = -*e);
+        if is_odd_block {
+            for row in 0..9 {
+                let idx = (2 * row + 1) * NBANDS;
+                if let Some(val) = y_full.get_mut(idx) {
+                    *val = val.wrapping_neg();
+                }
+            }
         }
         return 0;
     }
 
-    /* undo pre-IMDCT scaling, clipping if necessary */
     let mut m_out = 0;
-    let mut d;
-    if (block_idx & 0x01) == 0x01 {
-        /* frequency invert */
-        for i in x_prev.iter_mut() {
-            d = y_slice[0];
-            clip_2n(d, (31 - es) as u32);
-            y_slice[0] = d << es;
-            m_out |= y_slice[0].abs();
-            y_slice = &mut y_slice[NBANDS..];
-            d = -y_slice[0];
-            clip_2n(d, (31 - es) as u32);
-            y_slice[0] = d << es;
-            m_out |= y_slice[0].abs();
-            y_slice = &mut y_slice[NBANDS..];
-            d = *i;
-            clip_2n(d, (31 - es) as u32);
-            *i = d << es;
+    let n_clip = (31 - es) as u32;
+
+    for (i, xp) in x_prev.iter_mut().enumerate() {
+        let base = i * 2 * NBANDS;
+
+        // --- Pierwszy wiersz (Parzysty) ---
+        if let Some(val) = y_full.get_mut(base) {
+            let d = clip_2n(*val, n_clip);
+            let res = d << es;
+            *val = res;
+            m_out |= res.abs();
         }
-    } else {
-        for i in x_prev.iter_mut() {
-            d = y_slice[0];
-            clip_2n(d, (31 - es) as u32);
-            y_slice[0] = d << es;
-            m_out |= y_slice[0].abs();
-            y_slice = &mut y_slice[NBANDS..];
-            d = y_slice[0];
-            clip_2n(d, (31 - es) as u32);
-            y_slice[0] = d << es;
-            m_out |= y_slice[0].abs();
-            y_slice = &mut y_slice[NBANDS..];
-            d = *i;
-            clip_2n(d, (31 - es) as u32);
-            *i = d << es;
+
+        if let Some(val) = y_full.get_mut(base + NBANDS) {
+            let mut d = *val;
+            if is_odd_block {
+                d = -d;
+            }
+            d = clip_2n(d, n_clip);
+            let res = d << es;
+            *val = res;
+            m_out |= res.abs();
         }
+
+        let d_xp = clip_2n(*xp, n_clip);
+        let res_xp = d_xp << es;
+        *xp = res_xp;
     }
-    return m_out;
+    
+    m_out
 }
 
 /***********************************************************************************************************************

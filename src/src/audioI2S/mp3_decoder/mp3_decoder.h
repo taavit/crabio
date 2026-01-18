@@ -260,7 +260,6 @@ int MP3FindFreeSync(unsigned char *buf, unsigned char firstFH[4], int nBytes);
 void MP3ClearBadFrame(MP3DecInfo_t *m_MP3DecInfo, short *outbuf);
 int DequantBlock(int *inbuf, int *outbuf, int num, int scale);
 void WinPrevious(int *xPrev, int *xPrevWin, int btPrev);
-int FreqInvertRescale(int *y, int *xPrev, int blockIdx, int es);
 void idct9(int *x);
 int IMDCT36(int *xCurr, int *xPrev, int *y, int btCurr, int btPrev, int blockIdx, int gb);
 void imdct12(int *x, int *out);

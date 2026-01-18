@@ -1853,8 +1853,8 @@ pub unsafe fn HybridTransform(
     let mut x_prev_win = [0i32; 18];
     let mut m_out = 0i32;
     let mut n_blocks_out;
-    let (mut x_curr, _) = x_curr.as_chunks_mut::<18>();
-    let (mut x_prev, _) = x_prev.as_chunks_mut::<9>();
+    let (x_curr, _) = x_curr.as_chunks_mut::<18>();
+    let (x_prev, _) = x_prev.as_chunks_mut::<9>();
 
     let mut i = 0;
     let y_slice = y;

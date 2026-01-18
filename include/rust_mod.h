@@ -305,7 +305,6 @@ uint64_t MADD64(uint64_t sum64, int x, int y);
 
 int IMDCT36(int *xCurr, int *xPrev, int *y, int btCurr, int btPrev, int blockIdx, int gb);
 short ClipToShort(int x, int fracBits);
-int FreqInvertRescale(int *y, int *xPrev, int blockIdx, int es);
 
 void WinPrevious(int *xPrev, int *xPrevWin, int btPrev);
 void MP3ClearBadFrame(MP3DecInfo_t *m_MP3DecInfo, short *outbuf);
