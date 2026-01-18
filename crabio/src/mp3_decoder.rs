@@ -81,7 +81,7 @@ pub fn sar_64(x: u64, n: i32) -> u64 {
     x >> n
 }
 
-#[inline]
+#[inline(always)]
 pub fn mulshift_32(x: i32, y: i32) -> i32 {
     ((x as u64) * (y as u64) >> 32) as i32
 }
@@ -820,9 +820,9 @@ pub fn fdct_32(
         let t7 = mulshift_32(cptr_slice_second[base + 2], b7 - b4) << 1;
 
         let a1 = buf_chunk[1];
-        let a6 = buf_chunk[6];
         let a2 = buf_chunk[2];
         let a5 = buf_chunk[5];
+        let a6 = buf_chunk[6];
 
         let b1 = a1 + a6;
         let b6 = mulshift_32(cptr_slice_second[base + 3], a1 - a6) << 1;
