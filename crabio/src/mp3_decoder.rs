@@ -483,11 +483,14 @@ pub fn mp3_find_free_sync(buf: &[u8], first_header: [u8; 4]) -> Option<usize> {
  * Notes:       interleaves PCM samples LRLRLR...
  **********************************************************************************************************************/
 
+#[unsafe(no_mangle)]
 pub fn polyphase_stereo(pcm: &mut [i16], vbuf: &[i32], coef: &[u32; 264]) {
     let rnd_val = 1 << ((DQ_FRACBITS_OUT - 2 - 2 - 15) - 1 + (32 - CSHIFT));
-
+    if vbuf.len() < 1064 {
+        return;
+    }
+    let vbuf = &vbuf[..1064];
     /* special case, output sample 0 */
-    let vb1 = vbuf;
     let mut sum1_r: u64 = rnd_val;
     let mut sum1_l: u64 = rnd_val;
     let mut sum2_r: u64;
@@ -498,18 +501,19 @@ pub fn polyphase_stereo(pcm: &mut [i16], vbuf: &[i32], coef: &[u32; 264]) {
     let mut v_hi: i32;
 
     let mut coef_idx = 0;
+    let mut vbuf_idx = 0;
 
     for j in 0..8 {
         c1 = coef[coef_idx];
         coef_idx += 1;
         c2 = coef[coef_idx];
         coef_idx += 1;
-        v_lo = vb1[j];
-        v_hi = vb1[23 - j];
+        v_lo = vbuf[vbuf_idx + j];
+        v_hi = vbuf[vbuf_idx + 23 - j];
         sum1_l = madd_64(sum1_l as u64, v_lo, c1 as i32);
         sum1_l = madd_64(sum1_l as u64, v_hi, -(c2 as i32));
-        v_lo = vb1[32 + j];
-        v_hi = vb1[32 + (23 - j)];
+        v_lo = vbuf[vbuf_idx + 32 + j];
+        v_hi = vbuf[vbuf_idx + 32 + (23 - j)];
         sum1_r = madd_64(sum1_r as u64, v_lo, c1 as i32);
         sum1_r = madd_64(sum1_r as u64, v_hi, -(c2 as i32));
     }
@@ -525,16 +529,16 @@ pub fn polyphase_stereo(pcm: &mut [i16], vbuf: &[i32], coef: &[u32; 264]) {
 
     /* special case, output sample 16 */
     coef_idx = 256;
-    let mut vb1 = &vbuf[64 * 16..];
+    vbuf_idx = 64 * 16;
     sum1_l = rnd_val;
     sum1_r = rnd_val;
 
     for j in 0..8 {
         c1 = coef[coef_idx];
         coef_idx += 1;
-        v_lo = vb1[j];
+        v_lo = vbuf[vbuf_idx + j];
         sum1_l = madd_64(sum1_l as u64, v_lo, c1 as i32);
-        v_lo = vb1[32 + j];
+        v_lo = vbuf[vbuf_idx + 32 + j];
         sum1_r = madd_64(sum1_r as u64, v_lo, c1 as i32);
     }
     pcm[2 * 16 + CHANNEL_LEFT] = clip_to_short(
@@ -548,7 +552,7 @@ pub fn polyphase_stereo(pcm: &mut [i16], vbuf: &[i32], coef: &[u32; 264]) {
 
     /* main convolution loop: sum1L = samples 1, 2, 3, ... 15   sum2L = samples 31, 30, ... 17 */
     coef_idx = 16;
-    vb1 = &vbuf[64..];
+    vbuf_idx = 64;
     let mut pcm_idx = 2;
 
     /* right now, the compiler creates bad asm from this... */
@@ -563,22 +567,22 @@ pub fn polyphase_stereo(pcm: &mut [i16], vbuf: &[i32], coef: &[u32; 264]) {
             coef_idx += 1;
             c2 = coef[coef_idx];
             coef_idx += 1;
-            v_lo = vb1[j];
-            v_hi = vb1[23 - j];
+            v_lo = vbuf[vbuf_idx + j];
+            v_hi = vbuf[vbuf_idx + 23 - j];
             sum1_l = madd_64(sum1_l as u64, v_lo, c1 as i32);
             sum2_l = madd_64(sum2_l as u64, v_lo, c2 as i32);
 
             sum1_l = madd_64(sum1_l as u64, v_hi, -(c2 as i32));
             sum2_l = madd_64(sum2_l as u64, v_hi, c1 as i32);
 
-            v_lo = vb1[32 + j];
-            v_hi = vb1[32 + 23 - (j)];
+            v_lo = vbuf[vbuf_idx + 32 + j];
+            v_hi = vbuf[vbuf_idx + 32 + 23 - (j)];
             sum1_r = madd_64(sum1_r as u64, v_lo, c1 as i32);
             sum2_r = madd_64(sum2_r as u64, v_lo, c2 as i32);
             sum1_r = madd_64(sum1_r as u64, v_hi, -(c2 as i32));
             sum2_r = madd_64(sum2_r as u64, v_hi, c1 as i32);
         }
-        vb1 = &vb1[64..];
+        vbuf_idx += 64;
         pcm[pcm_idx + CHANNEL_LEFT] = clip_to_short(
             sar_64(sum1_l as u64, (32 - CSHIFT) as i32) as i32,
             (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32,
