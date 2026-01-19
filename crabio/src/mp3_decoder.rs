@@ -500,20 +500,15 @@ pub fn polyphase_stereo(pcm: &mut [i16], vbuf: &[i32], coef: &[u32; 264]) {
     let mut v_lo: i32;
     let mut v_hi: i32;
 
-    let mut coef_idx = 0;
-    let mut vbuf_idx = 0;
-
-    for j in 0..8 {
-        c1 = coef[coef_idx];
-        coef_idx += 1;
-        c2 = coef[coef_idx];
-        coef_idx += 1;
-        v_lo = vbuf[vbuf_idx + j];
-        v_hi = vbuf[vbuf_idx + 23 - j];
+    for (j, c) in coef[..16].chunks_exact(2).enumerate() {
+        c1 = c[0];
+        c2 = c[1];
+        v_lo = vbuf[j];
+        v_hi = vbuf[23 - j];
         sum1_l = madd_64(sum1_l as u64, v_lo, c1 as i32);
         sum1_l = madd_64(sum1_l as u64, v_hi, -(c2 as i32));
-        v_lo = vbuf[vbuf_idx + 32 + j];
-        v_hi = vbuf[vbuf_idx + 32 + (23 - j)];
+        v_lo = vbuf[32 + j];
+        v_hi = vbuf[32 + (23 - j)];
         sum1_r = madd_64(sum1_r as u64, v_lo, c1 as i32);
         sum1_r = madd_64(sum1_r as u64, v_hi, -(c2 as i32));
     }
@@ -528,8 +523,8 @@ pub fn polyphase_stereo(pcm: &mut [i16], vbuf: &[i32], coef: &[u32; 264]) {
     );
 
     /* special case, output sample 16 */
-    coef_idx = 256;
-    vbuf_idx = 64 * 16;
+    let mut coef_idx = 256;
+    let mut vbuf_idx = 64 * 16;
     sum1_l = rnd_val;
     sum1_r = rnd_val;
 
