@@ -532,16 +532,16 @@ pub fn polyphase_stereo(pcm: &mut [i16], vbuf: &[i32], coef: &[u32; 264]) {
         c1 = coef[coef_idx];
         coef_idx += 1;
         v_lo = vbuf[vbuf_idx + j];
-        sum1_l = madd_64(sum1_l as u64, v_lo, c1 as i32);
+        sum1_l = madd_64(sum1_l, v_lo, c1 as i32);
         v_lo = vbuf[vbuf_idx + 32 + j];
-        sum1_r = madd_64(sum1_r as u64, v_lo, c1 as i32);
+        sum1_r = madd_64(sum1_r, v_lo, c1 as i32);
     }
     pcm[2 * 16 + CHANNEL_LEFT] = clip_to_short(
-        sar_64(sum1_l as u64, (32 - CSHIFT) as i32) as i32,
+        sar_64(sum1_l, (32 - CSHIFT) as i32) as i32,
         (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32,
     );
     pcm[2 * 16 + CHANNEL_RIGHT] = clip_to_short(
-        sar_64(sum1_r as u64, (32 - CSHIFT) as i32) as i32,
+        sar_64(sum1_r, (32 - CSHIFT) as i32) as i32,
         (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32,
     );
 
