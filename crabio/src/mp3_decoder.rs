@@ -83,7 +83,7 @@ pub fn sar_64(x: u64, n: i32) -> u64 {
 
 #[inline(always)]
 pub fn mulshift_32(x: i32, y: i32) -> i32 {
-    ((x as u64) * (y as u64) >> 32) as i32
+    ((x as i64) * (y as i64) >> 32) as i32
 }
 
 #[inline(always)]
@@ -772,9 +772,11 @@ pub fn fdct_32(
             *d >>= es;
         }
     }
-    let (cptr, _) = M_DCTTAB.as_chunks::<24>();
 
-    /* first pass */
+    let (cptr_all, _) = M_DCTTAB.as_chunks::<24>();
+    let cptr0: &[i32; 24] = &cptr_all[0];
+
+    /* --- FIRST PASS: Butterfly and Phase 1 --- */
     for i in 0..8 {
         let base = i * 3;
         let a0 = buf_slice[i];
@@ -783,67 +785,56 @@ pub fn fdct_32(
         let a3 = buf_slice[31 - i];
 
         let b0 = a0 + a3;
-        let b3 = mulshift_32(cptr[0][base], a0 - a3) << 1;
-
+        let b3 = mulshift_32(cptr0[base], a0 - a3) << 1;
         let b1 = a1 + a2;
-        let b2 = mulshift_32(cptr[0][base + 1], a1 - a2) << FDCT32S1S2[i] as i32;
+        let b2 = mulshift_32(cptr0[base + 1], a1 - a2) << (FDCT32S1S2[i] as i32);
 
-        let coeff = cptr[0][base + 2]; // shared for next two uses
+        let coeff = cptr0[base + 2];
+        let shift_idx = FDCT32S1S2[8 + i] as i32;
+
         buf_slice[i] = b0 + b1;
-        buf_slice[15 - i] = mulshift_32(coeff, b0 - b1) << FDCT32S1S2[8 + i] as i32;
-
+        buf_slice[15 - i] = mulshift_32(coeff, b0 - b1) << shift_idx;
         buf_slice[16 + i] = b2 + b3;
-        buf_slice[31 - i] = mulshift_32(coeff, b3 - b2) << FDCT32S1S2[8 + i] as i32;
+        buf_slice[31 - i] = mulshift_32(coeff, b3 - b2) << shift_idx;
     }
 
-    let cptr_slice_second = cptr[1];
+    /* --- SECOND PASS: 4x8-point DCT --- */
+    let cptr1: &[i32; 24] = &cptr_all[1];
     let (chunks, _) = buf_slice.as_chunks_mut::<8>();
-    /* second pass */
+
     for (idx, buf_chunk) in chunks.iter_mut().enumerate() {
+        let chunk: &mut [i32; 8] = buf_chunk.try_into().unwrap();
         let base = idx * 6;
-        let a0 = buf_chunk[0];
-        let a3 = buf_chunk[3];
-        let a4 = buf_chunk[4];
-        let a7 = buf_chunk[7];
 
-        let b0 = a0 + a7;
-        let b7 = mulshift_32(cptr_slice_second[base], a0 - a7) << 1;
-
-        let b3 = a3 + a4;
-        let b4 = mulshift_32(cptr_slice_second[base + 1], a3 - a4) << 3;
+        let b0 = chunk[0] + chunk[7];
+        let b7 = mulshift_32(cptr1[base], chunk[0] - chunk[7]) << 1;
+        let b3 = chunk[3] + chunk[4];
+        let b4 = mulshift_32(cptr1[base + 1], chunk[3] - chunk[4]) << 3;
 
         let t0 = b0 + b3;
-        let t3 = mulshift_32(cptr_slice_second[base + 2], b0 - b3) << 1;
-
+        let t3 = mulshift_32(cptr1[base + 2], b0 - b3) << 1;
         let t4 = b4 + b7;
-        let t7 = mulshift_32(cptr_slice_second[base + 2], b7 - b4) << 1;
+        let t7 = mulshift_32(cptr1[base + 2], b7 - b4) << 1;
 
-        let a1 = buf_chunk[1];
-        let a2 = buf_chunk[2];
-        let a5 = buf_chunk[5];
-        let a6 = buf_chunk[6];
-
-        let b1 = a1 + a6;
-        let b6 = mulshift_32(cptr_slice_second[base + 3], a1 - a6) << 1;
-
-        let b2 = a2 + a5;
-        let b5 = mulshift_32(cptr_slice_second[base + 4], a2 - a5) << 1;
+        let b1 = chunk[1] + chunk[6];
+        let b6 = mulshift_32(cptr1[base + 3], chunk[1] - chunk[6]) << 1;
+        let b2 = chunk[2] + chunk[5];
+        let b5 = mulshift_32(cptr1[base + 4], chunk[2] - chunk[5]) << 1;
 
         let t1 = b1 + b2;
-        let t2 = mulshift_32(cptr_slice_second[base + 5], b1 - b2) << 2;
-
+        let t2 = mulshift_32(cptr1[base + 5], b1 - b2) << 2;
         let t5 = b5 + b6;
-        let t6 = mulshift_32(cptr_slice_second[base + 5], b6 - b5) << 2;
+        let t6 = mulshift_32(cptr1[base + 5], b6 - b5) << 2;
 
         let bb0 = t0 + t1;
         let bb1 = mulshift_32(M_COS4_0, t0 - t1) << 1;
         let bb2 = t2 + t3;
         let bb3 = mulshift_32(M_COS4_0, t3 - t2) << 1;
 
-        buf_chunk[0] = bb0;
-        buf_chunk[1] = bb1;
-        buf_chunk[2] = bb2 + bb3;
-        buf_chunk[3] = bb3;
+        chunk[0] = bb0;
+        chunk[1] = bb1;
+        chunk[2] = bb2 + bb3;
+        chunk[3] = bb3;
 
         let bb4 = t4 + t5;
         let bb5 = mulshift_32(M_COS4_0, t4 - t5) << 1;
@@ -851,175 +842,114 @@ pub fn fdct_32(
         let bb7 = mulshift_32(M_COS4_0, t7 - t6) << 1;
         let bb6_sum = bb6 + bb7;
 
-        buf_chunk[4] = bb4 + bb6_sum;
-        buf_chunk[5] = bb5 + bb7;
-        buf_chunk[6] = bb5 + bb6_sum;
-        buf_chunk[7] = bb7;
+        chunk[4] = bb4 + bb6_sum;
+        chunk[5] = bb5 + bb7;
+        chunk[6] = bb5 + bb6_sum;
+        chunk[7] = bb7;
     }
 
-    /* sample 0 - always delayed one block */
-    let mut d = &mut dest_slice[64 * 16
-        + ((offset - odd_block) & 7) as usize
-        + if odd_block != 0 { 0 } else { VBUF_LENGTH }..];
-    let s = buf_slice[0];
-    d[0] = s;
-    d[8] = s;
+    // Obliczanie bazowych offsetów dla d[]
+    let v_toggle = if odd_block != 0 { 0 } else { VBUF_LENGTH as usize };
+    let v_toggle_inv = if odd_block != 0 { VBUF_LENGTH as usize } else { 0 };
+    let off_8 = ((offset - odd_block) & 7) as usize;
+
+    /* sample 0 - delayed block */
+    let d0_idx = 64 * 16 + off_8 + v_toggle;
+    if let Some(d0_slot) = dest_slice.get_mut(d0_idx..d0_idx + 9) {
+        let s = buf_slice[0];
+        d0_slot[0] = s;
+        d0_slot[8] = s;
+    }
 
     /* samples 16 to 31 */
-    d = &mut dest_slice[offset as usize + if odd_block != 0 { VBUF_LENGTH } else { 0 }..];
-    let (d, _) = d.as_chunks_mut::<64>();
-    let mut s = buf_slice[1];
-    d[0][0] = s;
-    d[0][8] = s;
+    let d16_base = offset as usize + v_toggle_inv;
+    if let Some(d16_slice) = dest_slice.get_mut(d16_base..d16_base + 1024) {
+        let (d, _) = d16_slice.as_chunks_mut::<64>();
+        
+        let mut s = buf_slice[1];
+        d[0][0] = s; d[0][8] = s;
 
-    let mut tmp = buf_slice[25] + buf_slice[29];
-    s = buf_slice[17] + tmp;
-    d[1][0] = s;
-    d[1][8] = s;
-    s = buf_slice[9] + buf_slice[13];
-    d[2][0] = s;
-    d[2][8] = s;
-    s = buf_slice[21] + tmp;
-    d[3][0] = s;
-    d[3][8] = s;
+        let tmp1 = buf_slice[25] + buf_slice[29];
+        s = buf_slice[17] + tmp1; d[1][0] = s; d[1][8] = s;
+        s = buf_slice[9] + buf_slice[13]; d[2][0] = s; d[2][8] = s;
+        s = buf_slice[21] + tmp1; d[3][0] = s; d[3][8] = s;
 
-    tmp = buf_slice[29] + buf_slice[27];
-    s = buf_slice[5];
-    d[4][0] = s;
-    d[4][8] = s;
-    s = buf_slice[21] + tmp;
-    d[5][0] = s;
-    d[5][8] = s;
-    s = buf_slice[13] + buf_slice[11];
-    d[6][0] = s;
-    d[6][8] = s;
-    s = buf_slice[19] + tmp;
-    d[7][0] = s;
-    d[7][8] = s;
+        let tmp2 = buf_slice[29] + buf_slice[27];
+        s = buf_slice[5]; d[4][0] = s; d[4][8] = s;
+        s = buf_slice[21] + tmp2; d[5][0] = s; d[5][8] = s;
+        s = buf_slice[13] + buf_slice[11]; d[6][0] = s; d[6][8] = s;
+        s = buf_slice[19] + tmp2; d[7][0] = s; d[7][8] = s;
 
-    tmp = buf_slice[27] + buf_slice[31];
-    s = buf_slice[3];
-    d[8][0] = s;
-    d[8][8] = s;
-    s = buf_slice[19] + tmp;
-    d[9][0] = s;
-    d[9][8] = s;
-    s = buf_slice[11] + buf_slice[15];
-    d[10][0] = s;
-    d[10][8] = s;
-    s = buf_slice[23] + tmp;
-    d[11][0] = s;
-    d[11][8] = s;
+        let tmp3 = buf_slice[27] + buf_slice[31];
+        s = buf_slice[3]; d[8][0] = s; d[8][8] = s;
+        s = buf_slice[19] + tmp3; d[9][0] = s; d[9][8] = s;
+        s = buf_slice[11] + buf_slice[15]; d[10][0] = s; d[10][8] = s;
+        s = buf_slice[23] + tmp3; d[11][0] = s; d[11][8] = s;
 
-    tmp = buf_slice[31];
-    s = buf_slice[7];
-    d[12][0] = s;
-    d[12][8] = s;
-    s = buf_slice[23] + tmp;
-    d[13][0] = s;
-    d[13][8] = s;
-    s = buf_slice[15];
-    d[14][0] = s;
-    d[14][8] = s;
-    s = tmp;
-    d[15][0] = s;
-    d[15][8] = s;
+        let tmp4 = buf_slice[31];
+        s = buf_slice[7]; d[12][0] = s; d[12][8] = s;
+        s = buf_slice[23] + tmp4; d[13][0] = s; d[13][8] = s;
+        s = buf_slice[15]; d[14][0] = s; d[14][8] = s;
+        s = tmp4; d[15][0] = s; d[15][8] = s;
+    }
 
     /* samples 1 to 16 */
-    let d = &mut dest_slice
-        [16 + ((offset - odd_block) & 7) as usize + if odd_block != 0 { 0 } else { VBUF_LENGTH }..];
-    let (d, _) = d.as_chunks_mut::<64>();
-    s = buf_slice[1];
-    d[0][0] = s;
-    d[0][8] = s;
+    let d1_base = 16 + off_8 + v_toggle;
+    if let Some(d1_slice) = dest_slice.get_mut(d1_base..d1_base + 1024) {
+        let (d, _) = d1_slice.as_chunks_mut::<64>();
+        
+        let mut s = buf_slice[1];
+        d[0][0] = s; d[0][8] = s;
 
-    tmp = buf_slice[30] + buf_slice[25];
-    s = buf_slice[17] + tmp;
-    d[1][0] = s;
-    d[1][8] = s;
-    s = buf_slice[14] + buf_slice[9];
-    d[2][0] = s;
-    d[2][8] = s;
-    s = buf_slice[22] + tmp;
-    d[3][0] = s;
-    d[3][8] = s;
-    s = buf_slice[6];
-    d[4][0] = s;
-    d[4][8] = s;
+        let tmp1 = buf_slice[30] + buf_slice[25];
+        s = buf_slice[17] + tmp1; d[1][0] = s; d[1][8] = s;
+        s = buf_slice[14] + buf_slice[9]; d[2][0] = s; d[2][8] = s;
+        s = buf_slice[22] + tmp1; d[3][0] = s; d[3][8] = s;
+        s = buf_slice[6]; d[4][0] = s; d[4][8] = s;
 
-    tmp = buf_slice[26] + buf_slice[30];
-    s = buf_slice[22] + tmp;
-    d[5][0] = s;
-    d[5][8] = s;
-    s = buf_slice[10] + buf_slice[14];
-    d[6][0] = s;
-    d[6][8] = s;
-    s = buf_slice[18] + tmp;
-    d[7][0] = s;
-    d[7][8] = s;
-    s = buf_slice[2];
-    d[8][0] = s;
-    d[8][8] = s;
+        let tmp2 = buf_slice[26] + buf_slice[30];
+        s = buf_slice[22] + tmp2; d[5][0] = s; d[5][8] = s;
+        s = buf_slice[10] + buf_slice[14]; d[6][0] = s; d[6][8] = s;
+        s = buf_slice[18] + tmp2; d[7][0] = s; d[7][8] = s;
+        s = buf_slice[2]; d[8][0] = s; d[8][8] = s;
 
-    tmp = buf_slice[28] + buf_slice[26];
-    s = buf_slice[18] + tmp;
-    d[9][0] = s;
-    d[9][8] = s;
-    s = buf_slice[12] + buf_slice[10];
-    d[10][0] = s;
-    d[10][8] = s;
-    s = buf_slice[20] + tmp;
-    d[11][0] = s;
-    d[11][8] = s;
-    s = buf_slice[4];
-    d[12][0] = s;
-    d[12][8] = s;
+        let tmp3 = buf_slice[28] + buf_slice[26];
+        s = buf_slice[18] + tmp3; d[9][0] = s; d[9][8] = s;
+        s = buf_slice[12] + buf_slice[10]; d[10][0] = s; d[10][8] = s;
+        s = buf_slice[20] + tmp3; d[11][0] = s; d[11][8] = s;
+        s = buf_slice[4]; d[12][0] = s; d[12][8] = s;
 
-    tmp = buf_slice[24] + buf_slice[28];
-    s = buf_slice[20] + tmp;
-    d[13][0] = s;
-    d[13][8] = s;
-    s = buf_slice[8] + buf_slice[12];
-    d[14][0] = s;
-    d[14][8] = s;
-    s = buf_slice[16] + tmp;
-    d[15][0] = s;
-    d[15][8] = s;
+        let tmp4 = buf_slice[24] + buf_slice[28];
+        s = buf_slice[20] + tmp4; d[13][0] = s; d[13][8] = s;
+        s = buf_slice[8] + buf_slice[12]; d[14][0] = s; d[14][8] = s;
+        s = buf_slice[16] + tmp4; d[15][0] = s; d[15][8] = s;
+    }
 
-    /* final rescale + clip if es > 0 (rare) */
+    /* final rescale + clip if es > 0 */
     if es != 0 {
         let n_clip = (31 - es) as u32;
 
-        let d = &mut dest_slice[64 * 16
-            + ((offset - odd_block) & 7) as usize
-            + if odd_block != 0 { 0 } else { VBUF_LENGTH }..];
-        s = d[0];
-        s = clip_2n(s, n_clip);
-        s <<= es;
-        d[0] = s;
-        d[8] = s;
-
-        let d = &mut dest_slice[offset as usize + if odd_block != 0 { VBUF_LENGTH } else { 0 }..];
-        let (d, _) = d.as_chunks_mut::<64>();
-        // Blocks 16-32
-        for i in d.iter_mut().take(16) {
-            s = i[0];
-            s = clip_2n(s, n_clip);
-            s <<= es;
-            i[0] = s;
-            i[8] = s;
+        // Re-use logic for sample 0
+        if let Some(val) = dest_slice.get_mut(d0_idx) {
+            let s = (clip_2n(*val, n_clip)) << es;
+            *val = s;
+            dest_slice[d0_idx + 8] = s;
         }
 
-        let d = &mut dest_slice[16
-            + ((offset - odd_block) & 7) as usize
-            + if odd_block != 0 { 0 } else { VBUF_LENGTH }..];
-        let (d, _) = d.as_chunks_mut::<64>();
-        for i in d.iter_mut().take(16) {
-            s = i[0];
-            s = clip_2n(s, n_clip);
-            s <<= es;
-            i[0] = s;
-            i[8] = s;
+        // Re-use logic for 16-31
+        if let Some(d16_slice) = dest_slice.get_mut(d16_base..d16_base + 1024) {
+            for i in d16_slice.chunks_exact_mut(64).take(16) {
+                let s = (clip_2n(i[0], n_clip)) << es;
+                i[0] = s; i[8] = s;
+            }
+        }
+
+        // Re-use logic for 1-16
+        if let Some(d1_slice) = dest_slice.get_mut(d1_base..d1_base + 1024) {
+            for i in d1_slice.chunks_exact_mut(64).take(16) {
+                let s = (clip_2n(i[0], n_clip)) << es;
+                i[0] = s; i[8] = s;
+            }
         }
     }
 }
