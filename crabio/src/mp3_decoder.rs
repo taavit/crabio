@@ -765,6 +765,7 @@ pub fn fdct_32(
     odd_block: i32,
     gb: i32,
 ) {
+    let dest_slice = &mut dest_slice[0..MAX_NCHAN * VBUF_LENGTH - 32];
     let mut es = 0;
     if gb < 6 {
         es = 6 - gb;
@@ -849,8 +850,8 @@ pub fn fdct_32(
     }
 
     // Obliczanie bazowych offsetów dla d[]
-    let v_toggle = if odd_block != 0 { 0 } else { VBUF_LENGTH as usize };
-    let v_toggle_inv = if odd_block != 0 { VBUF_LENGTH as usize } else { 0 };
+    let v_toggle = if odd_block != 0 { 0 } else { VBUF_LENGTH };
+    let v_toggle_inv = v_toggle ^ VBUF_LENGTH;
     let off_8 = ((offset - odd_block) & 7) as usize;
 
     /* sample 0 - delayed block */
@@ -1055,11 +1056,16 @@ const IMDCT_WIN: [[u32; 36]; 4] = [
 ];
 
 #[allow(non_snake_case)]
+#[unsafe(no_mangle)]
 pub fn win_previous(
     x_prev: &mut [i32; BLOCK_SIZE / 2],
     x_prev_win: &mut [i32; BLOCK_SIZE],
-    bt_prev: i32,
+    bt_prev: usize,
 ) {
+    if bt_prev >= 4 {
+        return;
+    }
+
     if bt_prev == 2 {
         // Special case for short blocks – explicit unrolled version matching the original
         let w = IMDCT_WIN[2];
@@ -1078,12 +1084,13 @@ pub fn win_previous(
         x_prev_win[11] = mulshift_32(w[11] as i32, x_prev[5]);
 
         // Zero the unused upper part (original sets 12..17 to 0)
-        x_prev_win[12..18].fill(0);
-    } else {
+        x_prev_win[12..].fill(0);
+    }
+    {
         // Long blocks (0, 1, 3) – symmetric windowing
         // wpLo points to imdctWin[btPrev] + 18
         // wpHi points to imdctWin[btPrev] + 35 (i.e. wpLo + 17 backwards)
-        let win = &IMDCT_WIN[bt_prev as usize];
+        let win = IMDCT_WIN[bt_prev];
         let wp_lo = &win[18..36]; // 18 elements forward
         let wp_hi = &win[18..36][..18]; // same range, but we will iterate backwards
 

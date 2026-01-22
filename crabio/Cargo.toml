@@ -6,3 +6,4 @@ edition = "2024"
 crate-type = ["rlib"]
 
 [dependencies]
+esp-println = { version = "0.16.1", features = ["esp32s3"] }

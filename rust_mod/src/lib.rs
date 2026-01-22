@@ -1739,7 +1739,7 @@ pub fn imdct36(
         /* slower method - either prev or curr is using window type != 0 so do full 36-point window
          * output xPrevWin has at least 3 guard bits (xPrev has 2, gain 1 in WinPrevious)
          */
-        win_previous(x_prev, &mut x_prev_win, bt_prev);
+        win_previous(x_prev, &mut x_prev_win, bt_prev as usize);
 
         let wp = IMDCT_WIN[bt_curr as usize];
         for i in 0..9 {
@@ -1911,7 +1911,7 @@ pub fn hybrid_transform(
             prev_win_idx = 0;
         }
 
-        win_previous(&mut x_prev[i as usize], &mut x_prev_win, prev_win_idx);
+        win_previous(&mut x_prev[i as usize], &mut x_prev_win, prev_win_idx as usize);
 
         let mut non_zero = 0i32;
         let fi_bit = (i as i32) << 31;
@@ -1989,7 +1989,7 @@ pub fn imdct12x3(
     imdct_12(&x_curr[2..18].try_into().unwrap(), &mut c1[2]); // Block 2
 
     // 3. Okienkowanie poprzedniego bloku (Overlap z poprzedniej ramki)
-    win_previous(x_prev, &mut x_prev_win, bt_prev);
+    win_previous(x_prev, &mut x_prev_win, bt_prev as usize);
     // Pobranie wskaźnika do okna krótkiego (index 2)
     let wp = IMDCT_WIN[2];
     let mut m_out = 0i32;
