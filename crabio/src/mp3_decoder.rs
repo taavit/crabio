@@ -92,6 +92,16 @@ pub fn madd_64(sum64: u64, x: i32, y: i32) -> u64 {
     sum64.wrapping_add(prod as u64)
 } /* returns 64-bit value in [edx:eax] */
 
+#[repr(usize)]
+#[derive(Debug, PartialEq, Eq, Default, Clone, Copy)]
+pub enum BlockType {
+    #[default]
+    Normal = 0,     // Długie okno (Long)
+    Start = 1,      // Okno przejściowe (Start)
+    Short = 2,      // Trzy krótkie okna (Short) - TO JEST TWÓJ "SPECIAL CASE"
+    Stop = 3,       // Okno kończące (Stop)
+}
+
 /// 12-point IMDCT for MP3 short blocks (fixed-point)
 ///
 /// Input:  exactly 18 coefficients (only indices 0,3,6,9,12,15 used)
@@ -274,7 +284,7 @@ pub struct SideInfoSub {
     pub global_gain: i32, /* overall gain for dequantizer */
     pub sfCompress: i32, /* unpacked to figure out number of bits in scale factors */
     pub win_switch_flag: i32, /* window switching flag */
-    pub blockType: i32, /* block type */
+    pub blockType: BlockType, /* block type */
     pub mixedBlock: i32, /* 0 = regular block (all short or long), 1 = mixed block */
     pub tableSelect: [i32; 3], /* index of Huffman tables for the big values regions */
     pub subBlockGain: [i32; 3], /* subblock gain offset, relative to global gain */
@@ -336,21 +346,9 @@ pub struct IMDCTInfo {
     pub outBuf: [[[i32; NBANDS]; BLOCK_SIZE]; MAX_NCHAN], /* output of IMDCT */
     pub overBuf: [[i32; MAX_NSAMP / 2]; MAX_NCHAN], /* overlap-add buffer (by symmetry, only need 1/2 size) */
     pub numPrevIMDCT: [i32; MAX_NCHAN], /* how many IMDCT's calculated in this channel on prev. granule */
-    pub prevType: [i32; MAX_NCHAN],
+    pub prevType: [BlockType; MAX_NCHAN],
     pub prevWinSwitch: [i32; MAX_NCHAN],
     pub gb: [i32; MAX_NCHAN],
-}
-
-#[repr(C)]
-struct BlockCount {
-    n_blocks_long: i32,
-    n_blocks_total: i32,
-    n_blocks_prev: i32,
-    prev_type: i32,
-    prev_win_switch: i32,
-    curr_win_switch: i32,
-    gb_in: i32,
-    gb_out: i32,
 }
 
 #[repr(C)]
@@ -1060,13 +1058,10 @@ const IMDCT_WIN: [[u32; 36]; 4] = [
 pub fn win_previous(
     x_prev: &mut [i32; BLOCK_SIZE / 2],
     x_prev_win: &mut [i32; BLOCK_SIZE],
-    bt_prev: usize,
+    bt_prev: BlockType,
 ) {
-    if bt_prev >= 4 {
-        return;
-    }
-
-    if bt_prev == 2 {
+    match bt_prev {
+    BlockType::Short => {
         // Special case for short blocks – explicit unrolled version matching the original
         let w = IMDCT_WIN[2];
 
@@ -1085,12 +1080,12 @@ pub fn win_previous(
 
         // Zero the unused upper part (original sets 12..17 to 0)
         x_prev_win[12..].fill(0);
-    }
-    {
+    },
+    t => {
         // Long blocks (0, 1, 3) – symmetric windowing
         // wpLo points to imdctWin[btPrev] + 18
         // wpHi points to imdctWin[btPrev] + 35 (i.e. wpLo + 17 backwards)
-        let win = IMDCT_WIN[bt_prev];
+        let win = IMDCT_WIN[t as usize];
         let wp_lo = &win[18..36]; // 18 elements forward
         let wp_hi = &win[18..36][..18]; // same range, but we will iterate backwards
 
@@ -1108,6 +1103,7 @@ pub fn win_previous(
             hi_idx -= 1;
         }
     }
+}
 }
 
 #[repr(C)]
@@ -1590,7 +1586,7 @@ impl MP3Decoder {
                 sis.win_switch_flag = bsi.get_bits(1) as i32;
                 if sis.win_switch_flag != 0 {
                     /* this is a start, stop, short, or mixed block */
-                    sis.blockType = bsi.get_bits(2) as i32; /* 0 = normal, 1 = start, 2 = short, 3 = stop */
+                    sis.blockType = match bsi.get_bits(2) { 0 => BlockType::Normal, 1 => BlockType::Start, 2 => BlockType::Short, 3 => BlockType::Stop, _ => unreachable!("") }; /* 0 = normal, 1 = start, 2 = short, 3 = stop */
                     sis.mixedBlock = bsi.get_bits(1) as i32; /* 0 = not mixed, 1 = mixed */
                     sis.tableSelect[0] = bsi.get_bits(5) as i32;
                     sis.tableSelect[1] = bsi.get_bits(5) as i32;
@@ -1598,12 +1594,12 @@ impl MP3Decoder {
                     sis.subBlockGain[0] = bsi.get_bits(3) as i32;
                     sis.subBlockGain[1] = bsi.get_bits(3) as i32;
                     sis.subBlockGain[2] = bsi.get_bits(3) as i32;
-                    if sis.blockType == 0 {
+                    if sis.blockType == BlockType::Normal {
                         /* this should not be allowed, according to spec */
                         sis.n_bigvals = 0;
                         sis.part23_length = 0;
                         sis.sfCompress = 0;
-                    } else if sis.blockType == 2 && sis.mixedBlock == 0 {
+                    } else if sis.blockType == BlockType::Short && sis.mixedBlock == 0 {
                         /* short block, not mixed */
                         sis.region0Count = 8;
                     } else {
@@ -1613,7 +1609,7 @@ impl MP3Decoder {
                     sis.region1Count = 20 - sis.region0Count;
                 } else {
                     /* this is a normal block */
-                    sis.blockType = 0;
+                    sis.blockType = BlockType::Normal;
                     sis.mixedBlock = 0;
                     sis.tableSelect[0] = bsi.get_bits(5) as i32;
                     sis.tableSelect[1] = bsi.get_bits(5) as i32;

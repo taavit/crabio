@@ -4,15 +4,7 @@ use core::panic::PanicInfo;
 
 use crabio::{
     mp3_decoder::{
-        BLOCK_SIZE, CriticalBandInfo, ERR_MP3_FREE_BITRATE_SYNC, ERR_MP3_INDATA_UNDERFLOW,
-        ERR_MP3_INVALID_DEQUANTIZE, ERR_MP3_INVALID_FRAMEHEADER, ERR_MP3_INVALID_HUFFCODES,
-        ERR_MP3_INVALID_IMDCT, ERR_MP3_INVALID_SCALEFACT, ERR_MP3_INVALID_SIDEINFO,
-        ERR_MP3_INVALID_SUBBAND, ERR_MP3_MAINDATA_UNDERFLOW, ERR_MP3_NONE, FrameHeader,
-        HUFF_PAIRTABS, HuffTabLookup, HuffTabType, HuffmanInfo, IMDCT_SCALE, IMDCTInfo, MAX_NCHAN,
-        MAX_NGRAN, MAX_NSAMP, MAX_SCFBD, MP3DecInfo, MP3Decoder, MPEGVersion, NBANDS, SFBandTable,
-        SQRTHALF, ScaleFactorInfoSub, ScaleFactorJS, SideInfo, SideInfoSub, clip_2n,
-        freq_invert_rescale, idct_9, imdct_12, mp3_find_free_sync, mp3_find_sync_word, mulshift_32,
-        win_previous,
+        BLOCK_SIZE, BlockType, CriticalBandInfo, ERR_MP3_FREE_BITRATE_SYNC, ERR_MP3_INDATA_UNDERFLOW, ERR_MP3_INVALID_DEQUANTIZE, ERR_MP3_INVALID_FRAMEHEADER, ERR_MP3_INVALID_HUFFCODES, ERR_MP3_INVALID_IMDCT, ERR_MP3_INVALID_SCALEFACT, ERR_MP3_INVALID_SIDEINFO, ERR_MP3_INVALID_SUBBAND, ERR_MP3_MAINDATA_UNDERFLOW, ERR_MP3_NONE, FrameHeader, HUFF_PAIRTABS, HuffTabLookup, HuffTabType, HuffmanInfo, IMDCT_SCALE, IMDCTInfo, MAX_NCHAN, MAX_NGRAN, MAX_NSAMP, MAX_SCFBD, MP3DecInfo, MP3Decoder, MPEGVersion, NBANDS, SFBandTable, SQRTHALF, ScaleFactorInfoSub, ScaleFactorJS, SideInfo, SideInfoSub, clip_2n, freq_invert_rescale, idct_9, imdct_12, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, win_previous
     },
     utils::bit_stream_cache::BitStreamInfo,
 };
@@ -43,7 +35,7 @@ pub struct BlockCount {
     nBlocksLong: i32,
     nBlocksTotal: i32,
     nBlocksPrev: i32,
-    prevType: i32,
+    prev_type: BlockType,
     prevWinSwitch: i32,
     currWinSwitch: i32,
     gbIn: i32,
@@ -197,7 +189,7 @@ pub fn unpack_sfmpeg1(
     /* these can be 0, so make sure GetBits(bsi, 0) returns 0 (no >> 32 or anything) */
     slen0 = M_SFLEN_TAB[sis.sfCompress as usize][0] as i32;
     slen1 = M_SFLEN_TAB[sis.sfCompress as usize][1] as i32;
-    if sis.blockType == 2 {
+    if sis.blockType == BlockType::Short {
         /* short block, type 2 (implies winSwitchFlag == 1) */
         if sis.mixedBlock != 0 {
             /* do long block portion */
@@ -381,7 +373,7 @@ pub fn unpack_sfmpeg2(
 
     /* btIdx: (0,1,3) --> 0, (2 non-mixed) --> 1, (2 mixed) ---> 2 */
     bt_idx = 0;
-    if sis.blockType == 2 {
+    if sis.blockType == BlockType::Short {
         bt_idx = if sis.mixedBlock != 0 { 2 } else { 1 };
     }
 
@@ -401,7 +393,7 @@ pub fn unpack_sfmpeg2(
     sis.preFlag = pre_flag;
 
     /* Rozpakowywanie skal */
-    if sis.blockType == 2 {
+    if sis.blockType == BlockType::Short {
         if sis.mixedBlock != 0 {
             /* Część dla bloków długich (long) */
             for sfb in 0..6 {
@@ -1488,7 +1480,7 @@ pub unsafe fn DecodeHuffman(
         return -1;
     }
 
-    if sis.win_switch_flag != 0 && sis.blockType == 2 {
+    if sis.win_switch_flag != 0 && sis.blockType == BlockType::Short {
         // Short blocks lub mixed blocks
         if sis.mixedBlock == 0 {
             // Czyste short blocks
@@ -1652,8 +1644,8 @@ pub fn imdct36(
     x_curr: &mut [i32; BLOCK_SIZE],
     x_prev: &mut [i32; BLOCK_SIZE / 2],
     y: &mut [i32],
-    bt_curr: i32,
-    bt_prev: i32,
+    bt_curr: BlockType,
+    bt_prev: BlockType,
     block_idx: i32,
     gb: i32,
 ) -> i32 {
@@ -1709,7 +1701,7 @@ pub fn imdct36(
     let mut xp_idx = 8;
     let mut cp_idx = 8;
     let mut m_out = 0;
-    if bt_prev == 0 && bt_curr == 0 {
+    if bt_prev == BlockType::Normal && bt_curr == BlockType::Normal {
         /* fast path - use symmetry of sin window to reduce windowing multiplies to 18 (N/2) */
         for (i, e) in FAST_WIN36.chunks_exact(2).enumerate() {
             /* do ARM-style pointer arithmetic (i still needed for y[] indexing - compiler spills if 2 y pointers) */
@@ -1739,7 +1731,7 @@ pub fn imdct36(
         /* slower method - either prev or curr is using window type != 0 so do full 36-point window
          * output xPrevWin has at least 3 guard bits (xPrev has 2, gain 1 in WinPrevious)
          */
-        win_previous(x_prev, &mut x_prev_win, bt_prev as usize);
+        win_previous(x_prev, &mut x_prev_win, bt_prev);
 
         let wp = IMDCT_WIN[bt_curr as usize];
         for i in 0..9 {
@@ -1861,12 +1853,12 @@ pub fn hybrid_transform(
     while i < bc.nBlocksLong {
         let mut curr_win_idx = sis.blockType;
         if sis.mixedBlock != 0 && i < bc.currWinSwitch {
-            curr_win_idx = 0;
+            curr_win_idx = BlockType::Normal;
         }
 
-        let mut prev_win_idx = bc.prevType;
+        let mut prev_win_idx = bc.prev_type;
         if i < bc.prevWinSwitch {
-            prev_win_idx = 0;
+            prev_win_idx = BlockType::Normal;
         }
 
         // Adresowanie y[0][i] w tablicy y[18][32] to po prostu y + i
@@ -1886,9 +1878,9 @@ pub fn hybrid_transform(
 
     // 2. Bloki krótkie (Short Blocks)
     while i < bc.nBlocksTotal {
-        let mut prev_win_idx = bc.prevType;
+        let mut prev_win_idx = bc.prev_type;
         if i < bc.prevWinSwitch {
-            prev_win_idx = 0;
+            prev_win_idx = BlockType::Normal;
         }
 
         m_out |= imdct12x3(
@@ -1906,12 +1898,12 @@ pub fn hybrid_transform(
 
     // 3. Okienkowanie i Overlap dla pozostałych bloków poprzednich
     while i < bc.nBlocksPrev {
-        let mut prev_win_idx = bc.prevType;
+        let mut prev_win_idx = bc.prev_type;
         if i < bc.prevWinSwitch {
-            prev_win_idx = 0;
+            prev_win_idx = BlockType::Normal;
         }
 
-        win_previous(&mut x_prev[i as usize], &mut x_prev_win, prev_win_idx as usize);
+        win_previous(&mut x_prev[i as usize], &mut x_prev_win, prev_win_idx);
 
         let mut non_zero = 0i32;
         let fi_bit = (i as i32) << 31;
@@ -1961,7 +1953,7 @@ pub fn imdct12x3(
     x_curr: &mut [i32; 18],
     x_prev: &mut [i32; 9],
     y: &mut [i32],
-    bt_prev: i32,
+    bt_prev: BlockType,
     block_idx: i32,
     gb: i32,
 ) -> i32 {
@@ -1989,7 +1981,7 @@ pub fn imdct12x3(
     imdct_12(&x_curr[2..18].try_into().unwrap(), &mut c1[2]); // Block 2
 
     // 3. Okienkowanie poprzedniego bloku (Overlap z poprzedniej ramki)
-    win_previous(x_prev, &mut x_prev_win, bt_prev as usize);
+    win_previous(x_prev, &mut x_prev_win, bt_prev);
     // Pobranie wskaźnika do okna krótkiego (index 2)
     let wp = IMDCT_WIN[2];
     let mut m_out = 0i32;
@@ -2058,7 +2050,7 @@ pub fn imdct(
         nBlocksLong: 0,
         nBlocksTotal: 0,
         nBlocksPrev: 0,
-        prevType: 0,
+        prev_type: BlockType::Normal,
         prevWinSwitch: 0,
         currWinSwitch: 0,
         gbIn: 0,
@@ -2077,12 +2069,12 @@ pub fn imdct(
     };
     let block_cutoff = (sfb.l[cutoff_idx] as i32) / 18;
 
-    if sis.blockType != 2 {
+    if sis.blockType != BlockType::Short {
         /* all long transforms */
         let x = (m_huffman_info.non_zero_bound[ch as usize] + 7) / 18 + 1;
         bc.nBlocksLong = if x < 32 { x } else { 32 };
         n_bfly = bc.nBlocksLong - 1;
-    } else if sis.blockType == 2 && sis.mixedBlock != 0 {
+    } else if sis.blockType == BlockType::Short && sis.mixedBlock != 0 {
         /* mixed block */
         bc.nBlocksLong = block_cutoff;
         n_bfly = bc.nBlocksLong - 1;
@@ -2106,7 +2098,7 @@ pub fn imdct(
     // bc setup
     bc.nBlocksTotal = (m_huffman_info.non_zero_bound[ch as usize] + 17) / 18;
     bc.nBlocksPrev = m_imdctinfo.numPrevIMDCT[ch as usize];
-    bc.prevType = m_imdctinfo.prevType[ch as usize];
+    bc.prev_type = m_imdctinfo.prevType[ch as usize];
     bc.prevWinSwitch = m_imdctinfo.prevWinSwitch[ch as usize];
     bc.currWinSwitch = if sis.mixedBlock != 0 { block_cutoff } else { 0 };
     // Założenie: HuffmanInfo ma pole gb (guard bits)
@@ -2443,7 +2435,7 @@ pub fn dequant_channel(
     let cb_end_s: i32;
 
     // 1. Ustalenie granic dla bloków długich i krótkich
-    if sis.blockType == 2 {
+    if sis.blockType == BlockType::Short {
         if sis.mixedBlock != 0 {
             cb_end_l = if m_mpegversion == MPEGVersion::MPEG1 {
                 8
