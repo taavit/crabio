@@ -4,7 +4,15 @@ use core::panic::PanicInfo;
 
 use crabio::{
     mp3_decoder::{
-        BLOCK_SIZE, BlockType, CriticalBandInfo, ERR_MP3_FREE_BITRATE_SYNC, ERR_MP3_INDATA_UNDERFLOW, ERR_MP3_INVALID_DEQUANTIZE, ERR_MP3_INVALID_FRAMEHEADER, ERR_MP3_INVALID_HUFFCODES, ERR_MP3_INVALID_IMDCT, ERR_MP3_INVALID_SCALEFACT, ERR_MP3_INVALID_SIDEINFO, ERR_MP3_INVALID_SUBBAND, ERR_MP3_MAINDATA_UNDERFLOW, ERR_MP3_NONE, FrameHeader, HUFF_PAIRTABS, HuffTabLookup, HuffTabType, HuffmanInfo, IMDCT_SCALE, IMDCTInfo, MAX_NCHAN, MAX_NGRAN, MAX_NSAMP, MAX_SCFBD, MP3DecInfo, MP3Decoder, MPEGVersion, NBANDS, SFBandTable, SQRTHALF, ScaleFactorInfoSub, ScaleFactorJS, SideInfo, SideInfoSub, clip_2n, freq_invert_rescale, idct_9, imdct_12, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, win_previous
+        BLOCK_SIZE, BlockType, ChannelIndex, CriticalBandInfo, ERR_MP3_FREE_BITRATE_SYNC,
+        ERR_MP3_INDATA_UNDERFLOW, ERR_MP3_INVALID_DEQUANTIZE, ERR_MP3_INVALID_FRAMEHEADER,
+        ERR_MP3_INVALID_HUFFCODES, ERR_MP3_INVALID_IMDCT, ERR_MP3_INVALID_SCALEFACT,
+        ERR_MP3_INVALID_SIDEINFO, ERR_MP3_INVALID_SUBBAND, ERR_MP3_MAINDATA_UNDERFLOW,
+        ERR_MP3_NONE, FrameHeader, GranuleIndex, HUFF_PAIRTABS, HuffTabLookup,
+        HuffTabType, HuffmanInfo, IMDCT_SCALE, IMDCTInfo, MAX_NCHAN, MAX_NGRAN, MAX_NSAMP,
+        MAX_SCFBD, MP3DecInfo, MP3Decoder, MPEGVersion, NBANDS, SFBandTable, SQRTHALF,
+        ScaleFactorInfoSub, ScaleFactorJS, SideInfo, SideInfoSub, clip_2n, freq_invert_rescale,
+        idct_9, imdct_12, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, win_previous,
     },
     utils::bit_stream_cache::BitStreamInfo,
 };
@@ -40,13 +48,6 @@ pub struct BlockCount {
     currWinSwitch: i32,
     gbIn: i32,
     gbOut: i32,
-}
-
-pub struct BitStreamInfoC {
-    pub byte_ptr: *const u8, // unsigned char *bytePtr;
-    pub i_cache: u32,        // unsigned int iCache;
-    pub cached_bits: i32,    // int cachedBits;
-    pub n_bytes: i32,        // int nBytes;
 }
 
 #[unsafe(no_mangle)]
@@ -179,8 +180,8 @@ pub fn unpack_sfmpeg1(
     sis: &SideInfoSub,
     m_scale_factor_info_sub: &mut [[ScaleFactorInfoSub; MAX_NCHAN]; MAX_NGRAN],
     scfsi: &[i32; MAX_SCFBD],
-    gr: usize,
-    ch: usize,
+    gr: GranuleIndex,
+    ch: ChannelIndex,
 ) {
     let sfb: usize;
     let slen0: i32;
@@ -194,7 +195,8 @@ pub fn unpack_sfmpeg1(
         if sis.mixedBlock != 0 {
             /* do long block portion */
             for sfb in 0..8 {
-                m_scale_factor_info_sub[gr][ch].l[sfb] = bsi.get_bits(slen0 as u32) as u8;
+                m_scale_factor_info_sub[gr as usize][ch as usize].l[sfb] =
+                    bsi.get_bits(slen0 as u32) as u8;
             }
             sfb = 3;
         } else {
@@ -202,28 +204,36 @@ pub fn unpack_sfmpeg1(
             sfb = 0;
         }
         for sfb in sfb..6 {
-            m_scale_factor_info_sub[gr][ch].s[sfb][0] = bsi.get_bits(slen0 as u32) as u8;
-            m_scale_factor_info_sub[gr][ch].s[sfb][1] = bsi.get_bits(slen0 as u32) as u8;
-            m_scale_factor_info_sub[gr][ch].s[sfb][2] = bsi.get_bits(slen0 as u32) as u8;
+            m_scale_factor_info_sub[gr as usize][ch as usize].s[sfb][0] =
+                bsi.get_bits(slen0 as u32) as u8;
+            m_scale_factor_info_sub[gr as usize][ch as usize].s[sfb][1] =
+                bsi.get_bits(slen0 as u32) as u8;
+            m_scale_factor_info_sub[gr as usize][ch as usize].s[sfb][2] =
+                bsi.get_bits(slen0 as u32) as u8;
         }
         for sfb in 6..12 {
-            m_scale_factor_info_sub[gr][ch].s[sfb][0] = bsi.get_bits(slen1 as u32) as u8;
-            m_scale_factor_info_sub[gr][ch].s[sfb][1] = bsi.get_bits(slen1 as u32) as u8;
-            m_scale_factor_info_sub[gr][ch].s[sfb][2] = bsi.get_bits(slen1 as u32) as u8;
+            m_scale_factor_info_sub[gr as usize][ch as usize].s[sfb][0] =
+                bsi.get_bits(slen1 as u32) as u8;
+            m_scale_factor_info_sub[gr as usize][ch as usize].s[sfb][1] =
+                bsi.get_bits(slen1 as u32) as u8;
+            m_scale_factor_info_sub[gr as usize][ch as usize].s[sfb][2] =
+                bsi.get_bits(slen1 as u32) as u8;
         }
         /* last sf band not transmitted */
-        m_scale_factor_info_sub[gr][ch].s[12][0] = 0;
-        m_scale_factor_info_sub[gr][ch].s[12][1] = 0;
-        m_scale_factor_info_sub[gr][ch].s[12][2] = 0;
+        m_scale_factor_info_sub[gr as usize][ch as usize].s[12][0] = 0;
+        m_scale_factor_info_sub[gr as usize][ch as usize].s[12][1] = 0;
+        m_scale_factor_info_sub[gr as usize][ch as usize].s[12][2] = 0;
     } else {
         /* long blocks, type 0, 1, or 3 */
-        if gr == 0 {
+        if gr == GranuleIndex::Granule0 {
             /* first granule */
             for sfb in 0..11 {
-                m_scale_factor_info_sub[gr][ch].l[sfb] = bsi.get_bits(slen0 as u32) as u8;
+                m_scale_factor_info_sub[gr as usize][ch as usize].l[sfb] =
+                    bsi.get_bits(slen0 as u32) as u8;
             }
             for sfb in 11..21 {
-                m_scale_factor_info_sub[gr][ch].l[sfb] = bsi.get_bits(slen1 as u32) as u8;
+                m_scale_factor_info_sub[gr as usize][ch as usize].l[sfb] =
+                    bsi.get_bits(slen1 as u32) as u8;
             }
             return;
         } else {
@@ -234,46 +244,54 @@ pub fn unpack_sfmpeg1(
              */
             if scfsi[0] != 0 {
                 for sfb in 0..6 {
-                    m_scale_factor_info_sub[gr][ch].l[sfb] = m_scale_factor_info_sub[0][ch].l[sfb];
+                    m_scale_factor_info_sub[gr as usize][ch as usize].l[sfb] =
+                        m_scale_factor_info_sub[0][ch as usize].l[sfb];
                 }
             } else {
                 for sfb in 0..6 {
-                    m_scale_factor_info_sub[gr][ch].l[sfb] = bsi.get_bits(slen0 as u32) as u8;
+                    m_scale_factor_info_sub[gr as usize][ch as usize].l[sfb] =
+                        bsi.get_bits(slen0 as u32) as u8;
                 }
             }
 
             if scfsi[1] != 0 {
                 for sfb in 6..11 {
-                    m_scale_factor_info_sub[gr][ch].l[sfb] = m_scale_factor_info_sub[0][ch].l[sfb];
+                    m_scale_factor_info_sub[gr as usize][ch as usize].l[sfb] =
+                        m_scale_factor_info_sub[0][ch as usize].l[sfb];
                 }
             } else {
                 for sfb in 6..11 {
-                    m_scale_factor_info_sub[gr][ch].l[sfb] = bsi.get_bits(slen0 as u32) as u8;
+                    m_scale_factor_info_sub[gr as usize][ch as usize].l[sfb] =
+                        bsi.get_bits(slen0 as u32) as u8;
                 }
             }
             if scfsi[2] != 0 {
                 for sfb in 11..16 {
-                    m_scale_factor_info_sub[gr][ch].l[sfb] = m_scale_factor_info_sub[0][ch].l[sfb];
+                    m_scale_factor_info_sub[gr as usize][ch as usize].l[sfb] =
+                        m_scale_factor_info_sub[0][ch as usize].l[sfb];
                 }
             } else {
                 for sfb in 11..16 {
-                    m_scale_factor_info_sub[gr][ch].l[sfb] = bsi.get_bits(slen1 as u32) as u8;
+                    m_scale_factor_info_sub[gr as usize][ch as usize].l[sfb] =
+                        bsi.get_bits(slen1 as u32) as u8;
                 }
             }
 
             if scfsi[3] != 0 {
                 for sfb in 16..21 {
-                    m_scale_factor_info_sub[gr][ch].l[sfb] = m_scale_factor_info_sub[0][ch].l[sfb];
+                    m_scale_factor_info_sub[gr as usize][ch as usize].l[sfb] =
+                        m_scale_factor_info_sub[0][ch as usize].l[sfb];
                 }
             } else {
                 for sfb in 16..21 {
-                    m_scale_factor_info_sub[gr][ch].l[sfb] = bsi.get_bits(slen1 as u32) as u8;
+                    m_scale_factor_info_sub[gr as usize][ch as usize].l[sfb] =
+                        bsi.get_bits(slen1 as u32) as u8;
                 }
             }
         }
         /* last sf band not transmitted */
-        m_scale_factor_info_sub[gr][ch].l[21] = 0;
-        m_scale_factor_info_sub[gr][ch].l[22] = 0;
+        m_scale_factor_info_sub[gr as usize][ch as usize].l[21] = 0;
+        m_scale_factor_info_sub[gr as usize][ch as usize].l[22] = 0;
     }
 }
 
@@ -300,8 +318,8 @@ pub fn unpack_sfmpeg2(
     bsi: &mut BitStreamInfo,
     sis: &mut SideInfoSub,
     sfis: &mut ScaleFactorInfoSub,
-    _gr: i32, // nieużywane, zachowane dla sygnatury
-    ch: i32,
+    _gr: GranuleIndex, // nieużywane, zachowane dla sygnatury
+    ch: ChannelIndex,
     mode_ext: usize,
     sfjs: &mut ScaleFactorJS,
 ) {
@@ -317,7 +335,7 @@ pub fn unpack_sfmpeg2(
     let mut intensity_scale = 0;
 
     /* stereo mode bits (1 = on): bit 1 = mid-side on/off, bit 0 = intensity on/off */
-    if !((mode_ext & 0x01 != 0) && (ch == 1)) {
+    if !((mode_ext & 0x01 != 0) && (ch == ChannelIndex::Channel1)) {
         if sf_compress < 400 {
             slen[0] = (sf_compress >> 4) / 5;
             slen[1] = (sf_compress >> 4) % 5;
@@ -383,7 +401,7 @@ pub fn unpack_sfmpeg2(
     }
 
     /* save intensity stereo scale factor info */
-    if (mode_ext & 0x01 != 0) && (ch == 1) {
+    if (mode_ext & 0x01 != 0) && (ch == ChannelIndex::Channel1) {
         for i in 0..4 {
             sfjs.slen[i] = slen[i];
             sfjs.nr[i] = nr[i];
@@ -1426,7 +1444,7 @@ pub unsafe fn DecodeHuffmanQuads(
             vwxy[vwxy_idx + 2] = x;
             vwxy[vwxy_idx + 3] = y;
             i += 4;
-            vwxy_idx+=4;
+            vwxy_idx += 4;
         }
     }
 
@@ -1460,17 +1478,17 @@ pub unsafe fn DecodeHuffman(
     mut buf: *mut u8,
     bitOffset: *mut i32,
     huffBlockBits: i32,
-    gr: i32,
-    ch: i32,
+    gr: GranuleIndex,
+    ch: ChannelIndex,
     m_HuffmanInfo: &mut HuffmanInfo,
     m_SFBandTable: &SFBandTable, // SFBandTable_t*
     m_SideInfoSub: &mut [[SideInfoSub; MAX_NCHAN]; MAX_NGRAN],
     m_MPEGVersion: MPEGVersion,
 ) -> i32 {
     let mut rEnd = [0; 4];
-    let mut r1Start;
-    let mut r2Start;
-    let mut w;
+    let r1_start;
+    let r2_start;
+    let w;
     let mut bitsLeft;
     let startBuf = buf;
 
@@ -1484,22 +1502,22 @@ pub unsafe fn DecodeHuffman(
         // Short blocks lub mixed blocks
         if sis.mixedBlock == 0 {
             // Czyste short blocks
-            r1Start = m_SFBandTable.s[((sis.region0Count + 1) / 3) as usize] as i32 * 3;
+            r1_start = m_SFBandTable.s[((sis.region0Count + 1) / 3) as usize] as i32 * 3;
         } else {
             // Mixed block
             if m_MPEGVersion == MPEGVersion::MPEG1 {
-                r1Start = m_SFBandTable.l[(sis.region0Count + 1) as usize] as i32;
+                r1_start = m_SFBandTable.l[(sis.region0Count + 1) as usize] as i32;
             } else {
                 // MPEG2 / MPEG2.5 – spec wymaga specjalnego obliczenia
                 w = m_SFBandTable.s[4] as i32 - m_SFBandTable.s[3] as i32;
-                r1Start = m_SFBandTable.l[6] as i32 + 2 * w;
+                r1_start = m_SFBandTable.l[6] as i32 + 2 * w;
             }
         }
-        r2Start = MAX_NSAMP as i32; // short blocks nie mają regionu 2
+        r2_start = MAX_NSAMP as i32; // short blocks nie mają regionu 2
     } else {
         // Long blocks
-        r1Start = m_SFBandTable.l[(sis.region0Count + 1) as usize] as i32;
-        r2Start = m_SFBandTable.l[(sis.region0Count + 1 + sis.region1Count + 1) as usize] as i32;
+        r1_start = m_SFBandTable.l[(sis.region0Count + 1) as usize] as i32;
+        r2_start = m_SFBandTable.l[(sis.region0Count + 1 + sis.region1Count + 1) as usize] as i32;
     }
 
     /* offset rEnd index by 1 so first region = rEnd[1] - rEnd[0], etc. */
@@ -1508,8 +1526,16 @@ pub unsafe fn DecodeHuffman(
     } else {
         2 * sis.n_bigvals
     };
-    rEnd[2] = if r2Start < rEnd[3] { r2Start } else { rEnd[3] };
-    rEnd[1] = if r1Start < rEnd[3] { r1Start } else { rEnd[3] };
+    rEnd[2] = if r2_start < rEnd[3] {
+        r2_start
+    } else {
+        rEnd[3]
+    };
+    rEnd[1] = if r1_start < rEnd[3] {
+        r1_start
+    } else {
+        rEnd[3]
+    };
     rEnd[0] = 0;
 
     /* rounds up to first all-zero pair (we don't check last pair for (x,y) == (non-zero, zero)) */
@@ -1520,14 +1546,16 @@ pub unsafe fn DecodeHuffman(
 
     let mut bits_used;
     for i in 0..3 {
-        bits_used = DecodeHuffmanPairs(
-            &mut m_HuffmanInfo.huff_dec_buf[ch as usize]
-                [rEnd[i] as usize..rEnd[i] as usize + (rEnd[i + 1] - rEnd[i]) as usize],
-            sis.tableSelect[i],
-            bitsLeft,
-            buf,
-            *bitOffset,
-        );
+        bits_used = unsafe {
+            DecodeHuffmanPairs(
+                &mut m_HuffmanInfo.huff_dec_buf[ch as usize]
+                    [rEnd[i] as usize..rEnd[i] as usize + (rEnd[i + 1] - rEnd[i]) as usize],
+                sis.tableSelect[i],
+                bitsLeft,
+                buf,
+                *bitOffset,
+            )
+        };
         if (bits_used < 0 || bits_used > bitsLeft)
         /* error - overran end of bitstream */
         {
@@ -1541,14 +1569,16 @@ pub unsafe fn DecodeHuffman(
     }
 
     /* decode Huffman quads (if any) */
-    m_HuffmanInfo.non_zero_bound[ch as usize] += DecodeHuffmanQuads(
-        &mut m_HuffmanInfo.huff_dec_buf[ch as usize][rEnd[3] as usize..],
-        MAX_NSAMP as i32 - rEnd[3],
-        sis.count1TableSelect,
-        bitsLeft,
-        buf,
-        *bitOffset,
-    );
+    m_HuffmanInfo.non_zero_bound[ch as usize] += unsafe {
+        DecodeHuffmanQuads(
+            &mut m_HuffmanInfo.huff_dec_buf[ch as usize][rEnd[3] as usize..],
+            MAX_NSAMP as i32 - rEnd[3],
+            sis.count1TableSelect,
+            bitsLeft,
+            buf,
+            *bitOffset,
+        )
+    };
 
     assert!(m_HuffmanInfo.non_zero_bound[ch as usize] <= MAX_NSAMP as i32);
 
@@ -1834,6 +1864,7 @@ pub fn anti_alias(x: &mut [i32], n_bfly: usize) {
     }
 }
 
+#[unsafe(no_mangle)]
 pub fn hybrid_transform(
     x_curr: &mut [i32; MAX_NSAMP],
     x_prev: &mut [i32; MAX_NSAMP / 2],
@@ -1850,6 +1881,12 @@ pub fn hybrid_transform(
     let mut i = 0;
 
     // 1. Bloky długie (Long Blocks)
+    if bc.nBlocksLong > NBANDS as i32
+        || bc.nBlocksTotal > NBANDS as i32
+        || bc.nBlocksPrev > NBANDS as i32
+    {
+        return -1;
+    }
     while i < bc.nBlocksLong {
         let mut curr_win_idx = sis.blockType;
         if sis.mixedBlock != 0 && i < bc.currWinSwitch {
@@ -1935,8 +1972,8 @@ pub fn hybrid_transform(
     }
 
     // 4. Czyszczenie pozostałych bloków (do 32 pasm)
-    while i < 32 {
-        for j in 0..18 {
+    while i < NBANDS as i32 {
+        for j in 0..BLOCK_SIZE {
             y[j][i as usize] = 0;
         }
         i += 1;
@@ -1949,6 +1986,7 @@ pub fn hybrid_transform(
     n_blocks_out
 }
 
+#[unsafe(no_mangle)]
 pub fn imdct12x3(
     x_curr: &mut [i32; 18],
     x_prev: &mut [i32; 9],
@@ -1972,7 +2010,7 @@ pub fn imdct12x3(
             x_prev[i] >>= es;
         }
     }
-    
+
     // 2. Trzy transformaty IMDCT 12-punktowe
     // Dane wejściowe są przeplatane: b0[0], b1[0], b2[0], b0[1]...
     let (c1, _) = x_buf.as_chunks_mut::<6>();
@@ -2037,9 +2075,10 @@ pub fn imdct12x3(
     m_out
 }
 
+#[unsafe(no_mangle)]
 pub fn imdct(
-    gr: i32,
-    ch: i32,
+    gr: GranuleIndex,
+    ch: ChannelIndex,
     sfb: &SFBandTable,
     m_mpegversion: MPEGVersion,
     m_side_info_sub: &[[SideInfoSub; 2]; 2],
@@ -2176,12 +2215,7 @@ const POW2FRAC: [i32; 8] = [
     0x6597fa94, 0x50a28be6, 0x7fffffff, 0x6597fa94, 0x50a28be6, 0x7fffffff, 0x6597fa94, 0x50a28be6,
 ];
 
-pub fn dequant_block(
-    in_buf: &[i32],
-    out_buf: &mut [i32],
-    num: i32,
-    scale: i32,
-) -> i32 {
+pub fn dequant_block(in_buf: &[i32], out_buf: &mut [i32], num: i32, scale: i32) -> i32 {
     if num <= 0 {
         return 0;
     }
@@ -2295,12 +2329,7 @@ pub fn dequant_block(
     mask
 }
 
-
-pub fn dequant_block_in_place(
-    buf: &mut [i32],
-    num: i32,
-    scale: i32,
-) -> i32 {
+pub fn dequant_block_in_place(buf: &mut [i32], num: i32, scale: i32) -> i32 {
     if num <= 0 {
         return 0;
     }
@@ -2419,6 +2448,7 @@ const PRE_TAB: [u8; 22] = [
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 3, 3, 3, 2, 0,
 ];
 
+#[unsafe(no_mangle)]
 pub fn dequant_channel(
     sample_buf: &mut [i32; MAX_NSAMP],
     work_buf: &mut [i32],
@@ -2470,7 +2500,8 @@ pub fn dequant_channel(
 
     // 2. Dekwantyzacja bloków długich
     for cb in 0..cb_end_l {
-        let n_samps = (m_sf_band_table.l[(cb + 1) as usize] - m_sf_band_table.l[cb as usize]) as i32;
+        let n_samps =
+            (m_sf_band_table.l[(cb + 1) as usize] - m_sf_band_table.l[cb as usize]) as i32;
 
         let pre_val = if sis.preFlag != 0 {
             PRE_TAB[cb as usize] as i32
@@ -2479,11 +2510,7 @@ pub fn dequant_channel(
         };
         let gain_i = 210 - global_gain + s_multiplier * (sfis.l[cb as usize] as i32 + pre_val);
 
-        let non_zero = dequant_block_in_place(
-            &mut sample_buf[i..],
-            n_samps,
-            gain_i,
-        );
+        let non_zero = dequant_block_in_place(&mut sample_buf[i..], n_samps, gain_i);
 
         if non_zero != 0 {
             cb_max[0] = cb;
@@ -2509,7 +2536,8 @@ pub fn dequant_channel(
     // 3. Dekwantyzacja bloków krótkich
     cb_max = [cb_start_s, cb_start_s, cb_start_s];
     for cb in cb_start_s..cb_end_s {
-        let n_samps = (m_sf_band_table.s[(cb + 1) as usize] - m_sf_band_table.s[cb as usize]) as i32;
+        let n_samps =
+            (m_sf_band_table.s[(cb + 1) as usize] - m_sf_band_table.s[cb as usize]) as i32;
 
         for w in 0..3 {
             let gain_i = 210 - global_gain
@@ -2611,7 +2639,7 @@ const ISFIIP: [[i32; 2]; 2] = [
     [0x40000000, 0x00000000], /* mid-side off */
     [0x40000000, 0x40000000], /* mid-side on */
 ];
-
+#[unsafe(no_mangle)]
 pub fn intensity_proc_mpeg1(
     x: &mut [[i32; MAX_NSAMP]; MAX_NCHAN], // x[2][576]
     n_samps: i32,
@@ -2650,10 +2678,7 @@ pub fn intensity_proc_mpeg1(
         }
         let isf = sfis.l[cb] as usize;
         let (fl, fr) = if isf == 7 {
-            (
-                ISFIIP[mid_side_flag][0],
-                ISFIIP[mid_side_flag][1],
-            )
+            (ISFIIP[mid_side_flag][0], ISFIIP[mid_side_flag][1])
         } else {
             (isf_tab[isf], isf_tab[6] - isf_tab[isf])
         };
@@ -2719,6 +2744,7 @@ pub fn intensity_proc_mpeg1(
     m_out[1] = m_out_r;
 }
 
+#[unsafe(no_mangle)]
 pub fn intensity_proc_mpeg2(
     x: &mut [[i32; MAX_NSAMP]; MAX_NCHAN], // x[2][576]
     n_samps: i32,
@@ -2853,6 +2879,7 @@ pub fn intensity_proc_mpeg2(
     m_out[1] = m_out_r;
 }
 
+#[unsafe(no_mangle)]
 pub fn mid_side_proc(
     x: &mut [[i32; MAX_NSAMP]; MAX_NCHAN], // x[2][576]
     n_samps: usize,
@@ -2910,12 +2937,13 @@ pub fn mid_side_proc(
  * Return:      length (in bytes) of scale factor data, -1 if null input pointers
  **********************************************************************************************************************/
 
+#[unsafe(no_mangle)]
 pub unsafe fn unpack_scale_factors(
     mut buf: *mut u8,
     bit_offset: &mut i32,
     bits_avail: i32,
-    gr: i32,
-    ch: i32,
+    gr: GranuleIndex,
+    ch: ChannelIndex,
     m_side_info_sub: &mut [[SideInfoSub; 2]; 2],
     m_scale_factor_info_sub: &mut [[ScaleFactorInfoSub; 2]; 2],
     m_mp3_dec_info: &mut MP3DecInfo,
@@ -2940,8 +2968,8 @@ pub unsafe fn unpack_scale_factors(
             &mut m_side_info_sub[gr as usize][ch as usize],
             m_scale_factor_info_sub,
             &m_side_info.scfsi[ch as usize],
-            gr as usize,
-            ch as usize,
+            gr,
+            ch,
         );
     } else {
         unpack_sfmpeg2(
@@ -2977,8 +3005,8 @@ pub unsafe fn unpack_scale_factors(
  *
  * Return:      0 on success,  -1 if null input pointers
  **********************************************************************************************************************/
-
-pub fn mp3_dequantize(gr: i32, m_mp3_decoder: &mut MP3Decoder) -> i32 {
+#[unsafe(no_mangle)]
+pub fn mp3_dequantize(gr: GranuleIndex, m_mp3_decoder: &mut MP3Decoder) -> i32 {
     let di = &mut m_mp3_decoder.m_MP3DecInfo;
     let hi = &mut m_mp3_decoder.m_HuffmanInfo;
     let dqi = &mut m_mp3_decoder.m_DequantInfo;
@@ -3121,9 +3149,9 @@ pub unsafe fn MP3DecodeHelper(
     let outbuf = unsafe {
         core::slice::from_raw_parts_mut(
             outbuf,
-            (m_mp3_decoder.m_MP3DecInfo.nGrans
+            (m_mp3_decoder.m_MP3DecInfo.nGrans as i32
                 * m_mp3_decoder.m_MP3DecInfo.nGranSamps
-                * m_mp3_decoder.m_MP3DecInfo.nChans) as usize,
+                * m_mp3_decoder.m_MP3DecInfo.nChans as i32) as usize,
         )
     };
 
@@ -3138,11 +3166,13 @@ pub unsafe fn MP3DecodeHelper(
     if m_mp3_decoder.m_MP3DecInfo.bitrate == 0 || m_mp3_decoder.m_MP3DecInfo.freeBitrateFlag != 0 {
         if m_mp3_decoder.m_MP3DecInfo.freeBitrateFlag == 0 {
             m_mp3_decoder.m_MP3DecInfo.freeBitrateFlag = 1;
-            m_mp3_decoder.m_MP3DecInfo.freeBitrateSlots = unsafe { MP3FindFreeSync(
-                inbuf,
-                inbuf.offset(-(fh_bytes as isize) - (si_bytes as isize)),
-                *bytes_left,
-            ) };
+            m_mp3_decoder.m_MP3DecInfo.freeBitrateSlots = unsafe {
+                MP3FindFreeSync(
+                    inbuf,
+                    inbuf.offset(-(fh_bytes as isize) - (si_bytes as isize)),
+                    *bytes_left,
+                )
+            };
             if m_mp3_decoder.m_MP3DecInfo.freeBitrateSlots < 0 {
                 MP3ClearBadFrame(outbuf);
                 m_mp3_decoder.m_MP3DecInfo.freeBitrateFlag = 0;
@@ -3152,7 +3182,8 @@ pub unsafe fn MP3DecodeHelper(
                 m_mp3_decoder.m_MP3DecInfo.freeBitrateSlots + fh_bytes as i32 + si_bytes;
             m_mp3_decoder.m_MP3DecInfo.bitrate =
                 (free_frame_bytes * m_mp3_decoder.m_MP3DecInfo.samprate * 8)
-                    / (m_mp3_decoder.m_MP3DecInfo.nGrans * m_mp3_decoder.m_MP3DecInfo.nGranSamps);
+                    / (m_mp3_decoder.m_MP3DecInfo.nGrans as i32
+                        * m_mp3_decoder.m_MP3DecInfo.nGranSamps);
         }
         m_mp3_decoder.m_MP3DecInfo.nSlots = m_mp3_decoder.m_MP3DecInfo.freeBitrateSlots
             + m_mp3_decoder.m_FrameHeader.check_pad_bit();
@@ -3223,15 +3254,15 @@ pub unsafe fn MP3DecodeHelper(
     bit_offset = 0;
     main_bits = m_mp3_decoder.m_MP3DecInfo.mainDataBytes * 8;
     /* decode one complete frame */
-    for gr in 0..m_mp3_decoder.m_MP3DecInfo.nGrans {
-        for ch in 0..m_mp3_decoder.m_MP3DecInfo.nChans {
+    for gr in m_mp3_decoder.m_MP3DecInfo.nGrans.granules() {
+        for ch in m_mp3_decoder.m_MP3DecInfo.nChans.channels() {
             prev_bit_offset = bit_offset;
             offset = unpack_scale_factors(
                 main_ptr,
                 &mut bit_offset,
                 main_bits,
-                gr,
-                ch,
+                *gr,
+                *ch,
                 &mut m_mp3_decoder.m_SideInfoSub, // 1. Oczekiwany: *mut [[SideInfoSub; 2]; 2]
                 &mut m_mp3_decoder.m_ScaleFactorInfoSub, // 2. Oczekiwany: *mut [[ScaleFactorInfoSub; 2]; 2]
                 &mut m_mp3_decoder.m_MP3DecInfo,         // 3. Oczekiwany: *mut MP3DecInfo
@@ -3243,7 +3274,7 @@ pub unsafe fn MP3DecodeHelper(
 
             sf_block_bits = 8 * offset - prev_bit_offset + bit_offset;
             huff_block_bits =
-                m_mp3_decoder.m_MP3DecInfo.part23Length[gr as usize][ch as usize] - sf_block_bits;
+                m_mp3_decoder.m_MP3DecInfo.part23Length[*gr as usize][*ch as usize] - sf_block_bits;
             main_ptr = main_ptr.add(offset as usize);
             main_bits -= sf_block_bits;
 
@@ -3257,8 +3288,8 @@ pub unsafe fn MP3DecodeHelper(
                 main_ptr,
                 &mut bit_offset,
                 huff_block_bits,
-                gr,
-                ch,
+                *gr,
+                *ch,
                 &mut m_mp3_decoder.m_HuffmanInfo,
                 &mut m_mp3_decoder.m_SFBandTable,
                 &mut m_mp3_decoder.m_SideInfoSub,
@@ -3272,15 +3303,15 @@ pub unsafe fn MP3DecodeHelper(
             main_bits -= (8 * offset - prev_bit_offset + bit_offset);
         }
 
-        if mp3_dequantize(gr, m_mp3_decoder) < 0 {
+        if mp3_dequantize(*gr, m_mp3_decoder) < 0 {
             MP3ClearBadFrame(outbuf);
             return ERR_MP3_INVALID_DEQUANTIZE;
         }
 
-        for ch in 0..m_mp3_decoder.m_MP3DecInfo.nChans {
+        for ch in m_mp3_decoder.m_MP3DecInfo.nChans.channels() {
             if imdct(
-                gr,
-                ch,
+                *gr,
+                *ch,
                 &mut m_mp3_decoder.m_SFBandTable,
                 m_mp3_decoder.m_MPEGVersion,
                 &mut m_mp3_decoder.m_SideInfoSub,
@@ -3293,9 +3324,9 @@ pub unsafe fn MP3DecodeHelper(
             }
         }
 
-        let pcm_offset = (gr
+        let pcm_offset = (*gr as i32
             * m_mp3_decoder.m_MP3DecInfo.nGranSamps
-            * m_mp3_decoder.m_MP3DecInfo.nChans) as usize;
+            * m_mp3_decoder.m_MP3DecInfo.nChans as i32) as usize;
         if m_mp3_decoder.subband(&mut outbuf[pcm_offset..]) < 0 {
             MP3ClearBadFrame(outbuf);
             return ERR_MP3_INVALID_SUBBAND; // ERR_MP3_INVALID_SUBBAND

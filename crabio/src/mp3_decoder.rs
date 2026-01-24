@@ -1,3 +1,5 @@
+use core::ops::Index;
+
 use crate::utils::{bit_stream_cache::BitStreamInfo, clip_to_short::clip_to_short};
 
 pub const CHANNEL_MONO: usize = 0;
@@ -409,10 +411,17 @@ pub struct MP3Decoder {
  * Return:      offset to first sync word (bytes from start of buf)
  *              -1 if sync not found after searching nBytes
  **********************************************************************************************************************/
+#[unsafe(no_mangle)]
 pub fn mp3_find_sync_word(data: &[u8]) -> Option<&[u8]> {
-    data.windows(2)
-        .position(|w| w[0] == SYNCWORDH && (w[1] & SYNCWORDL) == SYNCWORDL)
-        .map(|pos| &data[pos..])
+    let mut tail = data;
+
+    while tail.len() >= 2 {
+        if tail[0] == SYNCWORDH && (tail[1] & SYNCWORDL) == SYNCWORDL {
+            return Some(tail);
+        }
+        tail = &tail[1..];
+    }
+    None
 }
 
 /***********************************************************************************************************************
@@ -1106,6 +1115,52 @@ pub fn win_previous(
 }
 }
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[repr(usize)]
+pub enum ChannelCount {
+    SingleChannel = 1,
+    DualChannel = 2,
+}
+
+impl ChannelCount {
+    pub fn channels(&self) -> &'static [ChannelIndex] {
+        match self {
+            ChannelCount::SingleChannel => &[ChannelIndex::Channel0],
+            ChannelCount::DualChannel => &[ChannelIndex::Channel0, ChannelIndex::Channel1],
+        }
+    }
+}
+
+impl GranuleCount {
+    pub fn granules(&self) -> &'static [GranuleIndex] {
+        match self {
+            GranuleCount::Mpeg1Granule => &[GranuleIndex::Granule0, GranuleIndex::Granule1],
+            GranuleCount::Mpeg2Granule => &[GranuleIndex::Granule0],
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[repr(usize)]
+pub enum GranuleCount {
+    Mpeg1Granule = 2,
+    Mpeg2Granule = 1,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(usize)]
+pub enum ChannelIndex {
+    Channel0 = 0,
+    Channel1 = 1,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(usize)]
+pub enum GranuleIndex {
+    Granule0 = 0,
+    Granule1 = 1,
+}
+
 #[repr(C)]
 #[allow(non_snake_case)]
 #[derive(Debug)]
@@ -1117,9 +1172,9 @@ pub struct MP3DecInfo {
     pub freeBitrateSlots: i32,
     /* user-accessible info */
     pub bitrate: i32,
-    pub nChans: i32,
+    pub nChans: ChannelCount,
     pub samprate: i32,
-    pub nGrans: i32,     /* granules per frame */
+    pub nGrans: GranuleCount,     /* granules per frame */
     pub nGranSamps: i32, /* samples per granule */
     pub nSlots: i32,
     pub layer: i32,
@@ -1244,7 +1299,7 @@ pub enum MPEGVersion {
 #[repr(C)]
 pub struct MP3FrameInfo {
     pub bitrate: i32,
-    pub nChans: i32,
+    pub n_chans: ChannelCount,
     pub samprate: i32,
     pub bitsPerSample: i32,
     pub outputSamps: i32,
@@ -1274,7 +1329,7 @@ pub enum StereoMode {
  *   - bitrate index == 0 is "free" mode (bitrate determined on the fly by
  *       counting bits between successive sync words)
  */
-const bitrateTab: [[[i16; 15]; 3]; 3] = [
+const BITRATE_TAB: [[[i16; 15]; 3]; 3] = [
     [
         /* MPEG-1 */
         [
@@ -1309,7 +1364,7 @@ const bitrateTab: [[[i16; 15]; 3]; 3] = [
  * for layer3, nSlots = floor(samps/frame * bitRate / sampleRate / 8)
  *   - add one pad slot if necessary
  */
-const slotTab: [[[i16; 15]; 3]; 3] = [
+const SLOT_TAB: [[[i16; 15]; 3]; 3] = [
     [
         /* MPEG-1 */
         [
@@ -1350,7 +1405,7 @@ const slotTab: [[[i16; 15]; 3]; 3] = [
 
 impl MP3Decoder {
     pub fn subband(&mut self, mut pcm_buf: &mut [i16]) -> i32 {
-        if self.m_MP3DecInfo.nChans == 2 {
+        if self.m_MP3DecInfo.nChans == ChannelCount::DualChannel {
             /* stereo */
             for b in 0..BLOCK_SIZE {
                 fdct_32(
@@ -1446,20 +1501,20 @@ impl MP3Decoder {
         }
         /* init user-accessible data */
         m_mp3_dec_info.nChans = if self.m_sMode == StereoMode::Mono {
-            1
+            ChannelCount::SingleChannel
         } else {
-            2
+            ChannelCount::DualChannel
         };
         m_mp3_dec_info.samprate =
             SAMPLERATE_TAB[self.m_MPEGVersion as usize][m_frame_header.srIdx as usize];
         m_mp3_dec_info.nGrans = if self.m_MPEGVersion == MPEGVersion::MPEG1 {
-            NGRANS_MPEG1 as i32
+            GranuleCount::Mpeg1Granule
         } else {
-            NGRANS_MPEG2 as i32
+            GranuleCount::Mpeg2Granule
         };
         m_mp3_dec_info.nGranSamps = (SAMPLES_PER_FRAME_TAB[self.m_MPEGVersion as usize]
             [(m_frame_header.layer - 1) as usize])
-            / m_mp3_dec_info.nGrans;
+            / m_mp3_dec_info.nGrans as i32;
         m_mp3_dec_info.layer = m_frame_header.layer;
 
         /* get bitrate and nSlots from table, unless brIdx == 0 (free mode) in which case caller must figure it out himself
@@ -1468,12 +1523,12 @@ impl MP3Decoder {
          *  this shouldn't be necessary, since it should be either all frames free or none free)
          */
         if m_frame_header.brIdx != 0 {
-            m_mp3_dec_info.bitrate = (bitrateTab[self.m_MPEGVersion as usize]
+            m_mp3_dec_info.bitrate = (BITRATE_TAB[self.m_MPEGVersion as usize]
                 [m_frame_header.layer as usize - 1][m_frame_header.brIdx as usize])
                 as i32
                 * 1000;
             /* nSlots = total frame bytes (from table) - sideInfo bytes - header - CRC (if present) + pad (if present) */
-            m_mp3_dec_info.nSlots = slotTab[self.m_MPEGVersion as usize]
+            m_mp3_dec_info.nSlots = SLOT_TAB[self.m_MPEGVersion as usize]
                 [m_frame_header.srIdx as usize][m_frame_header.brIdx as usize]
                 as i32
                 - SIDE_BYTES_TAB[self.m_MPEGVersion as usize][if self.m_sMode == StereoMode::Mono {
@@ -1513,7 +1568,7 @@ impl MP3Decoder {
     pub fn mp3_get_last_frame_info(&mut self) {
         if self.m_MP3DecInfo.layer != 3 {
             self.m_MP3FrameInfo.bitrate = 0;
-            self.m_MP3FrameInfo.nChans = 0;
+            self.m_MP3FrameInfo.n_chans = ChannelCount::SingleChannel;
             self.m_MP3FrameInfo.samprate = 0;
             self.m_MP3FrameInfo.bitsPerSample = 0;
             self.m_MP3FrameInfo.outputSamps = 0;
@@ -1521,10 +1576,10 @@ impl MP3Decoder {
             self.m_MP3FrameInfo.version = MPEGVersion::MPEG1;
         } else {
             self.m_MP3FrameInfo.bitrate = self.m_MP3DecInfo.bitrate;
-            self.m_MP3FrameInfo.nChans = self.m_MP3DecInfo.nChans;
+            self.m_MP3FrameInfo.n_chans = self.m_MP3DecInfo.nChans;
             self.m_MP3FrameInfo.samprate = self.m_MP3DecInfo.samprate;
             self.m_MP3FrameInfo.bitsPerSample = 16;
-            self.m_MP3FrameInfo.outputSamps = self.m_MP3DecInfo.nChans
+            self.m_MP3FrameInfo.outputSamps = self.m_MP3DecInfo.nChans as i32
                 * SAMPLES_PER_FRAME_TAB[self.m_MPEGVersion as usize]
                     [self.m_MP3DecInfo.layer as usize - 1] as i32;
             self.m_MP3FrameInfo.layer = self.m_MP3DecInfo.layer;
@@ -1555,9 +1610,9 @@ impl MP3Decoder {
             m_side_info.mainDataBegin = bsi.get_bits(9) as i32;
             m_side_info.privateBits =
                 bsi.get_bits(if m_s_mode == StereoMode::Mono { 5 } else { 3 }) as i32;
-            for ch in 0..m_mp3_dec_info.nChans {
+            for ch in 0..m_mp3_dec_info.nChans as usize {
                 for bd in 0..MAX_SCFBD {
-                    m_side_info.scfsi[ch as usize][bd] = bsi.get_bits(1) as i32;
+                    m_side_info.scfsi[ch][bd] = bsi.get_bits(1) as i32;
                 }
             }
         } else {
@@ -1572,8 +1627,8 @@ impl MP3Decoder {
             m_side_info.privateBits =
                 bsi.get_bits(if m_s_mode == StereoMode::Mono { 1 } else { 2 }) as i32;
         }
-        for gr in 0..m_mp3_dec_info.nGrans {
-            for ch in 0..m_mp3_dec_info.nChans {
+        for gr in 0..m_mp3_dec_info.nGrans as usize {
+            for ch in 0..m_mp3_dec_info.nChans as usize {
                 let sis = &mut m_side_info_sub[gr as usize][ch as usize]; /* side info subblock for this granule, channel */
                 sis.part23_length = bsi.get_bits(12) as i32;
                 sis.n_bigvals = bsi.get_bits(9) as i32;
@@ -1651,7 +1706,7 @@ mod unpack_frame_header_test {
             mainBuf: [0; MAINBUF_SIZE],
             mainDataBegin: 0,
             mainDataBytes: 0,
-            nChans: 0,
+            nChans: ChannelCount::SingleChannel,
             nGranSamps: 0,
             nGrans: 0,
             nSlots: 0,
@@ -1662,7 +1717,7 @@ mod unpack_frame_header_test {
             bitrate: 0,
             bitsPerSample: 0,
             layer: 0,
-            nChans: 0,
+            n_chans: 0,
             outputSamps: 0,
             samprate: 0,
             version: MPEGVersion::MPEG1,
