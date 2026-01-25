@@ -1881,10 +1881,7 @@ pub fn hybrid_transform(
     let mut i = 0;
 
     // 1. Bloky długie (Long Blocks)
-    if bc.nBlocksLong > NBANDS as i32
-        || bc.nBlocksTotal > NBANDS as i32
-        || bc.nBlocksPrev > NBANDS as i32
-    {
+    if bc.nBlocksLong > NBANDS as i32 || bc.nBlocksTotal > NBANDS as i32 || bc.nBlocksPrev > NBANDS as i32 {
         return -1;
     }
     while i < bc.nBlocksLong {

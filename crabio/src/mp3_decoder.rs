@@ -962,49 +962,57 @@ pub fn fdct_32(
     }
 }
 
+#[unsafe(no_mangle)]
 pub fn freq_invert_rescale(y_full: &mut [i32], x_prev: &mut [i32], block_idx: i32, es: i32) -> i32 {
     let is_odd_block = (block_idx & 0x01) == 0x01;
 
+    // --- CASE 1: Wyprostowana inwersja (es == 0) ---
     if es == 0 {
         if is_odd_block {
-            for row in 0..9 {
-                let idx = (2 * row + 1) * NBANDS;
-                if let Some(val) = y_full.get_mut(idx) {
-                    *val = val.wrapping_neg();
-                }
+            // Sprawdzamy zakres raz na początku (BCE)
+            // 17 * NBANDS + 1 to maksymalny indeks dla row=8 (2*8+1=17)
+            if y_full.len() >= 17 * NBANDS + 1 {
+                let y = y_full;
+                // Ręczny unroll 9 elementów - zero pętli w assemblerze!
+                // To usunie całą sekcję od 0x90 do 0xeb
+                y[1 * NBANDS] = y[1 * NBANDS].wrapping_neg();
+                y[3 * NBANDS] = y[3 * NBANDS].wrapping_neg();
+                y[5 * NBANDS] = y[5 * NBANDS].wrapping_neg();
+                y[7 * NBANDS] = y[7 * NBANDS].wrapping_neg();
+                y[9 * NBANDS] = y[9 * NBANDS].wrapping_neg();
+                y[11 * NBANDS] = y[11 * NBANDS].wrapping_neg();
+                y[13 * NBANDS] = y[13 * NBANDS].wrapping_neg();
+                y[15 * NBANDS] = y[15 * NBANDS].wrapping_neg();
+                y[17 * NBANDS] = y[17 * NBANDS].wrapping_neg();
             }
         }
         return 0;
     }
 
+    // --- CASE 2: Rescale i Clip (es > 0) ---
     let mut m_out = 0;
     let n_clip = (31 - es) as u32;
+    let limit_lo = -(1 << n_clip);
+    let limit_hi = (1 << n_clip) - 1;
 
-    for (i, xp) in x_prev.iter_mut().enumerate() {
-        let base = i * 2 * NBANDS;
+    // Używamy prostego iteratora zip, by uniknąć mnożenia i*2*NBANDS
+    let y_chunks = y_full.chunks_exact_mut(2 * NBANDS);
+    
+    for (xp, chunk) in x_prev.iter_mut().zip(y_chunks) {
+        // Pomagamy kompilatorowi z SAR - jedna operacja bitowa na starcie
+        let val_p = chunk[0].clamp(limit_lo, limit_hi) << es;
+        chunk[0] = val_p;
 
-        // --- Pierwszy wiersz (Parzysty) ---
-        if let Some(val) = y_full.get_mut(base) {
-            let d = clip_2n(*val, n_clip);
-            let res = d << es;
-            *val = res;
-            m_out |= res.abs();
-        }
+        let mut d_n = chunk[NBANDS];
+        if is_odd_block { d_n = d_n.wrapping_neg(); }
+        let val_n = d_n.clamp(limit_lo, limit_hi) << es;
+        chunk[NBANDS] = val_n;
 
-        if let Some(val) = y_full.get_mut(base + NBANDS) {
-            let mut d = *val;
-            if is_odd_block {
-                d = -d;
-            }
-            d = clip_2n(d, n_clip);
-            let res = d << es;
-            *val = res;
-            m_out |= res.abs();
-        }
+        let val_xp = (*xp).clamp(limit_lo, limit_hi) << es;
+        *xp = val_xp;
 
-        let d_xp = clip_2n(*xp, n_clip);
-        let res_xp = d_xp << es;
-        *xp = res_xp;
+        // Akumulacja m_out w jednej linii dla lepszego register-reuse
+        m_out |= val_p.abs() | val_n.abs() | val_xp.abs();
     }
 
     m_out
