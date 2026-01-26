@@ -772,7 +772,11 @@ pub fn fdct_32(
     odd_block: i32,
     gb: i32,
 ) {
+    const EXPECTED_LENGTH: usize = MAX_NCHAN * VBUF_LENGTH - 32;
     let dest_slice = &mut dest_slice[0..MAX_NCHAN * VBUF_LENGTH - 32];
+    if dest_slice.len() < EXPECTED_LENGTH {
+        return;
+    }
     let mut es = 0;
     if gb < 6 {
         es = 6 - gb;
