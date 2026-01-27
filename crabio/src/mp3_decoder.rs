@@ -493,7 +493,7 @@ pub fn mp3_find_free_sync(buf: &[u8], first_header: [u8; 4]) -> Option<usize> {
 #[unsafe(no_mangle)]
 pub fn polyphase_stereo(pcm: &mut [i16], vbuf: &[i32], coef: &[u32; 264]) {
     let rnd_val = 1 << ((DQ_FRACBITS_OUT - 2 - 2 - 15) - 1 + (32 - CSHIFT));
-    if vbuf.len() < 1064 {
+    if vbuf.len() < 1064 || pcm.len() < 64 {
         return;
     }
     let vbuf = &vbuf[..1064];
