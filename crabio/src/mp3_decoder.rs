@@ -491,9 +491,9 @@ pub fn mp3_find_free_sync(buf: &[u8], first_header: [u8; 4]) -> Option<usize> {
  **********************************************************************************************************************/
 
 #[unsafe(no_mangle)]
-pub fn polyphase_stereo(pcm: &mut [i16], vbuf: &[i32], coef: &[u32; 264]) {
+pub fn polyphase_stereo(pcm: &mut [i16; 64], vbuf: &[i32], coef: &[u32; 264]) {
     let rnd_val = 1 << ((DQ_FRACBITS_OUT - 2 - 2 - 15) - 1 + (32 - CSHIFT));
-    if vbuf.len() < 1064 || pcm.len() < 64 {
+    if vbuf.len() < 1064 {
         return;
     }
     let vbuf = &vbuf[..1064];
@@ -813,40 +813,39 @@ pub fn fdct_32(
     /* --- SECOND PASS: 4x8-point DCT --- */
     let cptr1: &[i32; 24] = &cptr_all[1];
     let (chunks, _) = buf_slice.as_chunks_mut::<8>();
+    let (cptr_chunks, _) = cptr1.as_chunks::<6>();
 
-    for (idx, buf_chunk) in chunks.iter_mut().enumerate() {
-        let chunk: &mut [i32; 8] = buf_chunk.try_into().unwrap();
-        let base = idx * 6;
+    for (buf_chunk, cptr) in chunks.iter_mut().zip(cptr_chunks) {
 
-        let b0 = chunk[0] + chunk[7];
-        let b7 = mulshift_32(cptr1[base], chunk[0] - chunk[7]) << 1;
-        let b3 = chunk[3] + chunk[4];
-        let b4 = mulshift_32(cptr1[base + 1], chunk[3] - chunk[4]) << 3;
+        let b0 = buf_chunk[0] + buf_chunk[7];
+        let b7 = mulshift_32(cptr[0], buf_chunk[0] - buf_chunk[7]) << 1;
+        let b3 = buf_chunk[3] + buf_chunk[4];
+        let b4 = mulshift_32(cptr[1], buf_chunk[3] - buf_chunk[4]) << 3;
 
         let t0 = b0 + b3;
-        let t3 = mulshift_32(cptr1[base + 2], b0 - b3) << 1;
+        let t3 = mulshift_32(cptr[2], b0 - b3) << 1;
         let t4 = b4 + b7;
-        let t7 = mulshift_32(cptr1[base + 2], b7 - b4) << 1;
+        let t7 = mulshift_32(cptr[2], b7 - b4) << 1;
 
-        let b1 = chunk[1] + chunk[6];
-        let b6 = mulshift_32(cptr1[base + 3], chunk[1] - chunk[6]) << 1;
-        let b2 = chunk[2] + chunk[5];
-        let b5 = mulshift_32(cptr1[base + 4], chunk[2] - chunk[5]) << 1;
+        let b1 = buf_chunk[1] + buf_chunk[6];
+        let b6 = mulshift_32(cptr[3], buf_chunk[1] - buf_chunk[6]) << 1;
+        let b2 = buf_chunk[2] + buf_chunk[5];
+        let b5 = mulshift_32(cptr[4], buf_chunk[2] - buf_chunk[5]) << 1;
 
         let t1 = b1 + b2;
-        let t2 = mulshift_32(cptr1[base + 5], b1 - b2) << 2;
+        let t2 = mulshift_32(cptr[5], b1 - b2) << 2;
         let t5 = b5 + b6;
-        let t6 = mulshift_32(cptr1[base + 5], b6 - b5) << 2;
+        let t6 = mulshift_32(cptr[5], b6 - b5) << 2;
 
         let bb0 = t0 + t1;
         let bb1 = mulshift_32(M_COS4_0, t0 - t1) << 1;
         let bb2 = t2 + t3;
         let bb3 = mulshift_32(M_COS4_0, t3 - t2) << 1;
 
-        chunk[0] = bb0;
-        chunk[1] = bb1;
-        chunk[2] = bb2 + bb3;
-        chunk[3] = bb3;
+        buf_chunk[0] = bb0;
+        buf_chunk[1] = bb1;
+        buf_chunk[2] = bb2 + bb3;
+        buf_chunk[3] = bb3;
 
         let bb4 = t4 + t5;
         let bb5 = mulshift_32(M_COS4_0, t4 - t5) << 1;
@@ -854,10 +853,10 @@ pub fn fdct_32(
         let bb7 = mulshift_32(M_COS4_0, t7 - t6) << 1;
         let bb6_sum = bb6 + bb7;
 
-        chunk[4] = bb4 + bb6_sum;
-        chunk[5] = bb5 + bb7;
-        chunk[6] = bb5 + bb6_sum;
-        chunk[7] = bb7;
+        buf_chunk[4] = bb4 + bb6_sum;
+        buf_chunk[5] = bb5 + bb7;
+        buf_chunk[6] = bb5 + bb6_sum;
+        buf_chunk[7] = bb7;
     }
 
     // Obliczanie bazowych offsetów dla d[]
@@ -1411,7 +1410,11 @@ impl MP3Decoder {
     pub fn subband(&mut self, mut pcm_buf: &mut [i16]) -> i32 {
         if self.m_MP3DecInfo.nChans == ChannelCount::DualChannel {
             /* stereo */
-            for b in 0..BLOCK_SIZE {
+            let (chunks, _) = pcm_buf.as_chunks_mut::<64>();
+            if chunks.len() < BLOCK_SIZE {
+                return -1;
+            }
+            for (b, chunk) in chunks.iter_mut().take(BLOCK_SIZE).enumerate() {
                 fdct_32(
                     &mut self.m_IMDCTInfo.outBuf[0][b],
                     &mut self.m_SubbandInfo.vbuf,
@@ -1427,13 +1430,12 @@ impl MP3Decoder {
                     self.m_IMDCTInfo.gb[1],
                 );
                 polyphase_stereo(
-                    pcm_buf,
+                    chunk,
                     &self.m_SubbandInfo.vbuf[self.m_SubbandInfo.vindex as usize
                         + VBUF_LENGTH * (b as i32 & 0x01) as usize..],
                     &POLY_COEF,
                 );
                 self.m_SubbandInfo.vindex = (self.m_SubbandInfo.vindex - (b as i32 & 0x01)) & 7;
-                pcm_buf = &mut pcm_buf[2 * NBANDS..];
             }
         } else {
             /* mono */
