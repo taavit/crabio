@@ -98,10 +98,10 @@ pub fn madd_64(sum64: u64, x: i32, y: i32) -> u64 {
 #[derive(Debug, PartialEq, Eq, Default, Clone, Copy)]
 pub enum BlockType {
     #[default]
-    Normal = 0,     // Długie okno (Long)
-    Start = 1,      // Okno przejściowe (Start)
-    Short = 2,      // Trzy krótkie okna (Short) - TO JEST TWÓJ "SPECIAL CASE"
-    Stop = 3,       // Okno kończące (Stop)
+    Normal = 0, // Długie okno (Long)
+    Start = 1, // Okno przejściowe (Start)
+    Short = 2, // Trzy krótkie okna (Short) - TO JEST TWÓJ "SPECIAL CASE"
+    Stop = 3,  // Okno kończące (Stop)
 }
 
 /// 12-point IMDCT for MP3 short blocks (fixed-point)
@@ -492,10 +492,10 @@ pub fn mp3_find_free_sync(buf: &[u8], first_header: [u8; 4]) -> Option<usize> {
 
 #[unsafe(no_mangle)]
 pub fn polyphase_stereo(pcm: &mut [i16; 64], vbuf: &[i32], coef: &[u32; 264]) {
-    let rnd_val = 1 << ((DQ_FRACBITS_OUT - 2 - 2 - 15) - 1 + (32 - CSHIFT));
     if vbuf.len() < 1064 {
         return;
     }
+    let rnd_val = 1 << ((DQ_FRACBITS_OUT - 2 - 2 - 15) - 1 + (32 - CSHIFT));
     let vbuf = &vbuf[..1064];
     /* special case, output sample 0 */
     let mut sum1_r: u64 = rnd_val;
@@ -531,7 +531,7 @@ pub fn polyphase_stereo(pcm: &mut [i16; 64], vbuf: &[i32], coef: &[u32; 264]) {
 
     /* special case, output sample 16 */
     let mut coef_idx = 256;
-    let mut vbuf_idx = 64 * 16;
+    let vbuf_idx = 64 * 16;
     sum1_l = rnd_val;
     sum1_r = rnd_val;
 
@@ -553,38 +553,25 @@ pub fn polyphase_stereo(pcm: &mut [i16; 64], vbuf: &[i32], coef: &[u32; 264]) {
     );
 
     /* main convolution loop: sum1L = samples 1, 2, 3, ... 15   sum2L = samples 31, 30, ... 17 */
-    coef_idx = 16;
-    vbuf_idx = 64;
     let mut pcm_idx = 2;
+    let (coef_chunks, _) = coef[16..].as_chunks::<16>();
+    let (vbuf_chunk, _) = vbuf[64..].as_chunks::<64>();
 
-    /* right now, the compiler creates bad asm from this... */
-    for i in (1..=15).rev() {
+    for ((i, coef), vbuf) in (1..=15).rev().zip(coef_chunks).zip(vbuf_chunk) {
         sum1_l = rnd_val;
         sum2_l = rnd_val;
         sum1_r = rnd_val;
         sum2_r = rnd_val;
 
-        for j in 0..8 {
-            c1 = coef[coef_idx];
-            coef_idx += 1;
-            c2 = coef[coef_idx];
-            coef_idx += 1;
-            v_lo = vbuf[vbuf_idx + j];
-            v_hi = vbuf[vbuf_idx + 23 - j];
-            sum1_l = madd_64(sum1_l as u64, v_lo, c1 as i32);
-            sum2_l = madd_64(sum2_l as u64, v_lo, c2 as i32);
+        calculate_sums(
+            coef,
+            vbuf,
+            &mut sum1_l,
+            &mut sum2_l,
+            &mut sum1_r,
+            &mut sum2_r,
+        );
 
-            sum1_l = madd_64(sum1_l as u64, v_hi, -(c2 as i32));
-            sum2_l = madd_64(sum2_l as u64, v_hi, c1 as i32);
-
-            v_lo = vbuf[vbuf_idx + 32 + j];
-            v_hi = vbuf[vbuf_idx + 32 + 23 - (j)];
-            sum1_r = madd_64(sum1_r as u64, v_lo, c1 as i32);
-            sum2_r = madd_64(sum2_r as u64, v_lo, c2 as i32);
-            sum1_r = madd_64(sum1_r as u64, v_hi, -(c2 as i32));
-            sum2_r = madd_64(sum2_r as u64, v_hi, c1 as i32);
-        }
-        vbuf_idx += 64;
         pcm[pcm_idx + CHANNEL_LEFT] = clip_to_short(
             sar_64(sum1_l as u64, (32 - CSHIFT) as i32) as i32,
             (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32,
@@ -602,6 +589,35 @@ pub fn polyphase_stereo(pcm: &mut [i16; 64], vbuf: &[i32], coef: &[u32; 264]) {
             (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32,
         );
         pcm_idx += 2;
+    }
+}
+
+fn calculate_sums(
+    coef: &[u32; 16],
+    vbuf: &[i32; 64],
+    sum1_l: &mut u64,
+    sum2_l: &mut u64,
+    sum1_r: &mut u64,
+    sum2_r: &mut u64,
+) {
+    let (coef_chunks, _) = coef.as_chunks::<2>();
+    for (j, coef) in coef_chunks.iter().enumerate() {
+        let c1 = coef[0];
+        let c2 = coef[1];
+        let mut v_lo = vbuf[j];
+        let mut v_hi = vbuf[23 - j];
+        *sum1_l = madd_64(*sum1_l, v_lo, c1 as i32);
+        *sum2_l = madd_64(*sum2_l, v_lo, c2 as i32);
+
+        *sum1_l = madd_64(*sum1_l, v_hi, -(c2 as i32));
+        *sum2_l = madd_64(*sum2_l, v_hi, c1 as i32);
+
+        v_lo = vbuf[32 + j];
+        v_hi = vbuf[32 + 23 - j];
+        *sum1_r = madd_64(*sum1_r, v_lo, c1 as i32);
+        *sum2_r = madd_64(*sum2_r, v_lo, c2 as i32);
+        *sum1_r = madd_64(*sum1_r, v_hi, -(c2 as i32));
+        *sum2_r = madd_64(*sum2_r, v_hi, c1 as i32);
     }
 }
 
@@ -816,7 +832,6 @@ pub fn fdct_32(
     let (cptr_chunks, _) = cptr1.as_chunks::<6>();
 
     for (buf_chunk, cptr) in chunks.iter_mut().zip(cptr_chunks) {
-
         let b0 = buf_chunk[0] + buf_chunk[7];
         let b7 = mulshift_32(cptr[0], buf_chunk[0] - buf_chunk[7]) << 1;
         let b3 = buf_chunk[3] + buf_chunk[4];
@@ -876,64 +891,126 @@ pub fn fdct_32(
     let d16_base = offset as usize + v_toggle_inv;
     if let Some(d16_slice) = dest_slice.get_mut(d16_base..d16_base + 1024) {
         let (d, _) = d16_slice.as_chunks_mut::<64>();
-        
+
         let mut s = buf_slice[1];
-        d[0][0] = s; d[0][8] = s;
+        d[0][0] = s;
+        d[0][8] = s;
 
         let tmp1 = buf_slice[25] + buf_slice[29];
-        s = buf_slice[17] + tmp1; d[1][0] = s; d[1][8] = s;
-        s = buf_slice[9] + buf_slice[13]; d[2][0] = s; d[2][8] = s;
-        s = buf_slice[21] + tmp1; d[3][0] = s; d[3][8] = s;
+        s = buf_slice[17] + tmp1;
+        d[1][0] = s;
+        d[1][8] = s;
+        s = buf_slice[9] + buf_slice[13];
+        d[2][0] = s;
+        d[2][8] = s;
+        s = buf_slice[21] + tmp1;
+        d[3][0] = s;
+        d[3][8] = s;
 
         let tmp2 = buf_slice[29] + buf_slice[27];
-        s = buf_slice[5]; d[4][0] = s; d[4][8] = s;
-        s = buf_slice[21] + tmp2; d[5][0] = s; d[5][8] = s;
-        s = buf_slice[13] + buf_slice[11]; d[6][0] = s; d[6][8] = s;
-        s = buf_slice[19] + tmp2; d[7][0] = s; d[7][8] = s;
+        s = buf_slice[5];
+        d[4][0] = s;
+        d[4][8] = s;
+        s = buf_slice[21] + tmp2;
+        d[5][0] = s;
+        d[5][8] = s;
+        s = buf_slice[13] + buf_slice[11];
+        d[6][0] = s;
+        d[6][8] = s;
+        s = buf_slice[19] + tmp2;
+        d[7][0] = s;
+        d[7][8] = s;
 
         let tmp3 = buf_slice[27] + buf_slice[31];
-        s = buf_slice[3]; d[8][0] = s; d[8][8] = s;
-        s = buf_slice[19] + tmp3; d[9][0] = s; d[9][8] = s;
-        s = buf_slice[11] + buf_slice[15]; d[10][0] = s; d[10][8] = s;
-        s = buf_slice[23] + tmp3; d[11][0] = s; d[11][8] = s;
+        s = buf_slice[3];
+        d[8][0] = s;
+        d[8][8] = s;
+        s = buf_slice[19] + tmp3;
+        d[9][0] = s;
+        d[9][8] = s;
+        s = buf_slice[11] + buf_slice[15];
+        d[10][0] = s;
+        d[10][8] = s;
+        s = buf_slice[23] + tmp3;
+        d[11][0] = s;
+        d[11][8] = s;
 
         let tmp4 = buf_slice[31];
-        s = buf_slice[7]; d[12][0] = s; d[12][8] = s;
-        s = buf_slice[23] + tmp4; d[13][0] = s; d[13][8] = s;
-        s = buf_slice[15]; d[14][0] = s; d[14][8] = s;
-        s = tmp4; d[15][0] = s; d[15][8] = s;
+        s = buf_slice[7];
+        d[12][0] = s;
+        d[12][8] = s;
+        s = buf_slice[23] + tmp4;
+        d[13][0] = s;
+        d[13][8] = s;
+        s = buf_slice[15];
+        d[14][0] = s;
+        d[14][8] = s;
+        s = tmp4;
+        d[15][0] = s;
+        d[15][8] = s;
     }
 
     /* samples 1 to 16 */
     let d1_base = 16 + off_8 + v_toggle;
     if let Some(d1_slice) = dest_slice.get_mut(d1_base..d1_base + 1024) {
         let (d, _) = d1_slice.as_chunks_mut::<64>();
-        
+
         let mut s = buf_slice[1];
-        d[0][0] = s; d[0][8] = s;
+        d[0][0] = s;
+        d[0][8] = s;
 
         let tmp1 = buf_slice[30] + buf_slice[25];
-        s = buf_slice[17] + tmp1; d[1][0] = s; d[1][8] = s;
-        s = buf_slice[14] + buf_slice[9]; d[2][0] = s; d[2][8] = s;
-        s = buf_slice[22] + tmp1; d[3][0] = s; d[3][8] = s;
-        s = buf_slice[6]; d[4][0] = s; d[4][8] = s;
+        s = buf_slice[17] + tmp1;
+        d[1][0] = s;
+        d[1][8] = s;
+        s = buf_slice[14] + buf_slice[9];
+        d[2][0] = s;
+        d[2][8] = s;
+        s = buf_slice[22] + tmp1;
+        d[3][0] = s;
+        d[3][8] = s;
+        s = buf_slice[6];
+        d[4][0] = s;
+        d[4][8] = s;
 
         let tmp2 = buf_slice[26] + buf_slice[30];
-        s = buf_slice[22] + tmp2; d[5][0] = s; d[5][8] = s;
-        s = buf_slice[10] + buf_slice[14]; d[6][0] = s; d[6][8] = s;
-        s = buf_slice[18] + tmp2; d[7][0] = s; d[7][8] = s;
-        s = buf_slice[2]; d[8][0] = s; d[8][8] = s;
+        s = buf_slice[22] + tmp2;
+        d[5][0] = s;
+        d[5][8] = s;
+        s = buf_slice[10] + buf_slice[14];
+        d[6][0] = s;
+        d[6][8] = s;
+        s = buf_slice[18] + tmp2;
+        d[7][0] = s;
+        d[7][8] = s;
+        s = buf_slice[2];
+        d[8][0] = s;
+        d[8][8] = s;
 
         let tmp3 = buf_slice[28] + buf_slice[26];
-        s = buf_slice[18] + tmp3; d[9][0] = s; d[9][8] = s;
-        s = buf_slice[12] + buf_slice[10]; d[10][0] = s; d[10][8] = s;
-        s = buf_slice[20] + tmp3; d[11][0] = s; d[11][8] = s;
-        s = buf_slice[4]; d[12][0] = s; d[12][8] = s;
+        s = buf_slice[18] + tmp3;
+        d[9][0] = s;
+        d[9][8] = s;
+        s = buf_slice[12] + buf_slice[10];
+        d[10][0] = s;
+        d[10][8] = s;
+        s = buf_slice[20] + tmp3;
+        d[11][0] = s;
+        d[11][8] = s;
+        s = buf_slice[4];
+        d[12][0] = s;
+        d[12][8] = s;
 
         let tmp4 = buf_slice[24] + buf_slice[28];
-        s = buf_slice[20] + tmp4; d[13][0] = s; d[13][8] = s;
-        s = buf_slice[8] + buf_slice[12]; d[14][0] = s; d[14][8] = s;
-        s = buf_slice[16] + tmp4; d[15][0] = s; d[15][8] = s;
+        s = buf_slice[20] + tmp4;
+        d[13][0] = s;
+        d[13][8] = s;
+        s = buf_slice[8] + buf_slice[12];
+        d[14][0] = s;
+        d[14][8] = s;
+        s = buf_slice[16] + tmp4;
+        d[15][0] = s;
+        d[15][8] = s;
     }
 
     /* final rescale + clip if es > 0 */
@@ -951,7 +1028,8 @@ pub fn fdct_32(
         if let Some(d16_slice) = dest_slice.get_mut(d16_base..d16_base + 1024) {
             for i in d16_slice.chunks_exact_mut(64).take(16) {
                 let s = (clip_2n(i[0], n_clip)) << es;
-                i[0] = s; i[8] = s;
+                i[0] = s;
+                i[8] = s;
             }
         }
 
@@ -959,7 +1037,8 @@ pub fn fdct_32(
         if let Some(d1_slice) = dest_slice.get_mut(d1_base..d1_base + 1024) {
             for i in d1_slice.chunks_exact_mut(64).take(16) {
                 let s = (clip_2n(i[0], n_clip)) << es;
-                i[0] = s; i[8] = s;
+                i[0] = s;
+                i[8] = s;
             }
         }
     }
@@ -1073,49 +1152,55 @@ pub fn win_previous(
     bt_prev: BlockType,
 ) {
     match bt_prev {
-    BlockType::Short => {
-        // Special case for short blocks – explicit unrolled version matching the original
-        let w = IMDCT_WIN[2];
+        BlockType::Short => {
+            // Special case for short blocks – explicit unrolled version matching the original
+            let w = IMDCT_WIN[2];
 
-        x_prev_win[0] = mulshift_32(w[6] as i32, x_prev[2]) + mulshift_32(w[0] as i32, x_prev[6]);
-        x_prev_win[1] = mulshift_32(w[7] as i32, x_prev[1]) + mulshift_32(w[1] as i32, x_prev[7]);
-        x_prev_win[2] = mulshift_32(w[8] as i32, x_prev[0]) + mulshift_32(w[2] as i32, x_prev[8]);
-        x_prev_win[3] = mulshift_32(w[9] as i32, x_prev[0]) + mulshift_32(w[3] as i32, x_prev[8]);
-        x_prev_win[4] = mulshift_32(w[10] as i32, x_prev[1]) + mulshift_32(w[4] as i32, x_prev[7]);
-        x_prev_win[5] = mulshift_32(w[11] as i32, x_prev[2]) + mulshift_32(w[5] as i32, x_prev[6]);
-        x_prev_win[6] = mulshift_32(w[6] as i32, x_prev[5]);
-        x_prev_win[7] = mulshift_32(w[7] as i32, x_prev[4]);
-        x_prev_win[8] = mulshift_32(w[8] as i32, x_prev[3]);
-        x_prev_win[9] = mulshift_32(w[9] as i32, x_prev[3]);
-        x_prev_win[10] = mulshift_32(w[10] as i32, x_prev[4]);
-        x_prev_win[11] = mulshift_32(w[11] as i32, x_prev[5]);
+            x_prev_win[0] =
+                mulshift_32(w[6] as i32, x_prev[2]) + mulshift_32(w[0] as i32, x_prev[6]);
+            x_prev_win[1] =
+                mulshift_32(w[7] as i32, x_prev[1]) + mulshift_32(w[1] as i32, x_prev[7]);
+            x_prev_win[2] =
+                mulshift_32(w[8] as i32, x_prev[0]) + mulshift_32(w[2] as i32, x_prev[8]);
+            x_prev_win[3] =
+                mulshift_32(w[9] as i32, x_prev[0]) + mulshift_32(w[3] as i32, x_prev[8]);
+            x_prev_win[4] =
+                mulshift_32(w[10] as i32, x_prev[1]) + mulshift_32(w[4] as i32, x_prev[7]);
+            x_prev_win[5] =
+                mulshift_32(w[11] as i32, x_prev[2]) + mulshift_32(w[5] as i32, x_prev[6]);
+            x_prev_win[6] = mulshift_32(w[6] as i32, x_prev[5]);
+            x_prev_win[7] = mulshift_32(w[7] as i32, x_prev[4]);
+            x_prev_win[8] = mulshift_32(w[8] as i32, x_prev[3]);
+            x_prev_win[9] = mulshift_32(w[9] as i32, x_prev[3]);
+            x_prev_win[10] = mulshift_32(w[10] as i32, x_prev[4]);
+            x_prev_win[11] = mulshift_32(w[11] as i32, x_prev[5]);
 
-        // Zero the unused upper part (original sets 12..17 to 0)
-        x_prev_win[12..].fill(0);
-    },
-    t => {
-        // Long blocks (0, 1, 3) – symmetric windowing
-        // wpLo points to imdctWin[btPrev] + 18
-        // wpHi points to imdctWin[btPrev] + 35 (i.e. wpLo + 17 backwards)
-        let win = IMDCT_WIN[t as usize];
-        let wp_lo = &win[18..36]; // 18 elements forward
-        let wp_hi = &win[18..36][..18]; // same range, but we will iterate backwards
+            // Zero the unused upper part (original sets 12..17 to 0)
+            x_prev_win[12..].fill(0);
+        }
+        t => {
+            // Long blocks (0, 1, 3) – symmetric windowing
+            // wpLo points to imdctWin[btPrev] + 18
+            // wpHi points to imdctWin[btPrev] + 35 (i.e. wpLo + 17 backwards)
+            let win = IMDCT_WIN[t as usize];
+            let wp_lo = &win[18..36]; // 18 elements forward
+            let wp_hi = &win[18..36][..18]; // same range, but we will iterate backwards
 
-        let mut lo_idx = 0;
-        let mut hi_idx = 17;
+            let mut lo_idx = 0;
+            let mut hi_idx = 17;
 
-        for &x in x_prev.iter() {
-            let w_lo = wp_lo[lo_idx];
-            let w_hi = wp_hi[hi_idx];
+            for &x in x_prev.iter() {
+                let w_lo = wp_lo[lo_idx];
+                let w_hi = wp_hi[hi_idx];
 
-            x_prev_win[lo_idx] = mulshift_32(w_lo as i32, x);
-            x_prev_win[17 - lo_idx] = mulshift_32(w_hi as i32, x);
+                x_prev_win[lo_idx] = mulshift_32(w_lo as i32, x);
+                x_prev_win[17 - lo_idx] = mulshift_32(w_hi as i32, x);
 
-            lo_idx += 1;
-            hi_idx -= 1;
+                lo_idx += 1;
+                hi_idx -= 1;
+            }
         }
     }
-}
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -1177,8 +1262,8 @@ pub struct MP3DecInfo {
     pub bitrate: i32,
     pub nChans: ChannelCount,
     pub samprate: i32,
-    pub nGrans: GranuleCount,     /* granules per frame */
-    pub nGranSamps: i32, /* samples per granule */
+    pub nGrans: GranuleCount, /* granules per frame */
+    pub nGranSamps: i32,      /* samples per granule */
     pub nSlots: i32,
     pub layer: i32,
 
@@ -1647,7 +1732,13 @@ impl MP3Decoder {
                 sis.win_switch_flag = bsi.get_bits(1) as i32;
                 if sis.win_switch_flag != 0 {
                     /* this is a start, stop, short, or mixed block */
-                    sis.blockType = match bsi.get_bits(2) { 0 => BlockType::Normal, 1 => BlockType::Start, 2 => BlockType::Short, 3 => BlockType::Stop, _ => unreachable!("") }; /* 0 = normal, 1 = start, 2 = short, 3 = stop */
+                    sis.blockType = match bsi.get_bits(2) {
+                        0 => BlockType::Normal,
+                        1 => BlockType::Start,
+                        2 => BlockType::Short,
+                        3 => BlockType::Stop,
+                        _ => unreachable!(""),
+                    }; /* 0 = normal, 1 = start, 2 = short, 3 = stop */
                     sis.mixedBlock = bsi.get_bits(1) as i32; /* 0 = not mixed, 1 = mixed */
                     sis.tableSelect[0] = bsi.get_bits(5) as i32;
                     sis.tableSelect[1] = bsi.get_bits(5) as i32;
