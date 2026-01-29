@@ -553,12 +553,21 @@ pub fn polyphase_stereo(pcm: &mut [i16; 64], vbuf: &[i32], coef: &[u32; 264]) {
     );
 
     /* main convolution loop: sum1L = samples 1, 2, 3, ... 15   sum2L = samples 31, 30, ... 17 */
-    let mut pcm_idx = 2;
-
     let (coef_chunks, _) = coef[16..].as_chunks::<16>();
     let (vbuf_chunk, _) = vbuf[64..].as_chunks::<64>();
 
-    for ((i, coef), vbuf) in (1..=15).rev().zip(coef_chunks).zip(vbuf_chunk) {
+    let (pcm_head, pcm_tail) = pcm.split_at_mut(32);
+    let (pcm_head, _) = &mut pcm_head[2..].as_chunks_mut::<2>();
+    let (pcm_tail, _) = &mut pcm_tail[2..].as_chunks_mut::<2>();
+
+    let pcm_head_iter = pcm_head.iter_mut();
+    let pcm_tail_iter = pcm_tail.iter_mut().rev();
+
+    for ((coef, vbuf), (pcm_head, pcm_tail)) in coef_chunks
+        .iter()
+        .zip(vbuf_chunk)
+        .zip(pcm_head_iter.zip(pcm_tail_iter))
+    {
         sum1_l = rnd_val;
         sum2_l = rnd_val;
         calculate_sums_l(coef, vbuf, &mut sum1_l, &mut sum2_l);
@@ -567,23 +576,22 @@ pub fn polyphase_stereo(pcm: &mut [i16; 64], vbuf: &[i32], coef: &[u32; 264]) {
         sum2_r = rnd_val;
         calculate_sums_r(coef, vbuf, &mut sum1_r, &mut sum2_r);
 
-        pcm[pcm_idx + CHANNEL_LEFT] = clip_to_short(
+        pcm_head[CHANNEL_LEFT] = clip_to_short(
             sar_64(sum1_l as u64, (32 - CSHIFT) as i32) as i32,
             (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32,
         );
-        pcm[pcm_idx + CHANNEL_RIGHT] = clip_to_short(
+        pcm_head[CHANNEL_RIGHT] = clip_to_short(
             sar_64(sum1_r as u64, (32 - CSHIFT) as i32) as i32,
             (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32,
         );
-        pcm[pcm_idx + 2 * 2 * i + CHANNEL_LEFT] = clip_to_short(
+        pcm_tail[CHANNEL_LEFT] = clip_to_short(
             sar_64(sum2_l as u64, (32 - CSHIFT) as i32) as i32,
             (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32,
         );
-        pcm[pcm_idx + 2 * 2 * i + CHANNEL_RIGHT] = clip_to_short(
+        pcm_tail[CHANNEL_RIGHT] = clip_to_short(
             sar_64(sum2_r as u64, (32 - CSHIFT) as i32) as i32,
             (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32,
         );
-        pcm_idx += 2;
     }
 }
 
