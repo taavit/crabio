@@ -554,23 +554,18 @@ pub fn polyphase_stereo(pcm: &mut [i16; 64], vbuf: &[i32], coef: &[u32; 264]) {
 
     /* main convolution loop: sum1L = samples 1, 2, 3, ... 15   sum2L = samples 31, 30, ... 17 */
     let mut pcm_idx = 2;
+
     let (coef_chunks, _) = coef[16..].as_chunks::<16>();
     let (vbuf_chunk, _) = vbuf[64..].as_chunks::<64>();
 
     for ((i, coef), vbuf) in (1..=15).rev().zip(coef_chunks).zip(vbuf_chunk) {
         sum1_l = rnd_val;
         sum2_l = rnd_val;
+        calculate_sums_l(coef, vbuf, &mut sum1_l, &mut sum2_l);
+
         sum1_r = rnd_val;
         sum2_r = rnd_val;
-
-        calculate_sums(
-            coef,
-            vbuf,
-            &mut sum1_l,
-            &mut sum2_l,
-            &mut sum1_r,
-            &mut sum2_r,
-        );
+        calculate_sums_r(coef, vbuf, &mut sum1_r, &mut sum2_r);
 
         pcm[pcm_idx + CHANNEL_LEFT] = clip_to_short(
             sar_64(sum1_l as u64, (32 - CSHIFT) as i32) as i32,
@@ -592,28 +587,28 @@ pub fn polyphase_stereo(pcm: &mut [i16; 64], vbuf: &[i32], coef: &[u32; 264]) {
     }
 }
 
-fn calculate_sums(
-    coef: &[u32; 16],
-    vbuf: &[i32; 64],
-    sum1_l: &mut u64,
-    sum2_l: &mut u64,
-    sum1_r: &mut u64,
-    sum2_r: &mut u64,
-) {
+fn calculate_sums_l(coef: &[u32; 16], vbuf: &[i32; 64], sum1_l: &mut u64, sum2_l: &mut u64) {
     let (coef_chunks, _) = coef.as_chunks::<2>();
     for (j, coef) in coef_chunks.iter().enumerate() {
         let c1 = coef[0];
         let c2 = coef[1];
-        let mut v_lo = vbuf[j];
-        let mut v_hi = vbuf[23 - j];
+        let v_lo = vbuf[j];
+        let v_hi = vbuf[23 - j];
         *sum1_l = madd_64(*sum1_l, v_lo, c1 as i32);
         *sum2_l = madd_64(*sum2_l, v_lo, c2 as i32);
 
         *sum1_l = madd_64(*sum1_l, v_hi, -(c2 as i32));
         *sum2_l = madd_64(*sum2_l, v_hi, c1 as i32);
+    }
+}
 
-        v_lo = vbuf[32 + j];
-        v_hi = vbuf[32 + 23 - j];
+fn calculate_sums_r(coef: &[u32; 16], vbuf: &[i32; 64], sum1_r: &mut u64, sum2_r: &mut u64) {
+    let (coef_chunks, _) = coef.as_chunks::<2>();
+    for (j, coef) in coef_chunks.iter().enumerate() {
+        let c1 = coef[0];
+        let c2 = coef[1];
+        let v_lo = vbuf[32 + j];
+        let v_hi = vbuf[32 + 23 - j];
         *sum1_r = madd_64(*sum1_r, v_lo, c1 as i32);
         *sum2_r = madd_64(*sum2_r, v_lo, c2 as i32);
         *sum1_r = madd_64(*sum1_r, v_hi, -(c2 as i32));
