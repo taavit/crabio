@@ -784,6 +784,30 @@ const M_DCTTAB: [i32; 48] = [
     -M_COS2_1, -M_COS2_2, M_COS3_1, /* 31, 31, 30 */
 ];
 
+fn fdct_32_first_pass(buf_slice: &mut [i32; NBANDS], cptr0: &[i32; 24]) {
+    let (fdct_head, fdct_tail) = FDCT32S1S2.split_at(8);
+    for (i, (fh, ft)) in fdct_head.iter().zip(fdct_tail.iter()).enumerate() {
+        let base = i * 3;
+        let a0 = buf_slice[i];
+        let a1 = buf_slice[15 - i];
+        let a2 = buf_slice[16 + i];
+        let a3 = buf_slice[31 - i];
+
+        let b0 = a0 + a3;
+        let b3 = mulshift_32(cptr0[base], a0 - a3) << 1;
+        let b1 = a1 + a2;
+        let b2 = mulshift_32(cptr0[base + 1], a1 - a2) << (*fh as i32);
+
+        let coeff = cptr0[base + 2];
+        let shift_idx = *ft as i32;
+
+        buf_slice[i] = b0 + b1;
+        buf_slice[15 - i] = mulshift_32(coeff, b0 - b1) << shift_idx;
+        buf_slice[16 + i] = b2 + b3;
+        buf_slice[31 - i] = mulshift_32(coeff, b3 - b2) << shift_idx;
+    }
+}
+
 pub fn fdct_32(
     buf_slice: &mut [i32; NBANDS],
     dest_slice: &mut [i32],
@@ -808,26 +832,7 @@ pub fn fdct_32(
     let cptr0: &[i32; 24] = &cptr_all[0];
 
     /* --- FIRST PASS: Butterfly and Phase 1 --- */
-    for i in 0..8 {
-        let base = i * 3;
-        let a0 = buf_slice[i];
-        let a1 = buf_slice[15 - i];
-        let a2 = buf_slice[16 + i];
-        let a3 = buf_slice[31 - i];
-
-        let b0 = a0 + a3;
-        let b3 = mulshift_32(cptr0[base], a0 - a3) << 1;
-        let b1 = a1 + a2;
-        let b2 = mulshift_32(cptr0[base + 1], a1 - a2) << (FDCT32S1S2[i] as i32);
-
-        let coeff = cptr0[base + 2];
-        let shift_idx = FDCT32S1S2[8 + i] as i32;
-
-        buf_slice[i] = b0 + b1;
-        buf_slice[15 - i] = mulshift_32(coeff, b0 - b1) << shift_idx;
-        buf_slice[16 + i] = b2 + b3;
-        buf_slice[31 - i] = mulshift_32(coeff, b3 - b2) << shift_idx;
-    }
+    fdct_32_first_pass(buf_slice, cptr0);
 
     /* --- SECOND PASS: 4x8-point DCT --- */
     let cptr1: &[i32; 24] = &cptr_all[1];
