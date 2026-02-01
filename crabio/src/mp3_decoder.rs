@@ -255,14 +255,99 @@ pub const ERR_MP3_INVALID_IMDCT: i8 = -11;
 pub const ERR_MP3_INVALID_SUBBAND: i8 = -12;
 pub const ERR_UNKNOWN: i8 = -127;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[repr(usize)]
+pub enum SampleRateIndex {
+    #[default]
+    SampleRate0 = 0,
+    SampleRate1 = 1,
+    SampleRate2 = 2,
+}
+
+impl SampleRateIndex {
+    pub const fn from_u8(v: u8) -> Result<Self, ()> {
+        match v {
+            0 => Ok(SampleRateIndex::SampleRate0),
+            1 => Ok(SampleRateIndex::SampleRate1),
+            2 => Ok(SampleRateIndex::SampleRate2),
+            _ => Err(())
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[repr(usize)]
+pub enum LayerIndex {
+    #[default]
+    Layer1 = 1,
+    Layer2 = 2,
+    Layer3 = 3,
+}
+
+impl LayerIndex {
+    pub const fn from_u8(v: u8) -> Result<Self, ()> {
+        match v {
+            1 => Ok(LayerIndex::Layer1),
+            2 => Ok(LayerIndex::Layer2),
+            3 => Ok(LayerIndex::Layer3),
+            _ => Err(())
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[repr(usize)]
+pub enum BitrateIndex {
+    #[default]
+    Bitrate0 = 0,
+    Bitrate1 = 1,
+    Bitrate2 = 2,
+    Bitrate3 = 3,
+    Bitrate4 = 4,
+    Bitrate5 = 5,
+    Bitrate6 = 6,
+    Bitrate7 = 7,
+    Bitrate8 = 8,
+    Bitrate9 = 9,
+    Bitrate10 = 10,
+    Bitrate11 = 11,
+    Bitrate12 = 12,
+    Bitrate13 = 13,
+    Bitrate14 = 14,
+}
+
+impl BitrateIndex {
+    pub const fn from_u8(v: u8) -> Result<Self, ()> {
+        match v {
+            0 => Ok(BitrateIndex::Bitrate0),
+            1 => Ok(BitrateIndex::Bitrate1),
+            2 => Ok(BitrateIndex::Bitrate2),
+            3 => Ok(BitrateIndex::Bitrate3),
+            4 => Ok(BitrateIndex::Bitrate4),
+            5 => Ok(BitrateIndex::Bitrate5),
+            6 => Ok(BitrateIndex::Bitrate6),
+            7 => Ok(BitrateIndex::Bitrate7),
+            8 => Ok(BitrateIndex::Bitrate8),
+            9 => Ok(BitrateIndex::Bitrate9),
+            10 => Ok(BitrateIndex::Bitrate10),
+            11 => Ok(BitrateIndex::Bitrate11),
+            12 => Ok(BitrateIndex::Bitrate12),
+            13 => Ok(BitrateIndex::Bitrate13),
+            14 => Ok(BitrateIndex::Bitrate14),
+            _ => Err(())
+        }
+    }
+}
+
+
 #[repr(C)]
 #[allow(non_snake_case)]
 #[derive(Default)]
 pub struct FrameHeader {
-    pub layer: i32,      /* layer index (1, 2, or 3) */
+    pub layer: LayerIndex,      /* layer index (1, 2, or 3) */
     pub crc: i32,        /* CRC flag: 0 = disabled, 1 = enabled */
-    pub brIdx: i32,      /* bitrate index (0 - 15) */
-    pub srIdx: i32,      /* sample rate index (0 - 2) */
+    pub br_idx: BitrateIndex,      /* bitrate index (0 - 15) */
+    pub sr_idx: SampleRateIndex,      /* sample rate index (0 - 2) */
     pub paddingBit: i32, /* padding flag: 0 = no padding, 1 = single pad byte */
     pub privateBit: i32, /* unused */
     pub modeExt: usize,  /* used to decipher joint stereo mode */
@@ -1273,7 +1358,7 @@ pub struct MP3DecInfo {
     pub nGrans: GranuleCount, /* granules per frame */
     pub nGranSamps: i32,      /* samples per granule */
     pub nSlots: i32,
-    pub layer: i32,
+    pub layer: LayerIndex,
 
     pub mainDataBegin: i32,
     pub mainDataBytes: i32,
@@ -1399,7 +1484,7 @@ pub struct MP3FrameInfo {
     pub samprate: i32,
     pub bitsPerSample: i32,
     pub outputSamps: i32,
-    pub layer: i32,
+    pub layer: LayerIndex,
     pub version: MPEGVersion,
 }
 
@@ -1556,6 +1641,9 @@ impl MP3Decoder {
 
     pub fn unpack_frame_header(&mut self, buf: &[u8]) -> Result<usize, i8> {
         /* validate pointers and sync word */
+        if buf.len() < 4 {
+            return Err(ERR_MP3_INVALID_FRAMEHEADER);
+        }
         if (buf[0] & SYNCWORDH) != SYNCWORDH || (buf[1] & SYNCWORDL) != SYNCWORDL {
             return Err(ERR_MP3_INVALID_FRAMEHEADER);
         }
@@ -1570,10 +1658,19 @@ impl MP3Decoder {
         } else {
             MPEGVersion::MPEG2
         };
-        m_frame_header.layer = 4 - ((buf[1] as i32 >> 1) & 0x03); /* easy mapping of index to layer number, 4 = error */
+        m_frame_header.layer = match LayerIndex::from_u8(4 - ((buf[1] >> 1) & 0x03)) {
+            Ok(v) => v,
+            Err(_) => { return Err(ERR_MP3_INVALID_FRAMEHEADER); }
+        }; /* easy mapping of index to layer number, 4 = error */
         m_frame_header.crc = 1 - ((buf[1] as i32 >> 0) & 0x01);
-        m_frame_header.brIdx = (buf[2] as i32 >> 4) & 0x0f;
-        m_frame_header.srIdx = (buf[2] as i32 >> 2) & 0x03;
+        m_frame_header.br_idx = match BitrateIndex::from_u8((buf[2] >> 4) & 0x0f) {
+            Ok(v) => v,
+            Err(_) => return Err(ERR_MP3_INVALID_FRAMEHEADER),
+        };
+        m_frame_header.sr_idx = match SampleRateIndex::from_u8((buf[2] >> 2) & 0x03) {
+            Ok(v) => v,
+            Err(_) => {return Err(ERR_MP3_INVALID_FRAMEHEADER); }
+        };
         m_frame_header.paddingBit = (buf[2] as i32 >> 1) & 0x01;
         m_frame_header.privateBit = (buf[2] as i32 >> 0) & 0x01;
         self.m_sMode = match (buf[3] >> 6) & 0x03 {
@@ -1588,12 +1685,9 @@ impl MP3Decoder {
         m_frame_header.origFlag = (buf[3] as i32 >> 2) & 0x01;
         m_frame_header.emphasis = (buf[3] as i32 >> 0) & 0x03;
         /* check parameters to avoid indexing tables with bad values */
-        if m_frame_header.srIdx == 3 || m_frame_header.layer == 4 || m_frame_header.brIdx == 15 {
-            return Err(ERR_MP3_INVALID_FRAMEHEADER);
-        }
         /* for readability (we reference sfBandTable many times in decoder) */
         self.m_SFBandTable =
-            SF_BAND_TABLE[self.m_MPEGVersion as usize][m_frame_header.srIdx as usize];
+            SF_BAND_TABLE[self.m_MPEGVersion as usize][m_frame_header.sr_idx as usize];
         if self.m_sMode != StereoMode::Joint {
             /* just to be safe (dequant, stproc check fh->modeExt) */
             m_frame_header.modeExt = 0;
@@ -1605,14 +1699,14 @@ impl MP3Decoder {
             ChannelCount::DualChannel
         };
         m_mp3_dec_info.samprate =
-            SAMPLERATE_TAB[self.m_MPEGVersion as usize][m_frame_header.srIdx as usize];
+            SAMPLERATE_TAB[self.m_MPEGVersion as usize][m_frame_header.sr_idx as usize];
         m_mp3_dec_info.nGrans = if self.m_MPEGVersion == MPEGVersion::MPEG1 {
             GranuleCount::Mpeg1Granule
         } else {
             GranuleCount::Mpeg2Granule
         };
         m_mp3_dec_info.nGranSamps = (SAMPLES_PER_FRAME_TAB[self.m_MPEGVersion as usize]
-            [(m_frame_header.layer - 1) as usize])
+            [(m_frame_header.layer as usize - 1) as usize])
             / m_mp3_dec_info.nGrans as i32;
         m_mp3_dec_info.layer = m_frame_header.layer;
 
@@ -1621,14 +1715,14 @@ impl MP3Decoder {
          *  copy the pre-calculated actual free bitrate into it in mp3dec.c (according to the spec,
          *  this shouldn't be necessary, since it should be either all frames free or none free)
          */
-        if m_frame_header.brIdx != 0 {
+        if m_frame_header.br_idx != BitrateIndex::Bitrate0 {
             m_mp3_dec_info.bitrate = (BITRATE_TAB[self.m_MPEGVersion as usize]
-                [m_frame_header.layer as usize - 1][m_frame_header.brIdx as usize])
+                [m_frame_header.layer as usize - 1][m_frame_header.br_idx as usize])
                 as i32
                 * 1000;
             /* nSlots = total frame bytes (from table) - sideInfo bytes - header - CRC (if present) + pad (if present) */
             m_mp3_dec_info.nSlots = SLOT_TAB[self.m_MPEGVersion as usize]
-                [m_frame_header.srIdx as usize][m_frame_header.brIdx as usize]
+                [m_frame_header.sr_idx as usize][m_frame_header.br_idx as usize]
                 as i32
                 - SIDE_BYTES_TAB[self.m_MPEGVersion as usize][if self.m_sMode == StereoMode::Mono {
                     0
@@ -1641,6 +1735,9 @@ impl MP3Decoder {
         }
         /* load crc word, if enabled, and return length of frame header (in bytes) */
         if m_frame_header.crc != 0 {
+            if buf.len() < 6 {
+                return Err(ERR_MP3_INVALID_FRAMEHEADER);
+            }
             m_frame_header.CRCWord = (buf[4] as i32) << 8 | (buf[5] as i32) << 0;
             return Ok(6);
         } else {
@@ -1665,13 +1762,13 @@ impl MP3Decoder {
      **********************************************************************************************************************/
 
     pub fn mp3_get_last_frame_info(&mut self) {
-        if self.m_MP3DecInfo.layer != 3 {
+        if self.m_MP3DecInfo.layer != LayerIndex::Layer3 {
             self.m_MP3FrameInfo.bitrate = 0;
             self.m_MP3FrameInfo.n_chans = ChannelCount::SingleChannel;
             self.m_MP3FrameInfo.samprate = 0;
             self.m_MP3FrameInfo.bitsPerSample = 0;
             self.m_MP3FrameInfo.outputSamps = 0;
-            self.m_MP3FrameInfo.layer = 0;
+            self.m_MP3FrameInfo.layer = LayerIndex::Layer1;
             self.m_MP3FrameInfo.version = MPEGVersion::MPEG1;
         } else {
             self.m_MP3FrameInfo.bitrate = self.m_MP3DecInfo.bitrate;
