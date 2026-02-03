@@ -2941,7 +2941,7 @@ pub unsafe fn unpack_scale_factors(
     bits_avail: i32,
     gr: GranuleIndex,
     ch: ChannelIndex,
-    m_side_info_sub: &mut [[SideInfoSub; 2]; 2],
+    m_side_info_sub: &mut SideInfoSub,
     m_scale_factor_info_sub: &mut [[ScaleFactorInfoSub; 2]; 2],
     m_mp3_dec_info: &mut MP3DecInfo,
     m_side_info: &mut SideInfo,
@@ -2962,7 +2962,7 @@ pub unsafe fn unpack_scale_factors(
     if m_mpegversion == MPEGVersion::MPEG1 {
         unpack_sfmpeg1(
             &mut bsi,
-            &mut m_side_info_sub[gr as usize][ch as usize],
+            m_side_info_sub,
             m_scale_factor_info_sub,
             &m_side_info.scfsi[ch as usize],
             gr,
@@ -2971,7 +2971,7 @@ pub unsafe fn unpack_scale_factors(
     } else {
         unpack_sfmpeg2(
             &mut bsi,
-            &mut m_side_info_sub[gr as usize][ch as usize],
+            m_side_info_sub,
             &mut m_scale_factor_info_sub[gr as usize][ch as usize],
             gr,
             ch,
@@ -2981,7 +2981,7 @@ pub unsafe fn unpack_scale_factors(
     }
 
     m_mp3_dec_info.part23Length[gr as usize][ch as usize] =
-        m_side_info_sub[gr as usize][ch as usize].part23_length;
+        m_side_info_sub.part23_length;
 
     let bits_used = bsi.calc_bits_used(start_buf, *bit_offset as usize);
     buf = unsafe { buf.add((bits_used + *bit_offset) as usize >> 3) };
@@ -3254,13 +3254,14 @@ pub unsafe fn MP3DecodeHelper(
     for gr in m_mp3_decoder.m_MP3DecInfo.nGrans.granules() {
         for ch in m_mp3_decoder.m_MP3DecInfo.nChans.channels() {
             prev_bit_offset = bit_offset;
+            let m_side_info_sub = &mut m_mp3_decoder.m_SideInfoSub[*gr as usize][*ch as usize];
             offset = unpack_scale_factors(
                 main_ptr,
                 &mut bit_offset,
                 main_bits,
                 *gr,
                 *ch,
-                &mut m_mp3_decoder.m_SideInfoSub, // 1. Oczekiwany: *mut [[SideInfoSub; 2]; 2]
+                m_side_info_sub, // 1. Oczekiwany: *mut [[SideInfoSub; 2]; 2]
                 &mut m_mp3_decoder.m_ScaleFactorInfoSub, // 2. Oczekiwany: *mut [[ScaleFactorInfoSub; 2]; 2]
                 &mut m_mp3_decoder.m_MP3DecInfo,         // 3. Oczekiwany: *mut MP3DecInfo
                 &mut m_mp3_decoder.m_SideInfo,
