@@ -533,7 +533,7 @@ pub fn mp3_find_sync_word(data: &[u8]) -> Option<&[u8]> {
  **********************************************************************************************************************/
 /// Find the start of the next frame with a matching header (free format detection)
 /// Returns the byte offset to the frame start (excluding padding byte if set)
-pub fn mp3_find_free_sync(buf: &[u8], first_header: [u8; 4]) -> Option<usize> {
+pub fn mp3_find_free_sync(buf: &[u8], first_header: &[u8; 4]) -> Option<usize> {
     if buf.len() < 4 {
         return None;
     }

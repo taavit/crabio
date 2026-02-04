@@ -74,22 +74,6 @@ pub unsafe extern "C" fn MP3FindSyncWord(buf: *const u8, n_bytes: i32) -> i32 {
         .unwrap_or(-1)
 }
 
-#[allow(non_snake_case)]
-pub unsafe extern "C" fn MP3FindFreeSync(buf: *const u8, first_fh: *const u8, n_bytes: i32) -> i32 {
-    let data = unsafe { core::slice::from_raw_parts(buf, n_bytes as usize) };
-    let first_header: [u8; 4] = unsafe {
-        [
-            *first_fh.offset(0),
-            *first_fh.offset(1),
-            *first_fh.offset(2),
-            *first_fh.offset(3),
-        ]
-    };
-    mp3_find_free_sync(data, first_header)
-        .map(|off| off as i32)
-        .unwrap_or(-1)
-}
-
 /***********************************************************************************************************************
  * P O L Y P H A S E
  **********************************************************************************************************************/
@@ -3127,7 +3111,7 @@ pub unsafe fn MP3DecodeHelper(
             return e;
         }
     };
-    inbuf = unsafe { inbuf.add(fh_bytes) };
+
     buf = &buf[fh_bytes..];
     /* unpack side info */
     si_bytes = m_mp3_decoder.unpack_side_info(buf) as i32;
@@ -3145,19 +3129,18 @@ pub unsafe fn MP3DecodeHelper(
         MP3ClearBadFrame(outbuf);
         return ERR_MP3_INVALID_SIDEINFO;
     }
-    inbuf = unsafe { inbuf.add(si_bytes as usize) };
+    let (first_header, buf) = buf.split_at(fh_bytes + si_bytes as usize);
+    let first_header: &[u8; 4] = first_header.try_into().unwrap_or(&[0; 4]);
+    inbuf = unsafe { inbuf.add(fh_bytes + si_bytes as usize) };
     *bytes_left -= fh_bytes as i32 + si_bytes;
 
     /* if free mode... */
     if m_mp3_decoder.m_MP3DecInfo.bitrate == 0 || m_mp3_decoder.m_MP3DecInfo.freeBitrateFlag != 0 {
         if m_mp3_decoder.m_MP3DecInfo.freeBitrateFlag == 0 {
             m_mp3_decoder.m_MP3DecInfo.freeBitrateFlag = 1;
-            m_mp3_decoder.m_MP3DecInfo.freeBitrateSlots = unsafe {
-                MP3FindFreeSync(
-                    inbuf,
-                    inbuf.offset(-(fh_bytes as isize) - (si_bytes as isize)),
-                    *bytes_left,
-                )
+            m_mp3_decoder.m_MP3DecInfo.freeBitrateSlots = match mp3_find_free_sync(buf, first_header) {
+                Some(v) => v as i32,
+                None => -1,
             };
             if m_mp3_decoder.m_MP3DecInfo.freeBitrateSlots < 0 {
                 MP3ClearBadFrame(outbuf);
@@ -3184,7 +3167,6 @@ pub unsafe fn MP3DecodeHelper(
         }
         m_mp3_decoder.m_MP3DecInfo.mainDataBytes = m_mp3_decoder.m_MP3DecInfo.nSlots;
         main_ptr = inbuf;
-        inbuf = inbuf.add(m_mp3_decoder.m_MP3DecInfo.nSlots as usize);
         *bytes_left -= m_mp3_decoder.m_MP3DecInfo.nSlots;
     } else {
         if m_mp3_decoder.m_MP3DecInfo.nSlots > *bytes_left {
