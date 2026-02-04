@@ -188,8 +188,8 @@ pub fn unpack_sfmpeg1(
     let slen1: i32;
 
     /* these can be 0, so make sure GetBits(bsi, 0) returns 0 (no >> 32 or anything) */
-    slen0 = M_SFLEN_TAB[sis.sfCompress as usize][0] as i32;
-    slen1 = M_SFLEN_TAB[sis.sfCompress as usize][1] as i32;
+    slen0 = M_SFLEN_TAB[sis.sf_compress as usize][0] as i32;
+    slen1 = M_SFLEN_TAB[sis.sf_compress as usize][1] as i32;
     if sis.blockType == BlockType::Short {
         /* short block, type 2 (implies winSwitchFlag == 1) */
         if sis.mixedBlock != 0 {
@@ -305,7 +305,7 @@ pub fn unpack_sfmpeg1(
  *   NRTab[x][1][y]   --> (NRTab[x][1][y])   / 3
  *   NRTab[x][2][>=1] --> (NRTab[x][2][>=1]) / 3  (first partition is long block)
  */
-const NRTAB: [[[u8; 4]; 3]; 6] = [
+const NRTAB: [[[i32; 4]; 3]; 6] = [
     [[6, 5, 5, 5], [3, 3, 3, 3], [6, 3, 3, 3]],
     [[6, 5, 7, 3], [3, 3, 4, 2], [6, 3, 4, 2]],
     [[11, 10, 0, 0], [6, 6, 0, 0], [6, 3, 6, 0]],
@@ -330,7 +330,7 @@ pub fn unpack_sfmpeg2(
     let mut slen = [0i32; 4];
     let mut nr = [0i32; 4];
 
-    let mut sf_compress = sis.sfCompress;
+    let mut sf_compress = sis.sf_compress;
     let mut pre_flag = 0;
     let mut intensity_scale = 0;
 
@@ -395,17 +395,12 @@ pub fn unpack_sfmpeg2(
         bt_idx = if sis.mixedBlock != 0 { 2 } else { 1 };
     }
 
-    for i in 0..4 {
-        // Zakładamy, że NRTab jest dostępny jako static/extern
-        nr[i] = NRTAB[sfc_idx][bt_idx][i] as i32;
-    }
+    nr.copy_from_slice(&NRTAB[sfc_idx][bt_idx]);
 
     /* save intensity stereo scale factor info */
     if (mode_ext & 0x01 != 0) && (ch == ChannelIndex::Channel1) {
-        for i in 0..4 {
-            sfjs.slen[i] = slen[i];
-            sfjs.nr[i] = nr[i];
-        }
+        sfjs.slen.copy_from_slice(&slen);
+        sfjs.nr.copy_from_slice(&nr);
         sfjs.intensity_scale = intensity_scale;
     }
     sis.preFlag = pre_flag;
@@ -2943,7 +2938,6 @@ pub unsafe fn unpack_scale_factors(
     ch: ChannelIndex,
     m_side_info_sub: &mut SideInfoSub,
     m_scale_factor_info_sub: &mut [[ScaleFactorInfoSub; 2]; 2],
-    m_mp3_dec_info: &mut MP3DecInfo,
     m_side_info: &mut SideInfo,
     m_frame_header: &mut FrameHeader,
     m_scale_factor_js: &mut ScaleFactorJS,
@@ -2959,17 +2953,16 @@ pub unsafe fn unpack_scale_factors(
         bsi.get_bits(*bit_offset as u32);
     }
 
-    if m_mpegversion == MPEGVersion::MPEG1 {
-        unpack_sfmpeg1(
+    match m_mpegversion {
+        MPEGVersion::MPEG1 => unpack_sfmpeg1(
             &mut bsi,
             m_side_info_sub,
             m_scale_factor_info_sub,
             &m_side_info.scfsi[ch as usize],
             gr,
             ch,
-        );
-    } else {
-        unpack_sfmpeg2(
+        ),
+    MPEGVersion::MPEG2|MPEGVersion::MPEG25 => unpack_sfmpeg2(
             &mut bsi,
             m_side_info_sub,
             &mut m_scale_factor_info_sub[gr as usize][ch as usize],
@@ -2977,12 +2970,8 @@ pub unsafe fn unpack_scale_factors(
             ch,
             m_frame_header.modeExt,
             m_scale_factor_js,
-        );
-    }
-
-    m_mp3_dec_info.part23Length[gr as usize][ch as usize] =
-        m_side_info_sub.part23_length;
-
+        )
+    };
     let bits_used = bsi.calc_bits_used(start_buf, *bit_offset as usize);
     buf = unsafe { buf.add((bits_used + *bit_offset) as usize >> 3) };
     *bit_offset = (bits_used + *bit_offset) & 0x07;
@@ -3261,14 +3250,15 @@ pub unsafe fn MP3DecodeHelper(
                 main_bits,
                 *gr,
                 *ch,
-                m_side_info_sub, // 1. Oczekiwany: *mut [[SideInfoSub; 2]; 2]
+                m_side_info_sub,
                 &mut m_mp3_decoder.m_ScaleFactorInfoSub, // 2. Oczekiwany: *mut [[ScaleFactorInfoSub; 2]; 2]
-                &mut m_mp3_decoder.m_MP3DecInfo,         // 3. Oczekiwany: *mut MP3DecInfo
                 &mut m_mp3_decoder.m_SideInfo,
                 &mut m_mp3_decoder.m_FrameHeader, // 5. Oczekiwany: *mut FrameHeader
                 &mut m_mp3_decoder.m_ScaleFactorJS, // 6. Oczekiwany: *mut ScaleFactorJS
-                m_mp3_decoder.m_MPEGVersion,      // 7. Oczekiwany: i32
+                m_mp3_decoder.m_MPEGVersion,
             );
+
+            m_mp3_decoder.m_MP3DecInfo.part23Length[*gr as usize][*ch as usize] = m_side_info_sub.part23_length;
 
             sf_block_bits = 8 * offset - prev_bit_offset + bit_offset;
             huff_block_bits =

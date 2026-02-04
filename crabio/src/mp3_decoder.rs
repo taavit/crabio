@@ -1,5 +1,3 @@
-use core::ops::Index;
-
 use crate::utils::{bit_stream_cache::BitStreamInfo, clip_to_short::clip_to_short};
 
 pub const CHANNEL_MONO: usize = 0;
@@ -79,17 +77,17 @@ pub fn clip_2n(y: i32, n: u32) -> i32 {
 }
 
 #[inline]
-pub fn sar_64(x: u64, n: i32) -> u64 {
+pub const fn sar_64(x: u64, n: i32) -> u64 {
     x >> n
 }
 
 #[inline(always)]
-pub fn mulshift_32(x: i32, y: i32) -> i32 {
+pub const fn mulshift_32(x: i32, y: i32) -> i32 {
     ((x as i64) * (y as i64) >> 32) as i32
 }
 
 #[inline(always)]
-pub fn madd_64(sum64: u64, x: i32, y: i32) -> u64 {
+pub const fn madd_64(sum64: u64, x: i32, y: i32) -> u64 {
     let prod = (x as i64).wrapping_mul(y as i64);
     sum64.wrapping_add(prod as u64)
 } /* returns 64-bit value in [edx:eax] */
@@ -369,7 +367,7 @@ pub struct SideInfoSub {
     pub part23_length: i32,     /* number of bits in main data */
     pub n_bigvals: i32, /* 2x this = first set of Huffman cw's (maximum amplitude can be > 1) */
     pub global_gain: i32, /* overall gain for dequantizer */
-    pub sfCompress: i32, /* unpacked to figure out number of bits in scale factors */
+    pub sf_compress: i32, /* unpacked to figure out number of bits in scale factors */
     pub win_switch_flag: i32, /* window switching flag */
     pub blockType: BlockType, /* block type */
     pub mixedBlock: i32, /* 0 = regular block (all short or long), 1 = mixed block */
@@ -384,8 +382,8 @@ pub struct SideInfoSub {
 
 #[repr(C)]
 pub struct SideInfo {
-    pub mainDataBegin: i32,
-    pub privateBits: i32,
+    pub main_data_begin: i32,
+    pub private_bits: i32,
     pub scfsi: [[i32; MAX_SCFBD]; MAX_NCHAN], /* 4 scalefactor bands per channel */
 }
 
@@ -1304,7 +1302,7 @@ pub enum ChannelCount {
 }
 
 impl ChannelCount {
-    pub fn channels(&self) -> &'static [ChannelIndex] {
+    pub const fn channels(&self) -> &'static [ChannelIndex] {
         match self {
             ChannelCount::SingleChannel => &[ChannelIndex::Channel0],
             ChannelCount::DualChannel => &[ChannelIndex::Channel0, ChannelIndex::Channel1],
@@ -1313,7 +1311,7 @@ impl ChannelCount {
 }
 
 impl GranuleCount {
-    pub fn granules(&self) -> &'static [GranuleIndex] {
+    pub const fn granules(&self) -> &'static [GranuleIndex] {
         match self {
             GranuleCount::Mpeg1Granule => &[GranuleIndex::Granule0, GranuleIndex::Granule1],
             GranuleCount::Mpeg2Granule => &[GranuleIndex::Granule0],
@@ -1505,6 +1503,15 @@ pub enum StereoMode {
     Mono = 0x03,  /* one channel */
 }
 
+impl StereoMode {
+    pub const fn get_channel_count(&self) -> ChannelCount {
+        match &self {
+            StereoMode::Mono => ChannelCount::SingleChannel,
+            _ => ChannelCount::DualChannel,
+        }
+    }
+}
+
 /* indexing = [version][layer][bitrate index]
  * bitrate (kbps) of frame
  *   - bitrate index == 0 is "free" mode (bitrate determined on the fly by
@@ -1693,11 +1700,7 @@ impl MP3Decoder {
             m_frame_header.modeExt = 0;
         }
         /* init user-accessible data */
-        m_mp3_dec_info.nChans = if self.m_sMode == StereoMode::Mono {
-            ChannelCount::SingleChannel
-        } else {
-            ChannelCount::DualChannel
-        };
+        m_mp3_dec_info.nChans = self.m_sMode.get_channel_count();
         m_mp3_dec_info.samprate =
             SAMPLERATE_TAB[self.m_MPEGVersion as usize][m_frame_header.sr_idx as usize];
         m_mp3_dec_info.nGrans = if self.m_MPEGVersion == MPEGVersion::MPEG1 {
@@ -1803,8 +1806,8 @@ impl MP3Decoder {
                 SIBYTES_MPEG1_STEREO
             };
             bsi = BitStreamInfo::from_slice(buf);
-            m_side_info.mainDataBegin = bsi.get_bits(9) as i32;
-            m_side_info.privateBits =
+            m_side_info.main_data_begin = bsi.get_bits(9) as i32;
+            m_side_info.private_bits =
                 bsi.get_bits(if m_s_mode == StereoMode::Mono { 5 } else { 3 }) as i32;
             for ch in 0..m_mp3_dec_info.nChans as usize {
                 for bd in 0..MAX_SCFBD {
@@ -1819,8 +1822,8 @@ impl MP3Decoder {
                 SIBYTES_MPEG2_STEREO
             };
             bsi = BitStreamInfo::from_slice(buf);
-            m_side_info.mainDataBegin = bsi.get_bits(8) as i32;
-            m_side_info.privateBits =
+            m_side_info.main_data_begin = bsi.get_bits(8) as i32;
+            m_side_info.private_bits =
                 bsi.get_bits(if m_s_mode == StereoMode::Mono { 1 } else { 2 }) as i32;
         }
         for gr in 0..m_mp3_dec_info.nGrans as usize {
@@ -1829,7 +1832,7 @@ impl MP3Decoder {
                 sis.part23_length = bsi.get_bits(12) as i32;
                 sis.n_bigvals = bsi.get_bits(9) as i32;
                 sis.global_gain = bsi.get_bits(8) as i32;
-                sis.sfCompress = bsi.get_bits(if m_mpegversion == MPEGVersion::MPEG1 {
+                sis.sf_compress = bsi.get_bits(if m_mpegversion == MPEGVersion::MPEG1 {
                     4
                 } else {
                     9
@@ -1855,7 +1858,7 @@ impl MP3Decoder {
                         /* this should not be allowed, according to spec */
                         sis.n_bigvals = 0;
                         sis.part23_length = 0;
-                        sis.sfCompress = 0;
+                        sis.sf_compress = 0;
                     } else if sis.blockType == BlockType::Short && sis.mixedBlock == 0 {
                         /* short block, not mixed */
                         sis.region0Count = 8;
@@ -1883,7 +1886,7 @@ impl MP3Decoder {
                 sis.count1TableSelect = bsi.get_bits(1) as i32;
             }
         }
-        m_mp3_dec_info.mainDataBegin = m_side_info.mainDataBegin; /* needed by main decode loop */
+        m_mp3_dec_info.mainDataBegin = m_side_info.main_data_begin; /* needed by main decode loop */
         // assert(nBytes == CalcBitsUsed(bsi, buf, 0) >> 3);
         n_bytes
     }
@@ -1925,8 +1928,8 @@ mod unpack_frame_header_test {
             version: MPEGVersion::MPEG1,
         };
         let m_SideInfo = SideInfo {
-            mainDataBegin: 0,
-            privateBits: 0,
+            main_data_begin: 0,
+            private_bits: 0,
             scfsi: [[0; MAX_SCFBD]; MAX_NCHAN],
         };
         let m_SFBandTable = SFBandTable {
