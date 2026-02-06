@@ -4,15 +4,7 @@ use core::panic::PanicInfo;
 
 use crabio::{
     mp3_decoder::{
-        BLOCK_SIZE, BlockType, ChannelIndex, CriticalBandInfo, ERR_MP3_FREE_BITRATE_SYNC,
-        ERR_MP3_INDATA_UNDERFLOW, ERR_MP3_INVALID_DEQUANTIZE, ERR_MP3_INVALID_FRAMEHEADER,
-        ERR_MP3_INVALID_HUFFCODES, ERR_MP3_INVALID_IMDCT, ERR_MP3_INVALID_SCALEFACT,
-        ERR_MP3_INVALID_SIDEINFO, ERR_MP3_INVALID_SUBBAND, ERR_MP3_MAINDATA_UNDERFLOW,
-        ERR_MP3_NONE, FrameHeader, GranuleIndex, HUFF_PAIRTABS, HuffTabLookup,
-        HuffTabType, HuffmanInfo, IMDCT_SCALE, IMDCTInfo, MAX_NCHAN, MAX_NGRAN, MAX_NSAMP,
-        MAX_SCFBD, MP3DecInfo, MP3Decoder, MPEGVersion, NBANDS, SFBandTable, SQRTHALF,
-        ScaleFactorInfoSub, ScaleFactorJS, SideInfo, SideInfoSub, clip_2n, freq_invert_rescale,
-        idct_9, imdct_12, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, win_previous,
+        BLOCK_SIZE, BlockType, ChannelIndex, CriticalBandInfo, ERR_MP3_FREE_BITRATE_SYNC, ERR_MP3_INDATA_UNDERFLOW, ERR_MP3_INVALID_DEQUANTIZE, ERR_MP3_INVALID_FRAMEHEADER, ERR_MP3_INVALID_HUFFCODES, ERR_MP3_INVALID_IMDCT, ERR_MP3_INVALID_SCALEFACT, ERR_MP3_INVALID_SIDEINFO, ERR_MP3_INVALID_SUBBAND, ERR_MP3_MAINDATA_UNDERFLOW, ERR_MP3_NONE, FrameHeader, GranuleIndex, HUFF_PAIRTABS, HuffTabLookup, HuffTabType, HuffmanInfo, IMDCT_SCALE, IMDCTInfo, MAINBUF_SIZE, MAX_NCHAN, MAX_NGRAN, MAX_NSAMP, MAX_SCFBD, MP3DecInfo, MP3Decoder, MPEGVersion, NBANDS, SFBandTable, SQRTHALF, ScaleFactorInfoSub, ScaleFactorJS, SideInfo, SideInfoSub, clip_2n, freq_invert_rescale, idct_9, imdct_12, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, win_previous
     },
     utils::bit_stream_cache::BitStreamInfo,
 };
@@ -1010,11 +1002,11 @@ const HUFF_TAB_LOOKUP: [HuffTabLookup; HUFF_PAIRTABS] = [
 const QUAD_TAB_OFFSET: [i32; 2] = [0, 64];
 const QUAD_TAB_MAX_BITS: [i32; 2] = [6, 4];
 
-pub unsafe fn DecodeHuffmanPairs(
+pub fn decode_huffman_pairs(
     mut xy: &mut [i32],
     tab_idx: i32,
     mut bits_left: i32,
-    mut buf: *const u8,
+    buf: &[u8],
     bit_offset: i32,
 ) -> i32 {
     let mut x: i32;
@@ -1029,6 +1021,8 @@ pub unsafe fn DecodeHuffmanPairs(
     let tabType: HuffTabType; // HuffTabType_t
     let mut cw: u16;
     let mut cache: u32;
+
+    let mut buf_idx = 0;
 
     let n_vals = xy.len();
 
@@ -1068,8 +1062,8 @@ pub unsafe fn DecodeHuffmanPairs(
     cache = 0;
     cachedBits = (8 - bit_offset) & 0x07;
     if cachedBits != 0 {
-        cache = (*buf as u32) << (32 - cachedBits);
-        buf = buf.add(1);
+        cache = (buf[buf_idx] as u32) << (32 - cachedBits);
+        buf_idx += 1;
     }
     bits_left -= cachedBits;
 
@@ -1083,15 +1077,15 @@ pub unsafe fn DecodeHuffmanPairs(
         }
         HuffTabType::OneShot => {
             maxBits = ((t_base[t_base_idx] >> 0) & 0x000f) as i32;
-            let tBase_one_shot = &t_base[1..];
+            let t_base_one_shot = &t_base[1..];
             padBits = 0;
 
             while xy.len() > 0 {
                 if bits_left >= 16 {
-                    cache |= (*buf as u32) << (24 - cachedBits);
-                    buf = buf.add(1);
-                    cache |= (*buf as u32) << (16 - cachedBits);
-                    buf = buf.add(1);
+                    cache |= (buf[buf_idx] as u32) << (24 - cachedBits);
+                    buf_idx += 1;
+                    cache |= (buf[buf_idx] as u32) << (16 - cachedBits);
+                    buf_idx += 1;
                     cachedBits += 16;
                     bits_left -= 16;
                 } else {
@@ -1099,12 +1093,12 @@ pub unsafe fn DecodeHuffmanPairs(
                         return -1;
                     }
                     if bits_left > 0 {
-                        cache |= (*buf as u32) << (24 - cachedBits);
-                        buf = buf.add(1);
+                        cache |= (buf[buf_idx] as u32) << (24 - cachedBits);
+                        buf_idx += 1;
                     }
                     if bits_left > 8 {
-                        cache |= (*buf as u32) << (16 - cachedBits);
-                        buf = buf.add(1);
+                        cache |= (buf[buf_idx] as u32) << (16 - cachedBits);
+                        buf_idx += 1;
                     }
                     cachedBits += bits_left;
                     bits_left = 0;
@@ -1115,7 +1109,7 @@ pub unsafe fn DecodeHuffmanPairs(
                 }
 
                 while xy.len() > 0 && cachedBits >= 11 {
-                    cw = tBase_one_shot[(cache >> (32 - maxBits)) as usize];
+                    cw = t_base_one_shot[(cache >> (32 - maxBits)) as usize];
 
                     len = ((cw >> 12) & 0x000f) as i32;
                     cachedBits -= len;
@@ -1152,10 +1146,10 @@ pub unsafe fn DecodeHuffmanPairs(
             padBits = 0;
             while xy.len() > 0 {
                 if bits_left >= 16 {
-                    cache |= (*buf as u32) << (24 - cachedBits);
-                    buf = buf.add(1);
-                    cache |= (*buf as u32) << (16 - cachedBits);
-                    buf = buf.add(1);
+                    cache |= (buf[buf_idx] as u32) << (24 - cachedBits);
+                    buf_idx += 1;
+                    cache |= (buf[buf_idx] as u32) << (16 - cachedBits);
+                    buf_idx += 1;
                     cachedBits += 16;
                     bits_left -= 16;
                 } else {
@@ -1163,12 +1157,12 @@ pub unsafe fn DecodeHuffmanPairs(
                         return -1;
                     }
                     if bits_left > 0 {
-                        cache |= (*buf as u32) << (24 - cachedBits);
-                        buf = buf.add(1);
+                        cache |= (buf[buf_idx] as u32) << (24 - cachedBits);
+                        buf_idx += 1;
                     }
                     if bits_left > 8 {
-                        cache |= (*buf as u32) << (16 - cachedBits);
-                        buf = buf.add(1);
+                        cache |= (buf[buf_idx] as u32) << (16 - cachedBits);
+                        buf_idx += 1;
                     }
                     cachedBits += bits_left;
                     bits_left = 0;
@@ -1200,8 +1194,8 @@ pub unsafe fn DecodeHuffmanPairs(
                             return -1;
                         }
                         while cachedBits < minBits {
-                            cache |= (*buf as u32) << (24 - cachedBits);
-                            buf = buf.add(1);
+                            cache |= (buf[buf_idx] as u32) << (24 - cachedBits);
+                            buf_idx += 1;
                             cachedBits += 8;
                             bits_left -= 8;
                         }
@@ -1226,8 +1220,8 @@ pub unsafe fn DecodeHuffmanPairs(
                             return -1;
                         }
                         while cachedBits < minBits {
-                            cache |= (*buf as u32) << (24 - cachedBits);
-                            buf = buf.add(1);
+                            cache |= (buf[buf_idx] as u32) << (24 - cachedBits);
+                            buf_idx += 1;
                             cachedBits += 8;
                             bits_left -= 8;
                         }
@@ -1303,7 +1297,7 @@ pub unsafe fn DecodeHuffmanQuads(
     n_vals: i32,
     tab_idx: i32,
     mut bits_left: i32,
-    mut buf: *mut u8,
+    mut buf: &mut [u8],
     bit_offset: i32,
 ) -> i32 {
     let mut v: i32;
@@ -1321,6 +1315,8 @@ pub unsafe fn DecodeHuffmanQuads(
         return 0;
     }
 
+    let mut buf_idx = 0;
+
     let mut vwxy_idx = 0;
 
     // Pobieranie bazy tabeli i parametrów (zakładamy dostęp do globalnych tablic)
@@ -1332,8 +1328,8 @@ pub unsafe fn DecodeHuffmanQuads(
     cache = 0;
     cached_bits = (8 - bit_offset) & 0x07;
     if cached_bits != 0 {
-        cache = (*buf as u32) << (32 - cached_bits);
-        buf = buf.add(1);
+        cache = (buf[buf_idx] as u32) << (32 - cached_bits);
+        buf_idx += 1;
     }
     bits_left -= cached_bits;
 
@@ -1343,10 +1339,10 @@ pub unsafe fn DecodeHuffmanQuads(
     while i < (n_vals - 3) {
         /* Uzupełnianie cache - ładowanie 16 bitów */
         if bits_left >= 16 {
-            cache |= (*buf as u32) << (24 - cached_bits);
-            buf = buf.add(1);
-            cache |= (*buf as u32) << (16 - cached_bits);
-            buf = buf.add(1);
+            cache |= (buf[buf_idx] as u32) << (24 - cached_bits);
+            buf_idx += 1;
+            cache |= (buf[buf_idx] as u32) << (16 - cached_bits);
+            buf_idx += 1;
             cached_bits += 16;
             bits_left -= 16;
         } else {
@@ -1355,12 +1351,12 @@ pub unsafe fn DecodeHuffmanQuads(
                 return i;
             }
             if bits_left > 0 {
-                cache |= (*buf as u32) << (24 - cached_bits);
-                buf = buf.add(1);
+                cache |= (buf[buf_idx] as u32) << (24 - cached_bits);
+                buf_idx += 1;
             }
             if bits_left > 8 {
-                cache |= (*buf as u32) << (16 - cached_bits);
-                buf = buf.add(1);
+                cache |= (buf[buf_idx] as u32) << (16 - cached_bits);
+                buf_idx += 1;
             }
             cached_bits += bits_left;
             bits_left = 0;
@@ -1455,124 +1451,124 @@ pub unsafe fn DecodeHuffmanQuads(
  *                out of bits prematurely (invalid bitstream)
  **********************************************************************************************************************/
 
-pub unsafe fn DecodeHuffman(
-    mut buf: *mut u8,
-    bitOffset: *mut i32,
-    huffBlockBits: i32,
+pub fn decode_huffman(
+    mut buf: &mut [u8],
+    bit_offset: &mut i32,
+    huff_block_bits: i32,
     gr: GranuleIndex,
     ch: ChannelIndex,
-    m_HuffmanInfo: &mut HuffmanInfo,
-    m_SFBandTable: &SFBandTable, // SFBandTable_t*
-    m_SideInfoSub: &mut [[SideInfoSub; MAX_NCHAN]; MAX_NGRAN],
-    m_MPEGVersion: MPEGVersion,
+    m_huffman_info: &mut HuffmanInfo,
+    m_sfband_table: &SFBandTable, // SFBandTable_t*
+    m_side_info_sub: &mut [[SideInfoSub; MAX_NCHAN]; MAX_NGRAN],
+    m_mpegversion: MPEGVersion,
 ) -> i32 {
-    let mut rEnd = [0; 4];
+    let mut r_end = [0; 4];
     let r1_start;
     let r2_start;
     let w;
-    let mut bitsLeft;
-    let startBuf = buf;
+    let mut bits_left;
 
-    let sis = &m_SideInfoSub[gr as usize][ch as usize];
+    let sis = &m_side_info_sub[gr as usize][ch as usize];
 
-    if huffBlockBits < 0 {
+    if huff_block_bits < 0 {
         return -1;
     }
+
+    let start_buf_len = buf.len();
 
     if sis.win_switch_flag != 0 && sis.blockType == BlockType::Short {
         // Short blocks lub mixed blocks
         if sis.mixedBlock == 0 {
             // Czyste short blocks
-            r1_start = m_SFBandTable.s[((sis.region0Count + 1) / 3) as usize] as i32 * 3;
+            r1_start = m_sfband_table.s[((sis.region0Count + 1) / 3) as usize] as i32 * 3;
         } else {
             // Mixed block
-            if m_MPEGVersion == MPEGVersion::MPEG1 {
-                r1_start = m_SFBandTable.l[(sis.region0Count + 1) as usize] as i32;
+            if m_mpegversion == MPEGVersion::MPEG1 {
+                r1_start = m_sfband_table.l[(sis.region0Count + 1) as usize] as i32;
             } else {
                 // MPEG2 / MPEG2.5 – spec wymaga specjalnego obliczenia
-                w = m_SFBandTable.s[4] as i32 - m_SFBandTable.s[3] as i32;
-                r1_start = m_SFBandTable.l[6] as i32 + 2 * w;
+                w = m_sfband_table.s[4] as i32 - m_sfband_table.s[3] as i32;
+                r1_start = m_sfband_table.l[6] as i32 + 2 * w;
             }
         }
         r2_start = MAX_NSAMP as i32; // short blocks nie mają regionu 2
     } else {
         // Long blocks
-        r1_start = m_SFBandTable.l[(sis.region0Count + 1) as usize] as i32;
-        r2_start = m_SFBandTable.l[(sis.region0Count + 1 + sis.region1Count + 1) as usize] as i32;
+        r1_start = m_sfband_table.l[(sis.region0Count + 1) as usize] as i32;
+        r2_start = m_sfband_table.l[(sis.region0Count + 1 + sis.region1Count + 1) as usize] as i32;
     }
 
     /* offset rEnd index by 1 so first region = rEnd[1] - rEnd[0], etc. */
-    rEnd[3] = if MAX_NSAMP < (2 * sis.n_bigvals as usize) {
+    r_end[3] = if MAX_NSAMP < (2 * sis.n_bigvals as usize) {
         MAX_NSAMP as i32
     } else {
         2 * sis.n_bigvals
     };
-    rEnd[2] = if r2_start < rEnd[3] {
+    r_end[2] = if r2_start < r_end[3] {
         r2_start
     } else {
-        rEnd[3]
+        r_end[3]
     };
-    rEnd[1] = if r1_start < rEnd[3] {
+    r_end[1] = if r1_start < r_end[3] {
         r1_start
     } else {
-        rEnd[3]
+        r_end[3]
     };
-    rEnd[0] = 0;
+    r_end[0] = 0;
 
     /* rounds up to first all-zero pair (we don't check last pair for (x,y) == (non-zero, zero)) */
-    (*m_HuffmanInfo).non_zero_bound[ch as usize] = rEnd[3];
+    (*m_huffman_info).non_zero_bound[ch as usize] = r_end[3];
 
     /* decode Huffman pairs (rEnd[i] are always even numbers) */
-    bitsLeft = huffBlockBits;
+    bits_left = huff_block_bits;
 
     let mut bits_used;
     for i in 0..3 {
-        bits_used = unsafe {
-            DecodeHuffmanPairs(
-                &mut m_HuffmanInfo.huff_dec_buf[ch as usize]
-                    [rEnd[i] as usize..rEnd[i] as usize + (rEnd[i + 1] - rEnd[i]) as usize],
+        bits_used = 
+            decode_huffman_pairs(
+                &mut m_huffman_info.huff_dec_buf[ch as usize]
+                    [r_end[i] as usize..r_end[i] as usize + (r_end[i + 1] - r_end[i]) as usize],
                 sis.tableSelect[i],
-                bitsLeft,
+                bits_left,
                 buf,
-                *bitOffset,
-            )
-        };
-        if (bits_used < 0 || bits_used > bitsLeft)
-        /* error - overran end of bitstream */
+                *bit_offset,
+            );
+        if bits_used < 0 || bits_used > bits_left
         {
+            /* error - overran end of bitstream */
             return -1;
         }
 
         /* update bitstream position */
-        buf = buf.add((bits_used + *bitOffset) as usize >> 3);
-        *bitOffset = (bits_used + *bitOffset) & 0x07;
-        bitsLeft -= bits_used;
+        buf = &mut buf[(bits_used + *bit_offset) as usize >> 3..];
+        *bit_offset = (bits_used + *bit_offset) & 0x07;
+        bits_left -= bits_used;
     }
 
     /* decode Huffman quads (if any) */
-    m_HuffmanInfo.non_zero_bound[ch as usize] += unsafe {
+    m_huffman_info.non_zero_bound[ch as usize] += unsafe {
         DecodeHuffmanQuads(
-            &mut m_HuffmanInfo.huff_dec_buf[ch as usize][rEnd[3] as usize..],
-            MAX_NSAMP as i32 - rEnd[3],
+            &mut m_huffman_info.huff_dec_buf[ch as usize][r_end[3] as usize..],
+            MAX_NSAMP as i32 - r_end[3],
             sis.count1TableSelect,
-            bitsLeft,
+            bits_left,
             buf,
-            *bitOffset,
+            *bit_offset,
         )
     };
 
-    assert!(m_HuffmanInfo.non_zero_bound[ch as usize] <= MAX_NSAMP as i32);
+    assert!(m_huffman_info.non_zero_bound[ch as usize] <= MAX_NSAMP as i32);
 
-    for i in m_HuffmanInfo.non_zero_bound[ch as usize]..MAX_NSAMP as i32 {
-        m_HuffmanInfo.huff_dec_buf[ch as usize][i as usize] = 0;
+    for i in m_huffman_info.non_zero_bound[ch as usize]..MAX_NSAMP as i32 {
+        m_huffman_info.huff_dec_buf[ch as usize][i as usize] = 0;
     }
     /* If bits used for 576 samples < huffBlockBits, then the extras are considered
      *  to be stuffing bits (throw away, but need to return correct bitstream position)
      */
-    buf = buf.add((bitsLeft + *bitOffset) as usize >> 3);
-    *bitOffset = (bitsLeft + *bitOffset) & 0x07;
+    buf = &mut buf[(bits_left + *bit_offset) as usize >> 3..];
+    *bit_offset = (bits_left + *bit_offset) & 0x07;
 
-    buf.offset_from(startBuf) as i32
+    start_buf_len as i32- buf.len() as i32
 }
 
 //
@@ -3254,10 +3250,9 @@ pub unsafe fn MP3DecodeHelper(
                 MP3ClearBadFrame(outbuf);
                 return ERR_MP3_INVALID_SCALEFACT;
             }
-
             prev_bit_offset = bit_offset;
-            offset = DecodeHuffman(
-                main_ptr,
+            offset = decode_huffman(
+                unsafe { core::slice::from_raw_parts_mut(main_ptr, MAINBUF_SIZE) },
                 &mut bit_offset,
                 huff_block_bits,
                 *gr,
