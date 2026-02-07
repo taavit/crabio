@@ -2912,8 +2912,8 @@ pub fn mid_side_proc(
  **********************************************************************************************************************/
 
 #[unsafe(no_mangle)]
-pub unsafe fn unpack_scale_factors(
-    mut buf: *mut u8,
+pub fn unpack_scale_factors(
+    buf: &[u8],
     bit_offset: &mut i32,
     bits_avail: i32,
     gr: GranuleIndex,
@@ -2926,9 +2926,11 @@ pub unsafe fn unpack_scale_factors(
     m_mpegversion: MPEGVersion,
 ) -> i32 {
     /* init GetBits reader */
-    let start_buf = unsafe {
-        core::slice::from_raw_parts(buf, (bits_avail as usize + *bit_offset as usize + 7) / 8)
-    };
+    // Safe: Calculate length and clamp it to the actual buffer length to prevent out-of-bounds access.
+    let bytes_needed = (bits_avail as usize + *bit_offset as usize + 7) / 8;
+    let actual_len = bytes_needed.min(buf.len());
+    let start_buf = &buf[..actual_len];
+
     let mut bsi = BitStreamInfo::from_slice(start_buf);
 
     if *bit_offset != 0 {
@@ -2944,7 +2946,7 @@ pub unsafe fn unpack_scale_factors(
             gr,
             ch,
         ),
-    MPEGVersion::MPEG2|MPEGVersion::MPEG25 => unpack_sfmpeg2(
+        MPEGVersion::MPEG2 | MPEGVersion::MPEG25 => unpack_sfmpeg2(
             &mut bsi,
             m_side_info_sub,
             &mut m_scale_factor_info_sub[gr as usize][ch as usize],
@@ -2952,13 +2954,19 @@ pub unsafe fn unpack_scale_factors(
             ch,
             m_frame_header.modeExt,
             m_scale_factor_js,
-        )
+        ),
     };
-    let bits_used = bsi.calc_bits_used(start_buf, *bit_offset as usize);
-    buf = unsafe { buf.add((bits_used + *bit_offset) as usize >> 3) };
-    *bit_offset = (bits_used + *bit_offset) & 0x07;
 
-    (unsafe { buf.offset_from(start_buf.as_ptr()) }) as i32
+    let bits_used = bsi.calc_bits_used(start_buf, *bit_offset as usize);
+    
+    // Safe: Perform integer arithmetic instead of raw pointer arithmetic.
+    let total_bits_consumed = bits_used + *bit_offset;
+    let bytes_consumed = total_bits_consumed >> 3; // divide by 8
+    
+    *bit_offset = (total_bits_consumed & 0x07) as i32; // modulo 8
+
+    // Return bytes consumed (equivalent to the previous pointer difference)
+    bytes_consumed as i32
 }
 
 /***********************************************************************************************************************
@@ -3225,7 +3233,7 @@ pub unsafe fn MP3DecodeHelper(
             prev_bit_offset = bit_offset;
             let m_side_info_sub = &mut m_mp3_decoder.m_SideInfoSub[*gr as usize][*ch as usize];
             offset = unpack_scale_factors(
-                main_ptr,
+                unsafe { core::slice::from_raw_parts(main_ptr, MAINBUF_SIZE) },
                 &mut bit_offset,
                 main_bits,
                 *gr,
