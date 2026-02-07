@@ -1297,7 +1297,7 @@ pub unsafe fn DecodeHuffmanQuads(
     n_vals: i32,
     tab_idx: i32,
     mut bits_left: i32,
-    mut buf: &mut [u8],
+    mut buf: &[u8],
     bit_offset: i32,
 ) -> i32 {
     let mut v: i32;
@@ -1452,7 +1452,7 @@ pub unsafe fn DecodeHuffmanQuads(
  **********************************************************************************************************************/
 
 pub fn decode_huffman(
-    mut buf: &mut [u8],
+    mut buf: &[u8],
     bit_offset: &mut i32,
     huff_block_bits: i32,
     gr: GranuleIndex,
@@ -1540,7 +1540,7 @@ pub fn decode_huffman(
         }
 
         /* update bitstream position */
-        buf = &mut buf[(bits_used + *bit_offset) as usize >> 3..];
+        buf = &buf[(bits_used + *bit_offset) as usize >> 3..];
         *bit_offset = (bits_used + *bit_offset) & 0x07;
         bits_left -= bits_used;
     }
@@ -1565,7 +1565,7 @@ pub fn decode_huffman(
     /* If bits used for 576 samples < huffBlockBits, then the extras are considered
      *  to be stuffing bits (throw away, but need to return correct bitstream position)
      */
-    buf = &mut buf[(bits_left + *bit_offset) as usize >> 3..];
+    buf = &buf[(bits_left + *bit_offset) as usize >> 3..];
     *bit_offset = (bits_left + *bit_offset) & 0x07;
 
     start_buf_len as i32- buf.len() as i32
@@ -3105,7 +3105,7 @@ pub unsafe fn MP3DecodeHelper(
     let mut prev_bit_offset: i32;
     let mut sf_block_bits: i32;
     let mut huff_block_bits: i32;
-    let mut main_ptr: *mut u8;
+    let main_ptr: *mut u8;
 
     // let m_mp3_decoder = unsafe { &mut *m_MP3Decoder };
     let mut buf = unsafe { core::slice::from_raw_parts(inbuf, inbuf_len) };
@@ -3227,13 +3227,14 @@ pub unsafe fn MP3DecodeHelper(
 
     bit_offset = 0;
     main_bits = m_mp3_decoder.m_MP3DecInfo.mainDataBytes * 8;
+    let mut buf = unsafe { core::slice::from_raw_parts(main_ptr, MAINBUF_SIZE) };
     /* decode one complete frame */
     for gr in m_mp3_decoder.m_MP3DecInfo.nGrans.granules() {
         for ch in m_mp3_decoder.m_MP3DecInfo.nChans.channels() {
             prev_bit_offset = bit_offset;
             let m_side_info_sub = &mut m_mp3_decoder.m_SideInfoSub[*gr as usize][*ch as usize];
             offset = unpack_scale_factors(
-                unsafe { core::slice::from_raw_parts(main_ptr, MAINBUF_SIZE) },
+                buf,
                 &mut bit_offset,
                 main_bits,
                 *gr,
@@ -3251,7 +3252,7 @@ pub unsafe fn MP3DecodeHelper(
             sf_block_bits = 8 * offset - prev_bit_offset + bit_offset;
             huff_block_bits =
                 m_mp3_decoder.m_MP3DecInfo.part23Length[*gr as usize][*ch as usize] - sf_block_bits;
-            main_ptr = main_ptr.add(offset as usize);
+            buf = &buf[offset as usize..];
             main_bits -= sf_block_bits;
 
             if offset < 0 || main_bits < huff_block_bits {
@@ -3260,7 +3261,7 @@ pub unsafe fn MP3DecodeHelper(
             }
             prev_bit_offset = bit_offset;
             offset = decode_huffman(
-                unsafe { core::slice::from_raw_parts_mut(main_ptr, MAINBUF_SIZE) },
+                buf,
                 &mut bit_offset,
                 huff_block_bits,
                 *gr,
@@ -3274,8 +3275,8 @@ pub unsafe fn MP3DecodeHelper(
                 MP3ClearBadFrame(outbuf);
                 return ERR_MP3_INVALID_HUFFCODES;
             }
-            main_ptr = main_ptr.add(offset as usize);
-            main_bits -= (8 * offset - prev_bit_offset + bit_offset);
+            buf = &buf[offset as usize..];
+            main_bits -= 8 * offset - prev_bit_offset + bit_offset;
         }
 
         if mp3_dequantize(*gr, m_mp3_decoder) < 0 {
