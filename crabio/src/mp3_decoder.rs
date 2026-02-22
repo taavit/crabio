@@ -369,15 +369,15 @@ pub struct SideInfoSub {
     pub global_gain: i32, /* overall gain for dequantizer */
     pub sf_compress: i32, /* unpacked to figure out number of bits in scale factors */
     pub win_switch_flag: i32, /* window switching flag */
-    pub blockType: BlockType, /* block type */
-    pub mixedBlock: i32, /* 0 = regular block (all short or long), 1 = mixed block */
-    pub tableSelect: [i32; 3], /* index of Huffman tables for the big values regions */
-    pub subBlockGain: [i32; 3], /* subblock gain offset, relative to global gain */
-    pub region0Count: i32, /* 1+region0Count = num scale factor bands in first region of bigvals */
-    pub region1Count: i32, /* 1+region1Count = num scale factor bands in second region of bigvals */
-    pub preFlag: i32,   /* for optional high frequency boost */
-    pub sfactScale: i32, /* scaling of the scalefactors */
-    pub count1TableSelect: i32, /* index of Huffman table for quad codewords */
+    pub block_type: BlockType, /* block type */
+    pub mixed_block: i32, /* 0 = regular block (all short or long), 1 = mixed block */
+    pub table_select: [i32; 3], /* index of Huffman tables for the big values regions */
+    pub sub_block_gain: [i32; 3], /* subblock gain offset, relative to global gain */
+    pub region0_count: i32, /* 1+region0Count = num scale factor bands in first region of bigvals */
+    pub region1_count: i32, /* 1+region1Count = num scale factor bands in second region of bigvals */
+    pub pre_flag: i32,   /* for optional high frequency boost */
+    pub sfact_scale: i32, /* scaling of the scalefactors */
+    pub count1_table_select: i32, /* index of Huffman table for quad codewords */
 }
 
 #[repr(C)]
@@ -1841,50 +1841,50 @@ impl MP3Decoder {
                 sis.win_switch_flag = bsi.get_bits(1) as i32;
                 if sis.win_switch_flag != 0 {
                     /* this is a start, stop, short, or mixed block */
-                    sis.blockType = match bsi.get_bits(2) {
+                    sis.block_type = match bsi.get_bits(2) {
                         0 => BlockType::Normal,
                         1 => BlockType::Start,
                         2 => BlockType::Short,
                         3 => BlockType::Stop,
                         _ => unreachable!(""),
                     }; /* 0 = normal, 1 = start, 2 = short, 3 = stop */
-                    sis.mixedBlock = bsi.get_bits(1) as i32; /* 0 = not mixed, 1 = mixed */
-                    sis.tableSelect[0] = bsi.get_bits(5) as i32;
-                    sis.tableSelect[1] = bsi.get_bits(5) as i32;
-                    sis.tableSelect[2] = 0; /* unused */
-                    sis.subBlockGain[0] = bsi.get_bits(3) as i32;
-                    sis.subBlockGain[1] = bsi.get_bits(3) as i32;
-                    sis.subBlockGain[2] = bsi.get_bits(3) as i32;
-                    if sis.blockType == BlockType::Normal {
+                    sis.mixed_block = bsi.get_bits(1) as i32; /* 0 = not mixed, 1 = mixed */
+                    sis.table_select[0] = bsi.get_bits(5) as i32;
+                    sis.table_select[1] = bsi.get_bits(5) as i32;
+                    sis.table_select[2] = 0; /* unused */
+                    sis.sub_block_gain[0] = bsi.get_bits(3) as i32;
+                    sis.sub_block_gain[1] = bsi.get_bits(3) as i32;
+                    sis.sub_block_gain[2] = bsi.get_bits(3) as i32;
+                    if sis.block_type == BlockType::Normal {
                         /* this should not be allowed, according to spec */
                         sis.n_bigvals = 0;
                         sis.part23_length = 0;
                         sis.sf_compress = 0;
-                    } else if sis.blockType == BlockType::Short && sis.mixedBlock == 0 {
+                    } else if sis.block_type == BlockType::Short && sis.mixed_block == 0 {
                         /* short block, not mixed */
-                        sis.region0Count = 8;
+                        sis.region0_count = 8;
                     } else {
                         /* start, stop, or short-mixed */
-                        sis.region0Count = 7;
+                        sis.region0_count = 7;
                     }
-                    sis.region1Count = 20 - sis.region0Count;
+                    sis.region1_count = 20 - sis.region0_count;
                 } else {
                     /* this is a normal block */
-                    sis.blockType = BlockType::Normal;
-                    sis.mixedBlock = 0;
-                    sis.tableSelect[0] = bsi.get_bits(5) as i32;
-                    sis.tableSelect[1] = bsi.get_bits(5) as i32;
-                    sis.tableSelect[2] = bsi.get_bits(5) as i32;
-                    sis.region0Count = bsi.get_bits(4) as i32;
-                    sis.region1Count = bsi.get_bits(3) as i32;
+                    sis.block_type = BlockType::Normal;
+                    sis.mixed_block = 0;
+                    sis.table_select[0] = bsi.get_bits(5) as i32;
+                    sis.table_select[1] = bsi.get_bits(5) as i32;
+                    sis.table_select[2] = bsi.get_bits(5) as i32;
+                    sis.region0_count = bsi.get_bits(4) as i32;
+                    sis.region1_count = bsi.get_bits(3) as i32;
                 }
-                sis.preFlag = if m_mpegversion == MPEGVersion::MPEG1 {
+                sis.pre_flag = if m_mpegversion == MPEGVersion::MPEG1 {
                     bsi.get_bits(1) as i32
                 } else {
                     0
                 };
-                sis.sfactScale = bsi.get_bits(1) as i32;
-                sis.count1TableSelect = bsi.get_bits(1) as i32;
+                sis.sfact_scale = bsi.get_bits(1) as i32;
+                sis.count1_table_select = bsi.get_bits(1) as i32;
             }
         }
         m_mp3_dec_info.mainDataBegin = m_side_info.main_data_begin; /* needed by main decode loop */
