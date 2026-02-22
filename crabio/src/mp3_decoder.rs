@@ -578,11 +578,13 @@ pub fn polyphase_stereo(pcm: &mut [i16; 64], vbuf: &[i32], coef: &[u32; 264]) {
     if vbuf.len() < 1064 {
         return;
     }
-    let rnd_val = 1 << ((DQ_FRACBITS_OUT - 2 - 2 - 15) - 1 + (32 - CSHIFT));
+    const CLIP_N: i32 = (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32;
+    const RND: u64 = 1 << ((DQ_FRACBITS_OUT - 2 - 2 - 15) - 1 + (32 - CSHIFT));
+    const SHIFT: i32 = 32 - CSHIFT as i32;
     let vbuf = &vbuf[..1064];
     /* special case, output sample 0 */
-    let mut sum1_r: u64 = rnd_val;
-    let mut sum1_l: u64 = rnd_val;
+    let mut sum1_r: u64 = RND;
+    let mut sum1_l: u64 = RND;
     let mut sum2_r: u64;
     let mut sum2_l: u64;
     let mut c1: u32;
@@ -604,35 +606,34 @@ pub fn polyphase_stereo(pcm: &mut [i16; 64], vbuf: &[i32], coef: &[u32; 264]) {
     }
 
     pcm[CHANNEL_LEFT] = clip_to_short(
-        sar_64(sum1_l as u64, (32 - CSHIFT) as i32) as i32,
-        (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32,
+        sar_64(sum1_l as u64, SHIFT) as i32,
+        CLIP_N,
     );
     pcm[CHANNEL_RIGHT] = clip_to_short(
-        sar_64(sum1_r as u64, (32 - CSHIFT) as i32) as i32,
-        (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32,
+        sar_64(sum1_r as u64, SHIFT) as i32,
+        CLIP_N,
     );
 
     /* special case, output sample 16 */
-    let mut coef_idx = 256;
     let vbuf_idx = 64 * 16;
-    sum1_l = rnd_val;
-    sum1_r = rnd_val;
+    sum1_l = RND;
+    sum1_r = RND;
 
-    for j in 0..8 {
-        c1 = coef[coef_idx];
-        coef_idx += 1;
-        v_lo = vbuf[vbuf_idx + j];
-        sum1_l = madd_64(sum1_l, v_lo, c1 as i32);
-        v_lo = vbuf[vbuf_idx + 32 + j];
-        sum1_r = madd_64(sum1_r, v_lo, c1 as i32);
+    for (c1, (v_lo1, v_lo2)) in coef[256..256 + 8]
+        .iter()
+        .zip(vbuf[vbuf_idx..].iter().zip(vbuf[vbuf_idx + 32..].iter()))
+    {
+        sum1_l = madd_64(sum1_r, *v_lo1, *c1 as i32);
+        sum1_r = madd_64(sum1_r, *v_lo2, *c1 as i32);
     }
+
     pcm[2 * 16 + CHANNEL_LEFT] = clip_to_short(
-        sar_64(sum1_l, (32 - CSHIFT) as i32) as i32,
-        (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32,
+        sar_64(sum1_l, SHIFT) as i32,
+        CLIP_N
     );
     pcm[2 * 16 + CHANNEL_RIGHT] = clip_to_short(
-        sar_64(sum1_r, (32 - CSHIFT) as i32) as i32,
-        (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32,
+        sar_64(sum1_r, SHIFT) as i32,
+        CLIP_N
     );
 
     /* main convolution loop: sum1L = samples 1, 2, 3, ... 15   sum2L = samples 31, 30, ... 17 */
@@ -651,29 +652,29 @@ pub fn polyphase_stereo(pcm: &mut [i16; 64], vbuf: &[i32], coef: &[u32; 264]) {
         .zip(vbuf_chunk)
         .zip(pcm_head_iter.zip(pcm_tail_iter))
     {
-        sum1_l = rnd_val;
-        sum2_l = rnd_val;
+        sum1_l = RND;
+        sum2_l = RND;
         calculate_sums_l(coef, vbuf, &mut sum1_l, &mut sum2_l);
 
-        sum1_r = rnd_val;
-        sum2_r = rnd_val;
+        sum1_r = RND;
+        sum2_r = RND;
         calculate_sums_r(coef, vbuf, &mut sum1_r, &mut sum2_r);
 
         pcm_head[CHANNEL_LEFT] = clip_to_short(
-            sar_64(sum1_l as u64, (32 - CSHIFT) as i32) as i32,
-            (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32,
+            sar_64(sum1_l as u64, SHIFT) as i32,
+            CLIP_N
         );
         pcm_head[CHANNEL_RIGHT] = clip_to_short(
-            sar_64(sum1_r as u64, (32 - CSHIFT) as i32) as i32,
-            (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32,
+            sar_64(sum1_r as u64, SHIFT) as i32,
+            CLIP_N
         );
         pcm_tail[CHANNEL_LEFT] = clip_to_short(
-            sar_64(sum2_l as u64, (32 - CSHIFT) as i32) as i32,
-            (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32,
+            sar_64(sum2_l as u64, SHIFT) as i32,
+            CLIP_N
         );
         pcm_tail[CHANNEL_RIGHT] = clip_to_short(
-            sar_64(sum2_r as u64, (32 - CSHIFT) as i32) as i32,
-            (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32,
+            sar_64(sum2_r as u64, SHIFT) as i32,
+            CLIP_N
         );
     }
 }
