@@ -1,5 +1,26 @@
 use crate::utils::{bit_stream_cache::BitStreamInfo, clip_to_short::clip_to_short};
 
+macro_rules! profile_block {
+    ($name:expr, $code:block) => {{
+        let start_cycles: u32;
+        unsafe {
+            core::arch::asm!("rsr.ccount {0}", out(reg) start_cycles);
+        }
+
+        let result = $code;
+
+        let end_cycles: u32;
+        unsafe {
+            core::arch::asm!("rsr.ccount {0}", out(reg) end_cycles);
+        }
+
+        let diff = end_cycles.wrapping_sub(start_cycles);
+        esp_println::println!("PERF: {} | {} cycles | {} us", $name, diff, diff / 240);
+
+        result
+    }};
+}
+
 pub const CHANNEL_MONO: usize = 0;
 pub const CHANNEL_LEFT: usize = 0;
 pub const CHANNEL_RIGHT: usize = 1;
@@ -581,6 +602,7 @@ pub fn polyphase_stereo(pcm: &mut [i16; 64], vbuf: &[i32], coef: &[u32; 264]) {
     const CLIP_N: i32 = (DQ_FRACBITS_OUT - 2 - 2 - 15) as i32;
     const RND: u64 = 1 << ((DQ_FRACBITS_OUT - 2 - 2 - 15) - 1 + (32 - CSHIFT));
     const SHIFT: i32 = 32 - CSHIFT as i32;
+
     let vbuf = &vbuf[..1064];
     /* special case, output sample 0 */
     let mut sum1_r: u64 = RND;
@@ -654,10 +676,10 @@ pub fn polyphase_stereo(pcm: &mut [i16; 64], vbuf: &[i32], coef: &[u32; 264]) {
     {
         sum1_l = RND;
         sum2_l = RND;
-        calculate_sums_l(coef, vbuf, &mut sum1_l, &mut sum2_l);
-
         sum1_r = RND;
         sum2_r = RND;
+
+        calculate_sums_l(coef, vbuf, &mut sum1_l, &mut sum2_l);
         calculate_sums_r(coef, vbuf, &mut sum1_r, &mut sum2_r);
 
         pcm_head[CHANNEL_LEFT] = clip_to_short(
@@ -1481,8 +1503,8 @@ pub struct MP3FrameInfo {
     pub bitrate: i32,
     pub n_chans: ChannelCount,
     pub samprate: i32,
-    pub bitsPerSample: i32,
-    pub outputSamps: i32,
+    pub bits_per_sample: i32,
+    pub output_samps: i32,
     pub layer: LayerIndex,
     pub version: MPEGVersion,
 }
@@ -1770,16 +1792,16 @@ impl MP3Decoder {
             self.m_MP3FrameInfo.bitrate = 0;
             self.m_MP3FrameInfo.n_chans = ChannelCount::SingleChannel;
             self.m_MP3FrameInfo.samprate = 0;
-            self.m_MP3FrameInfo.bitsPerSample = 0;
-            self.m_MP3FrameInfo.outputSamps = 0;
+            self.m_MP3FrameInfo.bits_per_sample = 0;
+            self.m_MP3FrameInfo.output_samps = 0;
             self.m_MP3FrameInfo.layer = LayerIndex::Layer1;
             self.m_MP3FrameInfo.version = MPEGVersion::MPEG1;
         } else {
             self.m_MP3FrameInfo.bitrate = self.m_MP3DecInfo.bitrate;
             self.m_MP3FrameInfo.n_chans = self.m_MP3DecInfo.nChans;
             self.m_MP3FrameInfo.samprate = self.m_MP3DecInfo.samprate;
-            self.m_MP3FrameInfo.bitsPerSample = 16;
-            self.m_MP3FrameInfo.outputSamps = self.m_MP3DecInfo.nChans as i32
+            self.m_MP3FrameInfo.bits_per_sample = 16;
+            self.m_MP3FrameInfo.output_samps = self.m_MP3DecInfo.nChans as i32
                 * SAMPLES_PER_FRAME_TAB[self.m_MPEGVersion as usize]
                     [self.m_MP3DecInfo.layer as usize - 1] as i32;
             self.m_MP3FrameInfo.layer = self.m_MP3DecInfo.layer;
@@ -1896,10 +1918,7 @@ impl MP3Decoder {
 #[cfg(test)]
 mod unpack_frame_header_test {
     use crate::mp3_decoder::{
-        BLOCK_SIZE, CriticalBandInfo, DequantInfo, FrameHeader, HuffmanInfo, IMDCTInfo,
-        MAINBUF_SIZE, MAX_NCHAN, MAX_NGRAN, MAX_NSAMP, MAX_REORDER_SAMPS, MAX_SCFBD, MP3Decoder,
-        MP3FrameInfo, MPEGVersion, NBANDS, SFBandTable, ScaleFactorInfoSub, ScaleFactorJS,
-        SideInfo, SideInfoSub, StereoMode, SubbandInfo, VBUF_LENGTH,
+        BLOCK_SIZE, CriticalBandInfo, DequantInfo, FrameHeader, HuffmanInfo, IMDCTInfo, LayerIndex, MAINBUF_SIZE, MAX_NCHAN, MAX_NGRAN, MAX_NSAMP, MAX_REORDER_SAMPS, MAX_SCFBD, MP3Decoder, MP3FrameInfo, MPEGVersion, NBANDS, SFBandTable, ScaleFactorInfoSub, ScaleFactorJS, SideInfo, SideInfoSub, StereoMode, SubbandInfo, VBUF_LENGTH
     };
 
     fn make_decoder() -> MP3Decoder {
@@ -1919,12 +1938,12 @@ mod unpack_frame_header_test {
             part23Length: [[0; MAX_NCHAN]; MAX_NGRAN],
             samprate: 0,
         };
-        let m_MP3FrameInfo = MP3FrameInfo {
+        let m_mp3_frame_info = MP3FrameInfo {
             bitrate: 0,
-            bitsPerSample: 0,
-            layer: 0,
-            n_chans: 0,
-            outputSamps: 0,
+            bits_per_sample: 0,
+            layer: LayerIndex::Layer3,
+            n_chans: ChannelCount::DualChannel,
+            output_samps: 0,
             samprate: 0,
             version: MPEGVersion::MPEG1,
         };
@@ -1941,7 +1960,7 @@ mod unpack_frame_header_test {
         MP3Decoder {
             m_FrameHeader,
             m_MP3DecInfo,
-            m_MP3FrameInfo,
+            m_MP3FrameInfo: m_mp3_frame_info,
             m_SideInfo,
             m_SFBandTable,
             m_SideInfoSub,
