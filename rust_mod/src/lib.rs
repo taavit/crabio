@@ -2190,10 +2190,7 @@ const POW2FRAC: [i32; 8] = [
     0x6597fa94, 0x50a28be6, 0x7fffffff, 0x6597fa94, 0x50a28be6, 0x7fffffff, 0x6597fa94, 0x50a28be6,
 ];
 
-pub fn dequant_block(in_buf: &[i32], out_buf: &mut [i32], num: i32, scale: i32) -> i32 {
-    if num <= 0 {
-        return 0;
-    }
+pub fn dequant_block(in_buf: &[i32], out_buf: &mut [i32], scale: i32) -> i32 {
 
     let mut tab4 = [0i32; 4];
     let mut mask = 0i32;
@@ -2223,8 +2220,8 @@ pub fn dequant_block(in_buf: &[i32], out_buf: &mut [i32], num: i32, scale: i32) 
     tab4[3] = tab16[3] >> shift_init;
 
     // Przetwarzamy num próbek
-    for i in 0..num {
-        let sx = in_buf[i as usize];
+    for (in_el, out_el) in in_buf.iter().zip(out_buf.iter_mut()) {
+        let sx = *in_el;
 
         let x = (sx & 0x7fffffff) as u32; // x = magnitude
         let mut y: i32;
@@ -2298,17 +2295,13 @@ pub fn dequant_block(in_buf: &[i32], out_buf: &mut [i32], num: i32, scale: i32) 
         /* Przywrócenie znaku i zapis */
         mask |= y;
         let final_y = if sx < 0 { -y } else { y };
-        out_buf[i as usize] = final_y;
+        *out_el = final_y;
     }
 
     mask
 }
 
-pub fn dequant_block_in_place(buf: &mut [i32], num: i32, scale: i32) -> i32 {
-    if num <= 0 {
-        return 0;
-    }
-
+pub fn dequant_block_in_place(buf: &mut [i32], scale: i32) -> i32 {
     let mut tab4 = [0i32; 4];
     let mut mask = 0i32;
 
@@ -2337,8 +2330,8 @@ pub fn dequant_block_in_place(buf: &mut [i32], num: i32, scale: i32) -> i32 {
     tab4[3] = tab16[3] >> shift_init;
 
     // Przetwarzamy num próbek
-    for i in 0..num {
-        let sx = buf[i as usize];
+    for el in buf.iter_mut() {
+        let sx = *el;
 
         let x = (sx & 0x7fffffff) as u32; // x = magnitude
         let mut y: i32;
@@ -2412,7 +2405,7 @@ pub fn dequant_block_in_place(buf: &mut [i32], num: i32, scale: i32) -> i32 {
         /* Przywrócenie znaku i zapis */
         mask |= y;
         let final_y = if sx < 0 { -y } else { y };
-        buf[i as usize] = final_y;
+        *el = final_y;
     }
 
     mask
@@ -2485,7 +2478,7 @@ pub fn dequant_channel(
         };
         let gain_i = 210 - global_gain + s_multiplier * (sfis.l[cb as usize] as i32 + pre_val);
 
-        let non_zero = dequant_block_in_place(&mut sample_buf[i..], n_samps, gain_i);
+        let non_zero = dequant_block_in_place(&mut sample_buf[i..i + n_samps as usize], gain_i);
 
         if non_zero != 0 {
             cb_max[0] = cb;
@@ -2499,10 +2492,10 @@ pub fn dequant_channel(
     }
 
     // Wstępne ustawienie CBI
-    cbi.cbType = 0;
-    cbi.cbEndL = cb_max[0];
-    cbi.cbEndS = [0, 0, 0];
-    cbi.cbEndSMax = 0;
+    cbi.cb_type = 0;
+    cbi.cb_end_l = cb_max[0];
+    cbi.cb_end_s = [0, 0, 0];
+    cbi.cb_end_smax = 0;
 
     if cb_start_s >= 12 {
         return (gb_mask.leading_zeros() as i32) - 1;
@@ -2520,10 +2513,10 @@ pub fn dequant_channel(
                 + s_multiplier * (sfis.s[cb as usize][w] as i32);
 
             // Dekwantyzujemy do workBuf, aby móc potem bezpiecznie przełożyć dane do sampleBuf
+            let buf_offset = (n_samps * w as i32) as usize;
             let non_zero = dequant_block(
-                &sample_buf[i + (n_samps * w as i32) as usize..],
-                &mut work_buf[(n_samps * w as i32) as usize..],
-                n_samps,
+                &sample_buf[i + buf_offset as usize..i + buf_offset + n_samps as usize],
+                &mut work_buf[buf_offset as usize..buf_offset + n_samps as usize],
                 gain_i,
             );
 
@@ -2558,9 +2551,9 @@ pub fn dequant_channel(
 
     // Aktualizacja non_zero_bound i CBI
     *non_zero_bound = i as i32;
-    cbi.cbType = if sis.mixed_block != 0 { 2 } else { 1 };
-    cbi.cbEndS = cb_max;
-    cbi.cbEndSMax = cb_max[0].max(cb_max[1]).max(cb_max[2]);
+    cbi.cb_type = if sis.mixed_block != 0 { 2 } else { 1 };
+    cbi.cb_end_s = cb_max;
+    cbi.cb_end_smax = cb_max[0].max(cb_max[1]).max(cb_max[2]);
 
     (gb_mask.leading_zeros() as i32) - 1
 }
@@ -2627,15 +2620,15 @@ pub fn intensity_proc_mpeg1(
     let mut i: usize;
     let (cb_start_l, cb_end_l, cb_start_s, cb_end_s);
 
-    if cbi[1].cbType == 0 {
-        cb_start_l = (cbi[1].cbEndL + 1) as usize;
-        cb_end_l = (cbi[0].cbEndL + 1) as usize;
+    if cbi[1].cb_type == 0 {
+        cb_start_l = (cbi[1].cb_end_l + 1) as usize;
+        cb_end_l = (cbi[0].cb_end_l + 1) as usize;
         cb_start_s = 0;
         cb_end_s = 0;
         i = sfbt.l[cb_start_l] as usize;
     } else {
-        cb_start_s = (cbi[1].cbEndSMax + 1) as usize;
-        cb_end_s = (cbi[0].cbEndSMax + 1) as usize;
+        cb_start_s = (cbi[1].cb_end_smax + 1) as usize;
+        cb_end_s = (cbi[0].cb_end_smax + 1) as usize;
         cb_start_l = 0;
         cb_end_l = 0;
         i = (3 * sfbt.s[cb_start_s]) as usize;
@@ -2752,12 +2745,12 @@ pub fn intensity_proc_mpeg2(
         }
     }
 
-    if cbi[1].cbType == 0 {
+    if cbi[1].cb_type == 0 {
         /* BLOKI DŁUGIE */
         il[21] = 1;
         il[22] = 1;
-        let cb_start_l = (cbi[1].cbEndL + 1) as usize;
-        let cb_end_l = (cbi[0].cbEndL + 1) as usize;
+        let cb_start_l = (cbi[1].cb_end_l + 1) as usize;
+        let cb_end_l = (cbi[0].cb_end_l + 1) as usize;
         let mut i = sfbt.l[cb_start_l] as usize;
         let mut samps_left = n_samps - i as i32;
 
@@ -2809,8 +2802,8 @@ pub fn intensity_proc_mpeg2(
         il[12] = 1;
 
         for w in 0..3 {
-            let cb_start_s = (cbi[1].cbEndS[w] + 1) as usize;
-            let cb_end_s = (cbi[0].cbEndS[w] + 1) as usize;
+            let cb_start_s = (cbi[1].cb_end_s[w] + 1) as usize;
+            let cb_end_s = (cbi[0].cb_end_s[w] + 1) as usize;
             let mut i = (3 * sfbt.s[cb_start_s] + w as i32) as usize;
 
             for cb in cb_start_s..cb_end_s {
@@ -3031,10 +3024,10 @@ pub fn mp3_dequantize(gr: GranuleIndex, m_mp3_decoder: &mut MP3Decoder) -> i32 {
         let n_samps: i32;
         if (fh.modeExt & 0x01) != 0 {
             /* Intensity stereo włączone - Mid-Side tylko do początku regionu zero prawego kanału */
-            if cbi[1].cbType == 0 {
-                n_samps = sfbt.l[cbi[1].cbEndL as usize + 1];
+            if cbi[1].cb_type == 0 {
+                n_samps = sfbt.l[cbi[1].cb_end_l as usize + 1];
             } else {
-                n_samps = 3 * sfbt.s[cbi[1].cbEndSMax as usize + 1];
+                n_samps = 3 * sfbt.s[cbi[1].cb_end_smax as usize + 1];
             }
         } else {
             /* Intensity stereo wyłączone - Mid-Side na całym widmie */

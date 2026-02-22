@@ -390,10 +390,10 @@ pub struct SideInfo {
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct CriticalBandInfo {
-    pub cbType: i32,      /* pure long = 0, pure short = 1, mixed = 2 */
-    pub cbEndS: [i32; 3], /* number nonzero short cb's, per subbblock */
-    pub cbEndSMax: i32,   /* max of cbEndS[] */
-    pub cbEndL: i32,      /* number nonzero long cb's  */
+    pub cb_type: i32,      /* pure long = 0, pure short = 1, mixed = 2 */
+    pub cb_end_s: [i32; 3], /* number nonzero short cb's, per subbblock */
+    pub cb_end_smax: i32,   /* max of cbEndS[] */
+    pub cb_end_l: i32,      /* number nonzero long cb's  */
 }
 
 #[repr(C)]
@@ -1959,10 +1959,10 @@ mod unpack_frame_header_test {
                 s: [[0; 3]; 13],
             }; MAX_NCHAN]; MAX_NGRAN],
             m_CriticalBandInfo: [CriticalBandInfo {
-                cbEndL: 0,
-                cbEndS: [0; 3],
-                cbEndSMax: 0,
-                cbType: 0,
+                cb_end_l: 0,
+                cb_end_s: [0; 3],
+                cb_end_smax: 0,
+                cb_type: 0,
             }; MAX_NCHAN],
             m_HuffmanInfo: HuffmanInfo {
                 gb: [0; MAX_NCHAN],
