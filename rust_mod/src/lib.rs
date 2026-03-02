@@ -1654,6 +1654,9 @@ pub fn imdct36(
     block_idx: i32,
     gb: i32,
 ) -> i32 {
+    if y.len() < (NBANDS - 1) * BLOCK_SIZE + 1 {
+        return -1;
+    }
     let mut acc1 = 0;
     let mut acc2 = 0;
     let es;

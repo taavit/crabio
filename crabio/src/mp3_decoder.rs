@@ -175,7 +175,6 @@ pub fn imdct_12(x: &[i32; 16], out: &mut [i32; 6]) {
     out[5] = even0 - odd1;
 }
 
-#[inline(always)]
 pub fn idct_9(x: &mut [i32; 9]) {
     let x0 = x[0];
     let x1 = x[1];
@@ -1258,8 +1257,6 @@ const IMDCT_WIN: [[u32; 36]; 4] = [
     ],
 ];
 
-#[allow(non_snake_case)]
-#[unsafe(no_mangle)]
 pub fn win_previous(
     x_prev: &mut [i32; BLOCK_SIZE / 2],
     x_prev_win: &mut [i32; BLOCK_SIZE],
