@@ -110,7 +110,7 @@ pub fn MP3ClearBadFrame(outbuf: &mut [i16]) {
     outbuf.iter_mut().for_each(|e| *e = 0);
 }
 
-const M_SFLEN_TAB: [[u8; 2]; 16] = [
+static M_SFLEN_TAB: [[u8; 2]; 16] = [
     [0, 0],
     [0, 1],
     [0, 2],
@@ -283,7 +283,7 @@ pub fn unpack_sfmpeg1(
  *   NRTab[x][1][y]   --> (NRTab[x][1][y])   / 3
  *   NRTab[x][2][>=1] --> (NRTab[x][2][>=1]) / 3  (first partition is long block)
  */
-const NRTAB: [[[i32; 4]; 3]; 6] = [
+static NRTAB: [[[i32; 4]; 3]; 6] = [
     [[6, 5, 5, 5], [3, 3, 3, 3], [6, 3, 3, 3]],
     [[6, 5, 7, 3], [3, 3, 4, 2], [6, 3, 4, 2]],
     [[11, 10, 0, 0], [6, 6, 0, 0], [6, 3, 6, 0]],
@@ -449,7 +449,7 @@ pub fn unpack_sfmpeg2(
  **********************************************************************************************************************/
 // no improvement with section=data
 
-const HUFF_TABLE: [u16; 4242] = [
+static HUFF_TABLE: [u16; 4242] = [
     /* huffTable01[9] */
     0xf003, 0x3112, 0x3101, 0x2011, 0x2011, 0x1000, 0x1000, 0x1000, 0x1000,
     /* huffTable02[65] */
@@ -870,7 +870,7 @@ const HUFF_TAB_OFFSET: [u16; HUFF_PAIRTABS] = [
     HUFF_OFFSET_24,
 ];
 
-const HUFF_TAB_LOOKUP: [HuffTabLookup; HUFF_PAIRTABS] = [
+static HUFF_TAB_LOOKUP: [HuffTabLookup; HUFF_PAIRTABS] = [
     HuffTabLookup {
         lin_bits: 0,
         tab_type: HuffTabType::NoBits,
@@ -1264,7 +1264,7 @@ pub fn decode_huffman_pairs(
  *  A = length of codeword
  *  B = codeword
  */
-const QUAD_TABLE: [u8; 64 + 16] = [
+static QUAD_TABLE: [u8; 64 + 16] = [
     /* table A */
     0x6b, 0x6f, 0x6d, 0x6e, 0x67, 0x65, 0x59, 0x59, 0x56, 0x56, 0x53, 0x53, 0x5a, 0x5a, 0x5c, 0x5c,
     0x42, 0x42, 0x42, 0x42, 0x41, 0x41, 0x41, 0x41, 0x44, 0x44, 0x44, 0x44, 0x48, 0x48, 0x48, 0x48,
@@ -1601,16 +1601,16 @@ pub fn decode_huffman(
  * Return:      mOut (OR of abs(y) for all y calculated here)
  **********************************************************************************************************************/
 // barely faster in RAM
-const C18: [u32; 9] = [
+static C18: [u32; 9] = [
     0x7f834ed0, 0x7ba3751d, 0x7401e4c1, 0x68d9f964, 0x5a82799a, 0x496af3e2, 0x36185aee, 0x2120fb83,
     0x0b27eb5c,
 ];
-const FAST_WIN36: [u32; 18] = [
+static FAST_WIN36: [u32; 18] = [
     0x42aace8b, 0xc2e92724, 0x47311c28, 0xc95f619a, 0x4a868feb, 0xd0859d8c, 0x4c913b51, 0xd8243ea0,
     0x4d413ccc, 0xe0000000, 0x4c913b51, 0xe7dbc161, 0x4a868feb, 0xef7a6275, 0x47311c28, 0xf6a09e67,
     0x42aace8b, 0xfd16d8dd,
 ];
-pub const IMDCT_WIN: [[u32; 36]; 4] = [
+pub static IMDCT_WIN: [[u32; 36]; 4] = [
     [
         0x02aace8b, 0x07311c28, 0x0a868fec, 0x0c913b52, 0x0d413ccd, 0x0c913b52, 0x0a868fec,
         0x07311c28, 0x02aace8b, 0xfd16d8dd, 0xf6a09e66, 0xef7a6275, 0xe7dbc161, 0xe0000000,
@@ -1645,6 +1645,31 @@ pub const IMDCT_WIN: [[u32; 36]; 4] = [
     ],
 ];
 
+fn prepare_imdct36(
+    es: i32,
+    x_curr: &mut [i32; BLOCK_SIZE],
+    x_buf: &mut [i32; BLOCK_SIZE],
+    x_prev: &mut [i32; BLOCK_SIZE / 2],
+) {
+    let mut acc1 = 0;
+    let mut acc2 = 0;
+
+    let (chunks, _) = x_curr.as_chunks_mut::<2>();
+
+    for (i, el) in chunks.iter_mut().enumerate().rev() {
+        acc1 = ((el[1]) >> es) - acc1;
+        acc2 = acc1 - acc2;
+        acc1 = ((el[0]) >> es) - acc1;
+        x_buf[i + 9] = acc2; /* odd */
+        x_buf[i + 0] = acc1; /* even */
+        x_prev[i] >>= es;
+    }
+
+    /* xEven[0] and xOdd[0] scaled by 0.5 */
+    x_buf[9] >>= 1;
+    x_buf[0] >>= 1;
+}
+
 pub fn imdct36(
     x_curr: &mut [i32; BLOCK_SIZE],
     x_prev: &mut [i32; BLOCK_SIZE / 2],
@@ -1657,9 +1682,7 @@ pub fn imdct36(
     if y.len() < (NBANDS - 1) * BLOCK_SIZE + 1 {
         return -1;
     }
-    let mut acc1 = 0;
-    let mut acc2 = 0;
-    let es;
+    let es = if gb < 7 { 7 - gb } else { 0 };
     let mut x_buf: [i32; BLOCK_SIZE] = [0; 18];
     let mut x_prev_win: [i32; BLOCK_SIZE] = [0; 18];
     let mut c;
@@ -1670,38 +1693,10 @@ pub fn imdct36(
     let mut t;
     let mut y_lo;
     let mut y_hi;
-    let mut x_curr_idx = 17;
     let mut x_prev_idx = 0;
-    /* 7 gb is always adequate for antialias + accumulator loop + idct9 */
-    if gb < 7 {
-        /* rarely triggered - 5% to 10% of the time on normal clips (with Q25 input) */
-        es = 7 - gb;
-        for i in (0..=8).rev() {
-            acc1 = ((x_curr[x_curr_idx]) >> es) - acc1;
-            x_curr_idx -= 1;
-            acc2 = acc1 - acc2;
-            acc1 = ((x_curr[x_curr_idx]) >> es) - acc1;
-            x_curr_idx -= 1;
-            x_buf[i + 9] = acc2; /* odd */
-            x_buf[i + 0] = acc1; /* even */
-            x_prev[i] >>= es;
-        }
-    } else {
-        es = 0;
-        /* max gain = 18, assume adequate guard bits */
-        for i in (0..=8).rev() {
-            acc1 = (x_curr[x_curr_idx]) - acc1;
-            x_curr_idx -= 1;
-            acc2 = acc1 - acc2;
-            acc1 = (x_curr[x_curr_idx]) - acc1;
-            x_curr_idx -= 1;
-            x_buf[i + 9] = acc2; /* odd */
-            x_buf[i + 0] = acc1; /* even */
-        }
-    }
-    /* xEven[0] and xOdd[0] scaled by 0.5 */
-    x_buf[9] >>= 1;
-    x_buf[0] >>= 1;
+
+    prepare_imdct36(es, x_curr, &mut x_buf, x_prev);
+
     let (spliced_buf, _) = x_buf.as_chunks_mut::<9>();
     /* do 9-point IDCT on even and odd */
     idct_9(&mut spliced_buf[0]); /* even */
@@ -1796,7 +1791,7 @@ pub fn imdct36(
  **********************************************************************************************************************/
 // a little bit faster in RAM (< 1 ms per block)
 /* __attribute__ ((section (".data"))) */
-const CSA: [[u32; 2]; 8] = [
+static CSA: [[u32; 2]; 8] = [
     [0x6dc253f0, 0xbe2500aa],
     [0x70dcebe4, 0xc39e4949],
     [0x798d6e73, 0xd7e33f4a],
@@ -2138,7 +2133,7 @@ pub fn imdct(
 }
 
 /* pow(2,-i/4) * pow(j,4/3) for i=0..3 j=0..15, Q25 format */
-const POW43_14: [[i32; 16]; 4] = [
+static POW43_14: [[i32; 16]; 4] = [
     /* Q28 */
     [
         0x00000000, 0x10000000, 0x285145f3, 0x453a5cdb, 0x0cb2ff53, 0x111989d6, 0x15ce31c8,
@@ -2163,10 +2158,10 @@ const POW43_14: [[i32; 16]; 4] = [
 ];
 
 /* pow(2,-i/4) for i=0..3, Q31 format */
-const POW14: [i32; 4] = [0x7fffffff, 0x6ba27e65, 0x5a82799a, 0x4c1bf829];
+static POW14: [i32; 4] = [0x7fffffff, 0x6ba27e65, 0x5a82799a, 0x4c1bf829];
 
 /* pow(j,4/3) for j=16..63, Q23 format */
-const POW43: [i32; 48] = [
+static POW43: [i32; 48] = [
     0x1428a2fa, 0x15db1bd6, 0x1796302c, 0x19598d85, 0x1b24e8bb, 0x1cf7fcfa, 0x1ed28af2, 0x20b4582a,
     0x229d2e6e, 0x248cdb55, 0x26832fda, 0x28800000, 0x2a832287, 0x2c8c70a8, 0x2e9bc5d8, 0x30b0ff99,
     0x32cbfd4a, 0x34eca001, 0x3712ca62, 0x393e6088, 0x3b6f47e0, 0x3da56717, 0x3fe0a5fc, 0x4220ed72,
@@ -2183,13 +2178,13 @@ const POW43: [i32; 48] = [
  * Relative error < 1E-7
  * Coefs are scaled by 4, 2, 1, 0.5, 0.25
  */
-const POLY43LO: [u32; 5] = [0x29a0bda9, 0xb02e4828, 0x5957aa1b, 0x236c498d, 0xff581859];
-const POLY43HI: [u32; 5] = [0x10852163, 0xd333f6a4, 0x46e9408b, 0x27c2cef0, 0xfef577b4];
+static POLY43LO: [u32; 5] = [0x29a0bda9, 0xb02e4828, 0x5957aa1b, 0x236c498d, 0xff581859];
+static POLY43HI: [u32; 5] = [0x10852163, 0xd333f6a4, 0x46e9408b, 0x27c2cef0, 0xfef577b4];
 
 /* pow(2, i*4/3) as exp and frac */
-const POW2EXP: [i32; 8] = [14, 13, 11, 10, 9, 7, 6, 5];
+static POW2EXP: [i32; 8] = [14, 13, 11, 10, 9, 7, 6, 5];
 
-const POW2FRAC: [i32; 8] = [
+static POW2FRAC: [i32; 8] = [
     0x6597fa94, 0x50a28be6, 0x7fffffff, 0x6597fa94, 0x50a28be6, 0x7fffffff, 0x6597fa94, 0x50a28be6,
 ];
 
@@ -2415,7 +2410,7 @@ pub fn dequant_block_in_place(buf: &mut [i32], scale: i32) -> i32 {
 }
 
 /* optional pre-emphasis for high-frequency scale factor bands */
-const PRE_TAB: [u8; 22] = [
+static PRE_TAB: [u8; 22] = [
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 3, 3, 3, 2, 0,
 ];
 
@@ -2561,7 +2556,7 @@ pub fn dequant_channel(
     (gb_mask.leading_zeros() as i32) - 1
 }
 
-const ISFMPEG1: [[i32; 7]; 2] = [
+static ISFMPEG1: [[i32; 7]; 2] = [
     [
         0x00000000, 0x0d8658ba, 0x176cf5d0, 0x20000000, 0x28930a2f, 0x3279a745, 0x40000000,
     ],
@@ -2570,7 +2565,7 @@ const ISFMPEG1: [[i32; 7]; 2] = [
     ],
 ];
 
-const ISFMPEG2: [[[i32; 16]; 2]; 2] = [
+static ISFMPEG2: [[[i32; 16]; 2]; 2] = [
     [
         [
             /* intensityScale off, mid-side off */
@@ -2606,7 +2601,7 @@ const ISFMPEG2: [[[i32; 16]; 2]; 2] = [
  * illegal intensity position scalefactors (see comments on ISFMpeg1)
  */
 
-const ISFIIP: [[i32; 2]; 2] = [
+static ISFIIP: [[i32; 2]; 2] = [
     [0x40000000, 0x00000000], /* mid-side off */
     [0x40000000, 0x40000000], /* mid-side on */
 ];
