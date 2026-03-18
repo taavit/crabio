@@ -10,9 +10,9 @@ use crabio::{
         ERR_MP3_INVALID_SIDEINFO, ERR_MP3_INVALID_SUBBAND, ERR_MP3_MAINDATA_UNDERFLOW,
         ERR_MP3_NONE, FrameHeader, GranuleIndex, HUFF_PAIRTABS, HuffTabLookup, HuffTabType,
         HuffmanInfo, IMDCT_SCALE, IMDCTInfo, MAINBUF_SIZE, MAX_NCHAN, MAX_NGRAN, MAX_NSAMP,
-        MAX_SCFBD, MP3Decoder, MPEGVersion, NBANDS, SFBandTable, SQRTHALF,
-        ScaleFactorInfoSub, ScaleFactorJS, SideInfo, SideInfoSub, freq_invert_rescale,
-        idct_9, imdct_12, mp3_find_free_sync, mp3_find_sync_word, mulshift_32, win_previous,
+        MAX_SCFBD, MP3Decoder, MPEGVersion, NBANDS, SFBandTable, SQRTHALF, ScaleFactorInfoSub,
+        ScaleFactorJS, SideInfo, SideInfoSub, freq_invert_rescale, idct_9, imdct_12,
+        mp3_find_free_sync, mp3_find_sync_word, mulshift_32, win_previous,
     },
     utils::bit_stream_cache::BitStreamInfo,
 };
@@ -1491,7 +1491,8 @@ pub fn decode_huffman(
     } else {
         // Long blocks
         r1_start = m_sfband_table.l[(sis.region0_count + 1) as usize] as i32;
-        r2_start = m_sfband_table.l[(sis.region0_count + 1 + sis.region1_count + 1) as usize] as i32;
+        r2_start =
+            m_sfband_table.l[(sis.region0_count + 1 + sis.region1_count + 1) as usize] as i32;
     }
 
     /* offset rEnd index by 1 so first region = rEnd[1] - rEnd[0], etc. */
@@ -1639,6 +1640,7 @@ pub static IMDCT_WIN: [[u32; 36]; 4] = [
     ],
 ];
 
+#[inline]
 fn prepare_imdct36(
     es: i32,
     x_curr: &mut [i32; BLOCK_SIZE],
@@ -1663,6 +1665,89 @@ fn prepare_imdct36(
     x_buf[9] >>= 1;
     x_buf[0] >>= 1;
 }
+#[inline]
+fn imdct36_fastpath(
+    x_buf: &mut [i32; BLOCK_SIZE],
+    x_prev: &mut [i32; BLOCK_SIZE / 2],
+    y: &mut [i32],
+) -> i32 {
+    if y.len() < 17 * NBANDS + 1 {
+        return 0;
+    }
+    let mut m_out = 0;
+    let mut cpxp_idx = 8;
+    let mut x_prev_idx = 0;
+    /* fast path - use symmetry of sin window to reduce windowing multiplies to 18 (N/2) */
+    for (i, e) in FAST_WIN36.chunks_exact(2).enumerate() {
+        /* do ARM-style pointer arithmetic (i still needed for y[] indexing - compiler spills if 2 y pointers) */
+        let c = C18[cpxp_idx];
+        let mut xo = x_buf[cpxp_idx + 9];
+        let mut xe = x_buf[cpxp_idx];
+        cpxp_idx -= 1;
+        /* gain 2 int bits here */
+        xo = mulshift_32(c as i32, xo); /* 2*c18*xOdd (mul by 2 implicit in scaling)  */
+        xe >>= 2;
+
+        let s = -(x_prev[x_prev_idx]); /* sum from last block (always at least 2 guard bits) */
+        let d = -(xe - xo); /* gain 2 int bits, don't shift xo (effective << 1 to eat sign bit, << 1 for mul by 2) */
+        x_prev[x_prev_idx] = xe + xo; /* symmetry - xPrev[i] = xPrev[17-i] for long blocks */
+        x_prev_idx += 1;
+        let t = s - d;
+
+        let y_lo = d + (mulshift_32(t, e[0] as i32) << 2);
+        let y_hi = s + (mulshift_32(t, e[1] as i32) << 2);
+        y[(i) * NBANDS] = y_lo;
+        y[(17 - i) * NBANDS] = y_hi;
+        m_out |= y_lo.abs();
+        m_out |= y_hi.abs();
+    }
+
+    m_out
+}
+
+fn imdct36_slowpath(
+    x_buf: &mut [i32; BLOCK_SIZE],
+    x_prev: &mut [i32; BLOCK_SIZE / 2],
+    y: &mut [i32],
+    bt_curr: BlockType,
+    bt_prev: BlockType,
+) -> i32 {
+    if y.len() < 17 * NBANDS + 1 {
+        return 0;
+    }
+    /* slower method - either prev or curr is using window type != 0 so do full 36-point window
+     * output xPrevWin has at least 3 guard bits (xPrev has 2, gain 1 in WinPrevious)
+     */
+    let mut x_prev_win: [i32; BLOCK_SIZE] = [0; BLOCK_SIZE];
+    let mut m_out = 0;
+    win_previous(x_prev, &mut x_prev_win, bt_prev);
+
+    let wp = IMDCT_WIN[bt_curr as usize];
+    let mut cpxp_idx = 8;
+    let mut x_prev_idx = 0;
+    for i in 0..9 {
+        let c = C18[cpxp_idx];
+        let mut xo = x_buf[cpxp_idx + 9];
+        let mut xe = x_buf[cpxp_idx];
+        cpxp_idx -= 1;
+        /* gain 2 int bits here */
+        xo = mulshift_32(c as i32, xo); /* 2*c18*xOdd (mul by 2 implicit in scaling)  */
+        xe >>= 2;
+
+        let d = xe - xo;
+        x_prev[x_prev_idx] = xe + xo; /* symmetry - xPrev[i] = xPrev[17-i] for long blocks */
+        x_prev_idx += 1;
+
+        let y_lo = (x_prev_win[i] + mulshift_32(d, wp[i] as i32)) << 2;
+        let y_hi = (x_prev_win[17 - i] + mulshift_32(d, wp[17 - i] as i32)) << 2;
+        y[(i) * NBANDS] = y_lo;
+        y[(17 - i) * NBANDS] = y_hi;
+        m_out |= y_lo.abs();
+        m_out |= y_hi.abs();
+    }
+
+    m_out
+}
 
 pub fn imdct36(
     x_curr: &mut [i32; BLOCK_SIZE],
@@ -1677,17 +1762,7 @@ pub fn imdct36(
         return -1;
     }
     let es = if gb < 7 { 7 - gb } else { 0 };
-    let mut x_buf: [i32; BLOCK_SIZE] = [0; 18];
-    let mut x_prev_win: [i32; BLOCK_SIZE] = [0; 18];
-    let mut c;
-    let mut xo;
-    let mut xe;
-    let mut s;
-    let mut d;
-    let mut t;
-    let mut y_lo;
-    let mut y_hi;
-    let mut x_prev_idx = 0;
+    let mut x_buf: [i32; BLOCK_SIZE] = [0; BLOCK_SIZE];
 
     prepare_imdct36(es, x_curr, &mut x_buf, x_prev);
 
@@ -1695,64 +1770,11 @@ pub fn imdct36(
     /* do 9-point IDCT on even and odd */
     idct_9(&mut spliced_buf[0]); /* even */
     idct_9(&mut spliced_buf[1]); /* odd */
-    let mut xp_idx = 8;
-    let mut cp_idx = 8;
-    let mut m_out = 0;
-    if bt_prev == BlockType::Normal && bt_curr == BlockType::Normal {
-        /* fast path - use symmetry of sin window to reduce windowing multiplies to 18 (N/2) */
-        for (i, e) in FAST_WIN36.chunks_exact(2).enumerate() {
-            /* do ARM-style pointer arithmetic (i still needed for y[] indexing - compiler spills if 2 y pointers) */
-            c = C18[cp_idx];
-            cp_idx -= 1;
-            xo = x_buf[xp_idx + 9];
-            xe = x_buf[xp_idx];
-            xp_idx -= 1;
-            /* gain 2 int bits here */
-            xo = mulshift_32(c as i32, xo); /* 2*c18*xOdd (mul by 2 implicit in scaling)  */
-            xe >>= 2;
-
-            s = -(x_prev[x_prev_idx]); /* sum from last block (always at least 2 guard bits) */
-            d = -(xe - xo); /* gain 2 int bits, don't shift xo (effective << 1 to eat sign bit, << 1 for mul by 2) */
-            x_prev[x_prev_idx] = xe + xo; /* symmetry - xPrev[i] = xPrev[17-i] for long blocks */
-            x_prev_idx += 1;
-            t = s - d;
-
-            y_lo = d + (mulshift_32(t, e[0] as i32) << 2);
-            y_hi = s + (mulshift_32(t, e[1] as i32) << 2);
-            y[(i) * NBANDS as usize] = y_lo;
-            y[(17 - i) * NBANDS as usize] = y_hi;
-            m_out |= y_lo.abs();
-            m_out |= y_hi.abs();
-        }
+    let mut m_out = if bt_prev == BlockType::Normal && bt_curr == BlockType::Normal {
+        imdct36_fastpath(&mut x_buf, x_prev, y)
     } else {
-        /* slower method - either prev or curr is using window type != 0 so do full 36-point window
-         * output xPrevWin has at least 3 guard bits (xPrev has 2, gain 1 in WinPrevious)
-         */
-        win_previous(x_prev, &mut x_prev_win, bt_prev);
-
-        let wp = IMDCT_WIN[bt_curr as usize];
-        for i in 0..9 {
-            c = C18[cp_idx];
-            cp_idx -= 1;
-            xo = x_buf[xp_idx + 9];
-            xe = x_buf[xp_idx];
-            xp_idx -= 1;
-            /* gain 2 int bits here */
-            xo = mulshift_32(c as i32, xo); /* 2*c18*xOdd (mul by 2 implicit in scaling)  */
-            xe >>= 2;
-
-            d = xe - xo;
-            x_prev[x_prev_idx] = xe + xo; /* symmetry - xPrev[i] = xPrev[17-i] for long blocks */
-            x_prev_idx += 1;
-
-            y_lo = (x_prev_win[i] + mulshift_32(d, wp[i] as i32)) << 2;
-            y_hi = (x_prev_win[17 - i] + mulshift_32(d, wp[17 - i] as i32)) << 2;
-            y[(i) * NBANDS] = y_lo;
-            y[(17 - i) * NBANDS] = y_hi;
-            m_out |= y_lo.abs();
-            m_out |= y_hi.abs();
-        }
-    }
+        imdct36_slowpath(&mut x_buf, x_prev, y, bt_curr, bt_prev)
+    };
 
     m_out |= freq_invert_rescale(y, x_prev, block_idx, es);
 
@@ -2106,7 +2128,11 @@ pub fn imdct(
     bc.n_blocks_prev = m_imdctinfo.numPrevIMDCT[ch as usize];
     bc.prev_type = m_imdctinfo.prevType[ch as usize];
     bc.prev_win_switch = m_imdctinfo.prevWinSwitch[ch as usize];
-    bc.curr_win_switch = if sis.mixed_block != 0 { block_cutoff } else { 0 };
+    bc.curr_win_switch = if sis.mixed_block != 0 {
+        block_cutoff
+    } else {
+        0
+    };
     // Założenie: HuffmanInfo ma pole gb (guard bits)
     // bc.gbIn = hi.gb[ch as usize];
 
@@ -2183,7 +2209,6 @@ static POW2FRAC: [i32; 8] = [
 ];
 
 pub fn dequant_block(in_buf: &[i32], out_buf: &mut [i32], scale: i32) -> i32 {
-
     let mut tab4 = [0i32; 4];
     let mut mask = 0i32;
 
