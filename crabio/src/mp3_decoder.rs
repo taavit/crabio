@@ -1157,7 +1157,7 @@ pub fn fdct_32(
     }
 }
 
-pub fn freq_invert_rescale(y_full: &mut [i32], x_prev: &mut [i32], block_idx: i32, es: i32) -> i32 {
+pub fn freq_invert_rescale(y_full: &mut [i32], x_prev: &mut [i32; BLOCK_SIZE / 2], block_idx: i32, es: i32) -> i32 {
     let is_odd_block = (block_idx & 0x01) == 0x01;
 
     if es == 0 {
@@ -1222,7 +1222,7 @@ pub fn freq_invert_rescale(y_full: &mut [i32], x_prev: &mut [i32], block_idx: i3
  *                sign bit, short blocks can have one addition but max gain < 1.0)
  **********************************************************************************************************************/
 
-const IMDCT_WIN: [[u32; 36]; 4] = [
+static IMDCT_WIN: [[u32; 36]; 4] = [
     [
         0x02aace8b, 0x07311c28, 0x0a868fec, 0x0c913b52, 0x0d413ccd, 0x0c913b52, 0x0a868fec,
         0x07311c28, 0x02aace8b, 0xfd16d8dd, 0xf6a09e66, 0xef7a6275, 0xe7dbc161, 0xe0000000,
@@ -1537,7 +1537,7 @@ impl StereoMode {
  *   - bitrate index == 0 is "free" mode (bitrate determined on the fly by
  *       counting bits between successive sync words)
  */
-const BITRATE_TAB: [[[i16; 15]; 3]; 3] = [
+static BITRATE_TAB: [[[i16; 15]; 3]; 3] = [
     [
         /* MPEG-1 */
         [

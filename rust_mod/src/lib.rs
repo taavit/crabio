@@ -87,12 +87,6 @@ pub unsafe extern "C" fn MP3FindSyncWord(buf: *const u8, n_bytes: i32) -> i32 {
  *
  * Return:      updated mOut (from new outputs y)
  **********************************************************************************************************************/
-#[allow(non_snake_case)]
-pub unsafe fn FreqInvertRescale(y: *mut i32, x_prev: &mut [i32], block_idx: i32, es: i32) -> i32 {
-    let y_slice = unsafe { core::slice::from_raw_parts_mut(y, 9 * NBANDS * 2 + NBANDS) };
-
-    freq_invert_rescale(y_slice, x_prev, block_idx, es)
-}
 
 /***********************************************************************************************************************
  * Function:    MP3ClearBadFrame
@@ -1961,8 +1955,8 @@ pub fn hybrid_transform(
 
 #[unsafe(no_mangle)]
 pub fn imdct12x3(
-    x_curr: &mut [i32; 18],
-    x_prev: &mut [i32; 9],
+    x_curr: &mut [i32; BLOCK_SIZE],
+    x_prev: &mut [i32; BLOCK_SIZE / 2],
     y: &mut [i32],
     bt_prev: BlockType,
     block_idx: i32,
